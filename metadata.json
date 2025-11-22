@@ -1,0 +1,9 @@
+{
+  "name": "Kova | Deployed COPY",
+  "description": "The premier social accountability and matching platform for entrepreneurs. Swipe to find co-founders, collaborate in real-time video rooms with shared tools, and gamify your growth.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}

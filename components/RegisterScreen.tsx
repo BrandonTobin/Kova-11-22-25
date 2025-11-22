@@ -1,12 +1,13 @@
 
 import React, { useState, useRef } from 'react';
-import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, User as UserIcon, Calendar, Briefcase, Flag, Hash, Mail, Lock, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, User as UserIcon, Calendar, Briefcase, Flag, Hash, Mail, Lock, ChevronDown, Loader2 } from 'lucide-react';
 import { User } from '../types';
 import { SECURITY_QUESTIONS } from '../constants';
 
 interface RegisterScreenProps {
   onRegister: (user: User) => void;
   onBack: () => void;
+  isLoading?: boolean;
 }
 
 const TITLES = ['Founder', 'Co-Founder', 'Investor', 'CEO', 'CTO', 'COO', 'CMO', 'Freelancer', 'Solo Founder', 'Entrepreneur', 'Student', 'Other'];
@@ -21,7 +22,7 @@ const US_STATES = [
   "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
 ];
 
-const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack }) => {
+const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isLoading = false }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<{email?: string, password?: string, general?: string}>({});
   const [formData, setFormData] = useState({
@@ -29,13 +30,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack }) =
     email: '',
     password: '',
     dob: '',
-    title: 'Founder', // Default
+    title: 'Founder', 
     customTitle: '',
-    stage: 'Idea', // Default
+    stage: 'Idea',
     gender: 'Male' as 'Male' | 'Female',
     city: '',
     state: '',
-    mainGoal: 'Find a Technical Co-founder', // Default
+    mainGoal: 'Find a Technical Co-founder', 
     customGoal: '',
     image: null as File | null,
     imagePreview: '',
@@ -95,14 +96,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack }) =
 
     if (!isValid) return;
     
+    // We let Supabase/App.tsx handle the ID generation for UUID if needed, 
+    // but for the 'User' object passed back, we can set a temp ID or let the parent handler overwrite it.
+    // The Kova ID however is specific to our business logic.
+
     const newUser: User = {
-      id: `user-${Date.now()}`,
+      id: '', // Will be assigned by Supabase DB trigger or App handler
       kovaId: generateKovaId(),
       name: formData.fullName,
       email: formData.email,
       password: formData.password,
       role: formData.title === 'Other' ? formData.customTitle : formData.title,
-      industry: 'Tech', // Default for MVP
+      industry: 'Tech',
       bio: `Hi, I'm ${formData.fullName}. I'm currently in the ${formData.stage} stage looking to ${formData.mainGoal === 'Other' ? formData.customGoal : formData.mainGoal}.`,
       imageUrl: formData.imagePreview || 'https://picsum.photos/400/400?grayscale',
       tags: [formData.stage],
@@ -123,16 +128,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack }) =
   return (
     <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
       
-      {/* Background Decorations (Matching LoginScreen) */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[5%] left-[15%] w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
         <div className="absolute bottom-[15%] right-[10%] w-80 h-80 bg-gold/5 rounded-full blur-[100px]" />
       </div>
 
-      {/* Card Container */}
       <div className="w-full max-w-md bg-surface/90 backdrop-blur-xl rounded-3xl border border-white/5 shadow-2xl flex flex-col max-h-[90vh] relative z-10 animate-in fade-in zoom-in duration-300">
         
-        {/* Header */}
         <div className="p-8 pb-4 text-center shrink-0 relative">
           <button 
             onClick={onBack}
@@ -149,7 +151,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack }) =
           <p className="text-text-muted text-sm mt-1">Match. Build. Scale.</p>
         </div>
 
-        {/* Form Content - Scrollable */}
         <div className="flex-1 overflow-y-auto px-8 pb-8 no-scrollbar">
           <form onSubmit={handleSubmit} className="space-y-5">
             
@@ -397,9 +398,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack }) =
 
             <button 
               type="submit" 
-              className="w-full bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 transition-all mt-4 border border-white/5"
+              disabled={isLoading}
+              className="w-full bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 transition-all mt-4 border border-white/5 disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              Complete Registration
+              {isLoading ? <Loader2 size={20} className="animate-spin"/> : "Complete Registration"}
             </button>
           </form>
         </div>

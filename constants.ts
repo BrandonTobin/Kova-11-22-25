@@ -1,4 +1,5 @@
 
+
 import { User, Badge, Match, Message } from './types';
 
 export const ALL_BADGES: Badge[] = [
@@ -38,15 +39,19 @@ export const BLANK_USER_TEMPLATE: User = {
   kovaId: '',
   name: '',
   email: '',
+  password: '',
   role: '',
   industry: '',
   bio: '',
   imageUrl: '',
   tags: [],
   badges: [],
+  dob: '',
   age: 0,
   gender: 'Male',
   stage: '',
   location: { city: '', state: '' },
-  mainGoal: ''
+  mainGoal: '',
+  securityQuestion: '',
+  securityAnswer: ''
 };

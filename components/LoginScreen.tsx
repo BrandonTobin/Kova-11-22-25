@@ -1,16 +1,17 @@
 
 import React, { useState } from 'react';
-import { ArrowRight, UserPlus, Mail, Lock, ShieldAlert, KeyRound, ArrowLeft, CheckCircle, ShieldCheck } from 'lucide-react';
+import { ArrowRight, UserPlus, Mail, Lock, ShieldAlert, KeyRound, ArrowLeft, CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (email: string, pass: string) => void;
   onRegisterClick: () => void;
   error?: string;
-  onGetSecurityQuestion?: (email: string) => string | null;
-  onVerifyAndReset?: (email: string, answer: string, newPass: string) => { success: boolean; message: string };
+  isLoading?: boolean;
+  onGetSecurityQuestion?: (email: string) => Promise<string | null>;
+  onVerifyAndReset?: (email: string, answer: string, newPass: string) => Promise<{ success: boolean; message: string }>;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, error, onGetSecurityQuestion, onVerifyAndReset }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, error, isLoading = false, onGetSecurityQuestion, onVerifyAndReset }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
@@ -22,6 +23,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [resetError, setResetError] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,17 +32,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
     }
   };
 
-  // Step 1: Look up Security Question
-  const handleLookupEmail = (e: React.FormEvent) => {
+  const handleLookupEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError('');
+    setIsResetting(true);
     if (!resetEmail.trim()) {
       setResetError('Please enter your email address.');
+      setIsResetting(false);
       return;
     }
 
     if (onGetSecurityQuestion) {
-      const question = onGetSecurityQuestion(resetEmail);
+      const question = await onGetSecurityQuestion(resetEmail);
       if (question) {
         setResetQuestion(question);
         setView('security-challenge');
@@ -50,34 +53,39 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
     } else {
       setResetError('Reset functionality unavailable.');
     }
+    setIsResetting(false);
   };
 
-  // Step 2: Verify Answer & Reset
-  const handleVerifyAndReset = (e: React.FormEvent) => {
+  const handleVerifyAndReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError('');
+    setIsResetting(true);
 
     if (newPassword.length < 6) {
       setResetError('Password must be at least 6 characters.');
+      setIsResetting(false);
       return;
     }
     if (newPassword !== confirmNewPassword) {
       setResetError('Passwords do not match.');
+      setIsResetting(false);
       return;
     }
     if (!securityAnswer.trim()) {
        setResetError('Please answer the security question.');
+       setIsResetting(false);
        return;
     }
 
     if (onVerifyAndReset) {
-      const result = onVerifyAndReset(resetEmail, securityAnswer, newPassword);
+      const result = await onVerifyAndReset(resetEmail, securityAnswer, newPassword);
       if (result.success) {
         setView('reset-success');
       } else {
         setResetError(result.message);
       }
     }
+    setIsResetting(false);
   };
 
   const renderLoginForm = () => (
@@ -155,9 +163,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
 
         <button 
           type="submit"
-          className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white font-bold text-lg transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group border border-white/5 mt-2"
+          disabled={isLoading}
+          className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white font-bold text-lg transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 group border border-white/5 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          Sign In <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+          {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
+             <>Sign In <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" /></>
+          )}
         </button>
       </form>
 
@@ -168,6 +179,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
 
       <button 
         onClick={onRegisterClick}
+        disabled={isLoading}
         className="w-full mt-6 py-3 rounded-xl bg-transparent border border-white/10 text-text-main hover:bg-white/5 transition-colors flex items-center justify-center gap-2 font-medium"
       >
         <UserPlus size={18} /> Create an Account
@@ -210,9 +222,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
 
         <button 
           type="submit" 
-          className="w-full py-4 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-primary-hover transition-colors flex items-center justify-center gap-2"
+          disabled={isResetting}
+          className="w-full py-4 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          Next Step
+          {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Next Step"}
         </button>
       </form>
     </div>
@@ -278,8 +291,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
 
         {resetError && <p className="text-red-400 text-sm text-center">{resetError}</p>}
 
-        <button type="submit" className="w-full py-4 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-primary-hover transition-colors mt-2">
-          Reset Password
+        <button 
+          type="submit" 
+          disabled={isResetting}
+          className="w-full py-4 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-primary-hover transition-colors mt-2 disabled:opacity-50 flex justify-center items-center"
+        >
+          {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Reset Password"}
         </button>
       </form>
     </div>
@@ -296,7 +313,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
        <button 
          onClick={() => {
             setView('login');
-            // clear reset state
             setResetEmail('');
             setResetQuestion('');
             setSecurityAnswer('');
@@ -312,7 +328,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
 
   return (
     <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-6 relative overflow-hidden transition-colors duration-300">
-      {/* Background Decorations */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-[5%] left-[15%] w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
         <div className="absolute bottom-[15%] right-[10%] w-80 h-80 bg-gold/5 rounded-full blur-[100px]" />

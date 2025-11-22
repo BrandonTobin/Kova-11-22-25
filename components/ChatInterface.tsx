@@ -1,88 +1,180 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Video, MoreVertical, Sparkles, Bot, UserPlus, Search } from 'lucide-react';
+import { Send, Video, MoreVertical, Sparkles, Bot, UserPlus, Search, Loader2 } from 'lucide-react';
 import { User, Match, Message } from '../types';
 import { generateIcebreaker } from '../services/geminiService';
-import { INITIAL_MESSAGES } from '../constants';
+import { supabase } from '../supabaseClient';
 
 interface ChatInterfaceProps {
   matches: Match[];
   currentUser: User;
-  allUsers: User[];
   onStartVideoCall: (match: Match) => void;
   onConnectById: (user: User) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, allUsers, onStartVideoCall, onConnectById }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onStartVideoCall, onConnectById }) => {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(matches[0]?.id || null);
-  const [messages, setMessages] = useState<Message[]>(INITIAL_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  
+  // Connect Modal State
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [searchId, setSearchId] = useState('');
   const [foundUser, setFoundUser] = useState<User | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
 
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, selectedMatchId]);
 
-  const handleSendMessage = (text: string = inputText) => {
-    if (!text.trim() || !selectedMatch) return;
+  // Load Messages from Supabase when match selected
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!selectedMatchId) return;
+      setIsLoadingMessages(true);
+      
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('match_id', selectedMatchId)
+        .order('timestamp', { ascending: true });
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
+      if (error) {
+        console.error("Error loading messages:", error);
+      } else if (data) {
+        const loadedMsgs: Message[] = data.map((msg: any) => ({
+           id: msg.id,
+           matchId: msg.match_id,
+           senderId: msg.sender_id,
+           text: msg.text,
+           timestamp: new Date(msg.timestamp)
+        }));
+        setMessages(loadedMsgs);
+      }
+      setIsLoadingMessages(false);
+    };
+
+    loadMessages();
+  }, [selectedMatchId]);
+
+  const handleSendMessage = async (text: string = inputText) => {
+    if (!text.trim() || !selectedMatchId || !currentUser) return;
+
+    // Optimistic Update
+    const optimisticMsg: Message = {
+      id: `temp-${Date.now()}`,
+      matchId: selectedMatchId,
       senderId: currentUser.id,
       text: text,
       timestamp: new Date(),
     };
 
-    setMessages([...messages, newMessage]);
+    setMessages(prev => [...prev, optimisticMsg]);
     setInputText('');
+
+    try {
+      // Save to Supabase
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([{
+          match_id: selectedMatchId,
+          sender_id: currentUser.id,
+          text: text,
+          timestamp: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      // Update the optimistic message with real ID from DB
+      if (data) {
+         setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? { ...m, id: data.id } : m));
+      }
+
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      // Fallback: Remove optimistic message if failure (or show error icon)
+    }
   };
 
   const handleAiIcebreaker = async () => {
     if (!selectedMatch) return;
     setIsGenerating(true);
+    // Note: generateIcebreaker is a stateless utility, works fine.
     const icebreaker = await generateIcebreaker(currentUser, selectedMatch.user);
     setInputText(icebreaker);
     setIsGenerating(false);
   };
 
-  const handleSearchUser = () => {
-    // DIRECT LOCAL STORAGE READ
-    // This bypasses any stale React state props and ensures we see users created seconds ago in another tab.
-    let realTimeUsers: User[] = [];
-    try {
-      const stored = localStorage.getItem('kova_users');
-      realTimeUsers = stored ? JSON.parse(stored) : [];
-    } catch (e) {
-      realTimeUsers = [];
-    }
+  // Supabase Search (Connect by ID)
+  const handleSearchUser = async () => {
+    setIsSearching(true);
+    setSearchError('');
+    setFoundUser(null);
 
     const term = searchId.trim();
-    const user = realTimeUsers.find(u => 
-      u.kovaId === term || 
-      u.kovaId === `KVA-${term}` || 
-      // Optional: Also allow email search for convenience
-      (u.email && u.email.toLowerCase() === term.toLowerCase())
-    );
-    
-    // Prevent finding yourself
-    if (user && user.id === currentUser.id) {
-        alert("You cannot connect with yourself!");
-        setFoundUser(null);
+    if (!term) {
+        setIsSearching(false);
         return;
     }
 
-    setFoundUser(user || null);
+    try {
+      // Search users table by kova_id
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('kova_id', term)
+        .single();
+
+      if (error || !data) {
+        setSearchError('User not found.');
+      } else {
+        if (data.id === currentUser.id) {
+           setSearchError('You cannot connect with yourself.');
+        } else {
+           // Map DB user to App user type
+           const appUser: User = {
+             id: data.id,
+             kovaId: data.kova_id,
+             name: data.name,
+             email: data.email,
+             password: '', 
+             role: data.role,
+             industry: data.industry,
+             bio: data.bio,
+             imageUrl: data.image_url,
+             tags: data.tags || [],
+             badges: data.badges || [],
+             dob: data.dob,
+             age: data.age,
+             gender: data.gender,
+             stage: data.stage,
+             location: data.location || { city: '', state: '' },
+             mainGoal: data.main_goal,
+             securityQuestion: '',
+             securityAnswer: ''
+           };
+           setFoundUser(appUser);
+        }
+      }
+    } catch (e) {
+      setSearchError('Error searching for user.');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleSendRequest = () => {
     if (foundUser) {
+      // Call parent handler which does the heavy lifting of inserting the match
       onConnectById(foundUser);
       setShowConnectModal(false);
       setSearchId('');
@@ -97,9 +189,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, all
       {showConnectModal && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
            <div className="bg-surface border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl">
-              <h3 className="text-xl font-bold text-text-main mb-4 flex items-center gap-2">
-                <UserPlus size={24} className="text-primary"/> Connect by ID
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-text-main flex items-center gap-2">
+                  <UserPlus size={24} className="text-primary"/> Connect by ID
+                </h3>
+                <button onClick={() => setShowConnectModal(false)} className="text-text-muted hover:text-white">✕</button>
+              </div>
+              
               <p className="text-text-muted text-sm mb-4">Enter a unique Kova ID (e.g., KVA-123456) to connect instantly.</p>
               
               <div className="flex gap-2 mb-6">
@@ -112,13 +208,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, all
                 />
                 <button 
                   onClick={handleSearchUser}
-                  className="bg-surface border border-white/10 hover:bg-white/5 text-white px-4 py-2 rounded-lg transition-colors"
+                  disabled={isSearching}
+                  className="bg-surface border border-white/10 hover:bg-white/5 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
                 >
-                  <Search size={20} />
+                  {isSearching ? <Loader2 size={20} className="animate-spin"/> : <Search size={20} />}
                 </button>
               </div>
 
-              {foundUser ? (
+              {searchError && <p className="text-red-400 text-sm mb-4">{searchError}</p>}
+
+              {foundUser && (
                  <div className="bg-background rounded-xl p-4 mb-6 border border-white/10 flex items-center gap-4">
                     <img src={foundUser.imageUrl} alt={foundUser.name} className="w-12 h-12 rounded-full object-cover" />
                     <div>
@@ -126,8 +225,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, all
                        <p className="text-xs text-text-muted">{foundUser.role} • {foundUser.industry}</p>
                     </div>
                  </div>
-              ) : searchId && !foundUser && (
-                 <p className="text-red-400 text-sm mb-6">User not found. Ensure the ID is exact.</p>
               )}
 
               <div className="flex justify-end gap-3">
@@ -168,14 +265,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, all
               >
                 <div className="relative">
                   <img src={match.user.imageUrl} alt={match.user.name} className="w-12 h-12 rounded-full object-cover border border-white/10" />
-                  {match.unread > 0 && <span className="absolute -top-1 -right-1 w-3 h-3 bg-secondary rounded-full border border-surface"></span>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline mb-1">
                     <h3 className="font-medium text-text-main truncate">{match.user.name}</h3>
-                    <span className="text-xs text-text-muted">{match.timestamp.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    <span className="text-xs text-text-muted">{match.timestamp.toLocaleDateString()}</span>
                   </div>
-                  <p className="text-sm text-text-muted truncate">{match.lastMessage || "New match!"}</p>
+                  <p className="text-sm text-text-muted truncate">{match.lastMessage || "Chat started"}</p>
                 </div>
               </div>
             ))
@@ -212,6 +308,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, all
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {isLoadingMessages && (
+               <div className="flex justify-center p-4"><Loader2 className="animate-spin text-gold"/></div>
+            )}
+            
+            {messages.length === 0 && !isLoadingMessages && (
+              <div className="text-center text-text-muted mt-8">
+                 <p>No messages yet. Start the conversation!</p>
+              </div>
+            )}
+            
             {messages.map((msg) => {
                const isMe = msg.senderId === currentUser.id;
                return (

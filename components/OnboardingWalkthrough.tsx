@@ -1,4 +1,5 @@
 
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Users, Video, TrendingUp, Check, ChevronRight, Sparkles } from 'lucide-react';
@@ -24,11 +25,15 @@ const MOCK_DEMO_USER: User = {
     { id: '4', icon: '🎯', name: 'Goal Crusher', color: 'text-gold', criteria: 'Goals' }
   ],
   email: 'demo@kova.app',
+  password: '',
+  dob: '1995-01-01',
   age: 28,
   gender: 'Male',
   stage: 'Scaling',
   location: { city: 'San Francisco', state: 'CA' },
-  mainGoal: 'Networking'
+  mainGoal: 'Networking',
+  securityQuestion: '',
+  securityAnswer: ''
 };
 
 const SLIDES = [

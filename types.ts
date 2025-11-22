@@ -53,10 +53,10 @@ export interface Match {
 
 export interface Message {
   id: string;
+  matchId: string; // Foreign key to Match
   senderId: string;
   text: string;
   timestamp: Date;
-  isAiGenerated?: boolean;
 }
 
 export interface Badge {

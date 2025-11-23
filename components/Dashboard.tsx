@@ -11,13 +11,21 @@ interface DashboardProps {
   user: User;
 }
 
+interface CalendarDay {
+  date: Date;
+  dateKey: string; // 'YYYY-MM-DD'
+  count: number;   // raw activity count
+  intensity: number; // 0-4
+  isInCurrentYear: boolean;
+}
+
 interface DashboardMetrics {
   totalHours: number;
   hoursChange: number; // Percent change vs last week
   completedGoals: number;
   totalGoals: number;
   weeklyMessages: { name: string; value: number }[]; // value = hours focused that day
-  heatmapData: { day: number; intensity: number }[];
+  calendarDays: CalendarDay[];
   scheduledSessions: ScheduledSession[];
 }
 
@@ -28,14 +36,28 @@ interface ScheduledSession {
   partner_email?: string;
 }
 
+// Kova Color Palette
 const getHeatmapColor = (intensity: number) => {
   switch (intensity) {
-    case 4: return 'bg-gold shadow-[0_0_8px_rgba(214,167,86,0.5)] border border-gold/50'; // Peak (Gold)
-    case 3: return 'bg-primary/40 border border-primary/20'; // High (Swapped to Faded Emerald)
-    case 2: return 'bg-primary border border-primary-hover'; // Medium (Deep Emerald)
-    case 1: return 'bg-secondary border border-secondary/50'; // Low (Swapped to Soft Teal)
-    default: return 'bg-surface border border-white/5';
+    case 4:
+      return 'bg-gold shadow-[0_0_8px_rgba(214,167,86,0.5)] border border-gold/50'; // Peak (Gold)
+    case 3:
+      return 'bg-primary/40 border border-primary/20'; // High (Faded Emerald)
+    case 2:
+      return 'bg-primary border border-primary-hover'; // Medium (Deep Emerald)
+    case 1:
+      return 'bg-secondary border border-secondary/50'; // Low (Soft Teal)
+    default:
+      return 'bg-surface border border-white/5'; // None
   }
+};
+
+const mapCountToIntensity = (count: number): number => {
+  if (count === 0) return 0;
+  if (count <= 1) return 1;
+  if (count <= 3) return 2;
+  if (count <= 6) return 3;
+  return 4;
 };
 
 interface BadgeCardProps {
@@ -113,14 +135,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
       try {
         const now = new Date();
+        const currentYear = now.getFullYear();
+        const startOfYear = new Date(currentYear, 0, 1);
+        const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59);
+
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(now.getDate() - 7);
         
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(now.getDate() - 14);
-
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(now.getDate() - 90);
 
         // --- 1. Fetch Sessions (Co-working Time) ---
         const { data: sessions } = await supabase
@@ -137,7 +160,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             const startTime = new Date(s.started_at);
             const endTime = s.ended_at ? new Date(s.ended_at) : null;
             
-            // Calculate duration in minutes manually since DB doesn't store it
+            // Calculate duration in minutes manually
             const minutes = endTime 
               ? Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000)) 
               : 0;
@@ -168,7 +191,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
 
         // --- 3. Weekly Focus (Hours per day from sessions) ---
-        // Build a rolling last-7-days map keyed by date (YYYY-MM-DD)
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const weeklyMinutesMap = new Map<string, number>();
 
@@ -179,8 +201,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           weeklyMinutesMap.set(dateKey, 0);
         }
 
-        // Re-use the `sessions` array we already fetched above.
-        // For each session, add its duration (in minutes) to the correct day in the last 7 days.
         sessions?.forEach((s: any) => {
           const startTime = new Date(s.started_at);
           const endTime = s.ended_at ? new Date(s.ended_at) : null;
@@ -196,7 +216,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           }
         });
 
-        // Convert the map into an array for Recharts, with values in HOURS (1 decimal)
         const weeklyMessages = Array.from(weeklyMinutesMap.entries()).map(([dateKey, minutes]) => {
           const d = new Date(dateKey);
           const dayName = dayNames[d.getDay()];
@@ -205,16 +224,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         });
 
 
-        // --- 4. Consistency Heatmap (90 Days) ---
-        // Fetch swipes, messages, sessions timestamps for last 90 days
-        const { data: recentSwipes } = await supabase.from('swipes').select('created_at').eq('swiper_id', user.id).gte('created_at', ninetyDaysAgo.toISOString());
-        const { data: recentMsgs } = await supabase.from('messages').select('created_at').eq('sender_id', user.id).gte('created_at', ninetyDaysAgo.toISOString());
-        const { data: recentSessions } = await supabase.from('sessions').select('started_at').or(`host_id.eq.${user.id},partner_id.eq.${user.id}`).gte('started_at', ninetyDaysAgo.toISOString());
+        // --- 4. Consistency Heatmap (Full Year - GitHub Style) ---
+        const startIso = startOfYear.toISOString();
+        const endIso = endOfYear.toISOString();
+        
+        const { data: recentSwipes } = await supabase.from('swipes').select('created_at').eq('swiper_id', user.id).gte('created_at', startIso).lte('created_at', endIso);
+        const { data: recentMsgs } = await supabase.from('messages').select('created_at').eq('sender_id', user.id).gte('created_at', startIso).lte('created_at', endIso);
+        const { data: recentSessions } = await supabase.from('sessions').select('started_at').or(`host_id.eq.${user.id},partner_id.eq.${user.id}`).gte('started_at', startIso).lte('started_at', endIso);
 
         const activityCounts = new Map<string, number>();
         
         const recordActivity = (isoDate: string) => {
-            const dateKey = new Date(isoDate).toLocaleDateString('en-CA'); // YYYY-MM-DD
+            const dateKey = new Date(isoDate).toLocaleDateString('en-CA');
             activityCounts.set(dateKey, (activityCounts.get(dateKey) || 0) + 1);
         };
 
@@ -222,23 +243,39 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         recentMsgs?.forEach((m: any) => recordActivity(m.created_at));
         recentSessions?.forEach((s: any) => recordActivity(s.started_at));
 
-        // Build 90 day array
-        const heatmapData = Array.from({ length: 90 }).map((_, i) => {
-             const d = new Date();
-             d.setDate(now.getDate() - (89 - i)); // Past to present
-             const dateKey = d.toLocaleDateString('en-CA');
-             const count = activityCounts.get(dateKey) || 0;
-             
-             // Map count to intensity 0-4
-             let intensity = 0;
-             if (count > 10) intensity = 4;
-             else if (count > 5) intensity = 3;
-             else if (count > 2) intensity = 2;
-             else if (count > 0) intensity = 1;
+        // Build Calendar Grid aligned to start on Sunday
+        const calendarDays: CalendarDay[] = [];
+        
+        // Find Sunday before Jan 1
+        const startDayOfWeek = startOfYear.getDay(); // 0=Sun..6=Sat
+        const gridStart = new Date(startOfYear);
+        gridStart.setDate(startOfYear.getDate() - startDayOfWeek);
 
-             return { day: i + 1, intensity };
-        });
+        // Find Saturday after Dec 31
+        const endDayOfWeek = endOfYear.getDay();
+        const gridEnd = new Date(endOfYear);
+        gridEnd.setDate(endOfYear.getDate() + (6 - endDayOfWeek));
 
+        const d = new Date(gridStart);
+        while (d <= gridEnd) {
+            const dateKey = d.toLocaleDateString('en-CA');
+            const count = activityCounts.get(dateKey) || 0;
+            const intensity = mapCountToIntensity(count);
+            
+            // Should show color if within year boundaries and not in future
+            const isInYear = d >= startOfYear && d <= endOfYear;
+            const isFuture = d > now;
+
+            calendarDays.push({
+                date: new Date(d),
+                dateKey,
+                count,
+                intensity: (isInYear && !isFuture) ? intensity : 0,
+                isInCurrentYear: isInYear
+            });
+            
+            d.setDate(d.getDate() + 1);
+        }
 
         // --- 5. Upcoming Sessions ---
         const { data: scheduled } = await supabase
@@ -256,7 +293,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             totalGoals,
             completedGoals,
             weeklyMessages,
-            heatmapData,
+            calendarDays,
             scheduledSessions: scheduled || []
         });
 
@@ -291,6 +328,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           </div>
       );
   }
+
+  // --- Helpers for Heatmap Rendering ---
+  const weeks: CalendarDay[][] = [];
+  for (let i = 0; i < metrics.calendarDays.length; i += 7) {
+      weeks.push(metrics.calendarDays.slice(i, i + 7));
+  }
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   return (
     <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
@@ -429,36 +474,100 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
             </div>
           </div>
 
-          {/* 2. Productivity Heatmap */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
+          {/* 2. Consistency Heatmap (GitHub Style) */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg overflow-hidden">
+            <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
                 <Zap size={18} className="text-gold"/> Consistency Heatmap
               </h3>
-              <span className="text-xs text-text-muted">Last 90 Days</span>
+              <span className="text-xs text-text-muted">{new Date().getFullYear()}</span>
             </div>
             
-            <div className="overflow-x-auto no-scrollbar w-full">
-              <div className="grid grid-cols-[repeat(30,minmax(0,1fr))] gap-1 w-full">
-                {metrics.heatmapData.map((data, idx) => (
-                  <div key={idx} className="relative group w-full">
-                    <div 
-                      className={`w-full aspect-square rounded-[2px] transition-all duration-300 ${getHeatmapColor(data.intensity)}`}
-                    ></div>
-                    <div className="absolute bottom-full mb-2 hidden group-hover:block z-10 w-max px-2 py-1 bg-black text-white text-xs rounded shadow-xl border border-surface left-1/2 -translate-x-1/2 pointer-events-none">
-                       Day {data.day}: {data.intensity === 0 ? 'Rest' : data.intensity === 4 ? 'Peak' : data.intensity === 3 ? 'High' : data.intensity === 2 ? 'Medium' : 'Low'}
-                    </div>
+            <div className="overflow-x-auto no-scrollbar w-full pb-2">
+               <div className="flex items-start gap-2 min-w-max">
+                  {/* Y-Axis Labels (Days) - Aligned to grid height */}
+                  <div className="flex flex-col justify-between pt-[2px] text-[10px] text-text-muted h-[88px] shrink-0 font-medium leading-[10px]">
+                     <span>Mon</span>
+                     <span>Wed</span>
+                     <span>Fri</span>
                   </div>
-                ))}
-              </div>
+
+                  <div className="flex flex-col gap-1">
+                      {/* X-Axis Labels (Months) */}
+                      <div className="flex text-[10px] text-text-muted gap-[2px]">
+                          {weeks.map((week, weekIndex) => {
+                              // Only consider days that are actually in the current year
+                              const firstCurrentYearDay = week.find(d => d.isInCurrentYear);
+                            
+                              if (!firstCurrentYearDay) {
+                                // Week is completely outside the current year – keep the column
+                                // width but don’t render a month label.
+                                return <div key={weekIndex} className="w-[10px]" />;
+                              }
+                            
+                              const currentMonth = firstCurrentYearDay.date.getMonth();
+                            
+                              const prevWeek = weeks[weekIndex - 1];
+                              const prevCurrentYearDay = prevWeek?.find(d => d.isInCurrentYear);
+                              const prevMonth = prevCurrentYearDay ? prevCurrentYearDay.date.getMonth() : -1;
+                            
+                              // Show label on the first week where this month appears
+                              // and only if that first current-year day is within the first 7 days of the month
+                              const showLabel =
+                                currentMonth !== prevMonth &&
+                                firstCurrentYearDay.date.getDate() <= 7;
+                            
+                              return (
+                                <div key={weekIndex} className="w-[10px] text-left overflow-visible">
+                                  {showLabel ? monthNames[currentMonth] : ''}
+                                </div>
+                              );
+                          })}
+                      </div>
+
+                      {/* The Grid */}
+                      <div className="grid grid-flow-col grid-rows-7 gap-[2px]">
+                          {metrics.calendarDays.map((day) => (
+                              <div key={day.dateKey} className="relative group">
+                                <div 
+                                    className={`w-[10px] h-[10px] rounded-sm transition-all duration-300 ${
+                                      day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent'
+                                    }`} 
+                                />
+                                {/* Tooltip - Positioned Below */}
+                                {day.isInCurrentYear && (
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block z-20 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none">
+                                        <p className="font-semibold text-text-muted">{day.date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                        <p className="font-bold mt-0.5">
+                                           {day.count === 0 ? 'No activity' : `${day.count} contribution${day.count !== 1 ? 's' : ''}`}
+                                        </p>
+                                    </div>
+                                )}
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+               </div>
             </div>
 
             <div className="flex items-center justify-start gap-4 mt-4 text-xs text-text-muted">
-              <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-[2px] bg-surface border border-white/5"></div> None</div>
-              <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-[2px] bg-secondary border border-secondary/50"></div> Low</div>
-              <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-[2px] bg-primary border border-primary-hover"></div> Med</div>
-              <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-[2px] bg-primary/40 border border-primary/20"></div> High</div>
-              <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)]"></div> Peak</div>
+              <span className="mr-1">Less</span>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-surface border border-white/5"></div>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-secondary border border-secondary/50"></div>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary border border-primary-hover"></div>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary/40 border border-primary/20"></div>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50"></div>
+              </div>
+              <span className="ml-1">More</span>
             </div>
           </div>
         </div>

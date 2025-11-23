@@ -413,6 +413,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUnmatch = async (matchId: string) => {
+    try {
+      const { error } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id', matchId);
+
+      if (error) throw error;
+
+      setMatches(prev => prev.filter(m => m.id !== matchId));
+    } catch (err) {
+      console.error("Error unmatching:", err);
+      alert("Failed to unmatch. Please try again.");
+    }
+  };
+
   const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
     if (!user) return;
 
@@ -565,6 +581,7 @@ const App: React.FC = () => {
                   currentUser={user}
                   onStartVideoCall={(m) => { setActiveVideoMatch(m); setCurrentView(ViewState.VIDEO_ROOM); }}
                   onConnectById={handleConnectById}
+                  onUnmatch={handleUnmatch}
                />
             </div>
           )}

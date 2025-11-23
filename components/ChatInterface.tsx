@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Video, MoreVertical, Sparkles, Bot, UserPlus, Search, Loader2, ArrowLeft, MapPin, Briefcase, Flag, Tag, Clock } from 'lucide-react';
+import { Send, Video, Sparkles, Bot, UserPlus, Search, Loader2, ArrowLeft, MapPin, Flag, Tag, Clock, UserMinus, X } from 'lucide-react';
 import { User, Match, Message } from '../types';
 import { generateIcebreaker } from '../services/geminiService';
 import { supabase } from '../supabaseClient';
@@ -19,9 +19,10 @@ interface ChatInterfaceProps {
   currentUser: User;
   onStartVideoCall: (match: Match) => void;
   onConnectById: (user: User) => void;
+  onUnmatch: (matchId: string) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onStartVideoCall, onConnectById }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onStartVideoCall, onConnectById, onUnmatch }) => {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(matches[0]?.id || null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -34,6 +35,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   const [foundUser, setFoundUser] = useState<User | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+
+  // Profile Modal State
+  const [showProfileModal, setShowProfileModal] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
@@ -300,6 +304,93 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
     }
   };
 
+  const handleUnmatch = () => {
+    if (!selectedMatchId) return;
+    
+    if (window.confirm("Are you sure you want to unmatch? This conversation will be removed.")) {
+        onUnmatch(selectedMatchId);
+        setSelectedMatchId(null);
+    }
+  };
+
+  // Reusable Profile Details Component
+  const ProfileDetailView = ({ match }: { match: Match }) => (
+    <>
+        <div className="p-8 flex flex-col items-center text-center border-b border-white/5">
+            <img 
+            src={match.user.imageUrl} 
+            alt={match.user.name} 
+            className="w-24 h-24 rounded-full object-cover border-4 border-surface shadow-xl mb-4" 
+            onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+            />
+            <h2 className="text-xl font-bold text-text-main">{match.user.name}</h2>
+            <p className="text-sm text-gold font-medium mt-1">{match.user.role}</p>
+            
+            <div className="flex gap-2 mt-4">
+                <span className="px-3 py-1 bg-background rounded-full text-xs font-bold text-text-muted border border-white/5 uppercase tracking-wide">
+                {match.user.stage}
+                </span>
+                <span className="px-3 py-1 bg-background rounded-full text-xs font-bold text-text-muted border border-white/5 uppercase tracking-wide">
+                {match.user.industry}
+                </span>
+            </div>
+        </div>
+
+        <div className="p-6 space-y-8">
+            {/* About Section */}
+            <div>
+                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">About</h4>
+                <p className="text-sm text-text-main leading-relaxed opacity-90">
+                {match.user.bio || "No bio available."}
+                </p>
+            </div>
+
+            {/* Location */}
+            {match.user.location && (match.user.location.city || match.user.location.state) && (
+            <div>
+                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Location</h4>
+                <div className="flex items-center gap-2 text-sm text-text-main">
+                    <MapPin size={16} className="text-secondary" />
+                    {match.user.location.city}, {match.user.location.state}
+                </div>
+            </div>
+            )}
+
+            {/* Main Goal */}
+            <div>
+                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Current Focus</h4>
+                <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 flex items-start gap-3">
+                <Flag size={16} className="text-primary mt-0.5 shrink-0" />
+                <p className="text-sm text-primary font-medium">{match.user.mainGoal}</p>
+                </div>
+            </div>
+
+            {/* Tags */}
+            {match.user.tags && match.user.tags.length > 0 && (
+            <div>
+                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Interests</h4>
+                <div className="flex flex-wrap gap-2">
+                    {match.user.tags.map(tag => (
+                    <span key={tag} className="text-xs px-2.5 py-1 bg-background border border-white/10 rounded-md text-text-muted flex items-center gap-1">
+                        <Tag size={10} /> {tag}
+                    </span>
+                    ))}
+                </div>
+            </div>
+            )}
+            
+            {/* Join Date */}
+            <div>
+                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Member Since</h4>
+                <div className="flex items-center gap-2 text-sm text-text-muted">
+                <Clock size={14} />
+                {new Date(match.timestamp).toLocaleDateString([], {month: 'long', year: 'numeric'})}
+                </div>
+            </div>
+        </div>
+    </>
+  );
+
   return (
     <div className="flex h-full w-full bg-background overflow-hidden border-t border-white/5 relative">
       
@@ -364,6 +455,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
         </div>
       )}
 
+      {/* Profile Details Modal (Desktop & Mobile) */}
+      {showProfileModal && selectedMatch && (
+        <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+             <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
+                <button 
+                    onClick={() => setShowProfileModal(false)} 
+                    className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text-white hover:bg-black/60 transition-colors"
+                >
+                    <X size={20} />
+                </button>
+                <div className="flex-1 overflow-y-auto">
+                    <ProfileDetailView match={selectedMatch} />
+                </div>
+             </div>
+        </div>
+      )}
+
       {/* --- Column 1: Sidebar List (Left Side) --- */}
       <div className={`w-full md:w-72 lg:w-80 bg-surface border-r border-white/5 flex flex-col shrink-0 ${selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface sticky top-0 z-10">
@@ -422,38 +530,49 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
         {selectedMatch ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 border-b border-white/5 flex items-center justify-between px-4 md:px-6 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20">
-              <div className="flex items-center gap-3 min-w-0">
-                 <button onClick={() => setSelectedMatchId(null)} className="md:hidden text-text-muted hover:text-white mr-2">
-                   <ArrowLeft size={20} />
+            <div className="h-16 border-b border-white/5 flex items-center justify-between px-3 md:px-6 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20">
+              <div className="flex items-center gap-3 flex-1 min-w-0 mr-2">
+                 <button onClick={() => setSelectedMatchId(null)} className="md:hidden text-text-muted hover:text-white shrink-0 p-1">
+                   <ArrowLeft size={22} />
                  </button>
                  <img 
                    src={selectedMatch.user.imageUrl} 
                    alt={selectedMatch.user.name} 
-                   className="w-10 h-10 rounded-full object-cover border border-white/10" 
+                   className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0" 
                    onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                  />
-                 <div className="min-w-0">
+                 <div className="min-w-0 flex-1">
                    <h3 className="font-bold text-text-main truncate">{selectedMatch.user.name}</h3>
                    <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
                       <span className="text-green-500">●</span> Online
                       <span className="text-white/20">|</span>
-                      <span>{selectedMatch.user.role}</span>
+                      <span className="truncate">{selectedMatch.user.role}</span>
                       <span className="hidden sm:inline">• {selectedMatch.user.stage}</span>
                       <span className="hidden sm:inline">• {selectedMatch.user.industry}</span>
                    </p>
                  </div>
               </div>
-              <div className="flex items-center gap-2">
+              
+              {/* Toolbar Actions */}
+              <div className="flex items-center gap-2 shrink-0">
+                 {/* Video Call */}
                  <button 
                     onClick={() => onStartVideoCall(selectedMatch)}
-                    className="p-2.5 text-text-muted hover:text-gold hover:bg-gold/10 rounded-full transition-colors" 
+                    className="px-3 py-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center gap-2 text-xs font-bold" 
                     title="Start Co-working Session"
                  >
-                   <Video size={20} />
+                   <Video size={16} />
+                   <span className="hidden md:inline">Video Call</span>
                  </button>
-                 <button className="p-2.5 text-text-muted hover:text-white rounded-full hover:bg-white/5">
-                   <MoreVertical size={20} />
+
+                 {/* Unmatch */}
+                 <button 
+                    onClick={handleUnmatch}
+                    className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center gap-2 text-xs font-medium"
+                    title="Unmatch"
+                 >
+                    <UserMinus size={16} />
+                    <span className="hidden md:inline">Unmatch</span>
                  </button>
               </div>
             </div>
@@ -542,7 +661,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                   <button 
                     onClick={() => handleSendMessage()}
                     disabled={!inputText.trim()}
-                    className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                    className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
                   >
                     <Send size={20} />
                   </button>
@@ -573,78 +692,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
       {/* --- Column 3: Profile Context Panel (Desktop Only) --- */}
       {selectedMatch && (
         <div className="hidden lg:flex w-80 bg-surface/50 border-l border-white/5 flex-col shrink-0 overflow-y-auto">
-           <div className="p-8 flex flex-col items-center text-center border-b border-white/5">
-              <img 
-                src={selectedMatch.user.imageUrl} 
-                alt={selectedMatch.user.name} 
-                className="w-24 h-24 rounded-full object-cover border-4 border-surface shadow-xl mb-4" 
-                onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-              />
-              <h2 className="text-xl font-bold text-text-main">{selectedMatch.user.name}</h2>
-              <p className="text-sm text-gold font-medium mt-1">{selectedMatch.user.role}</p>
-              
-              <div className="flex gap-2 mt-4">
-                 <span className="px-3 py-1 bg-background rounded-full text-xs font-bold text-text-muted border border-white/5 uppercase tracking-wide">
-                   {selectedMatch.user.stage}
-                 </span>
-                 <span className="px-3 py-1 bg-background rounded-full text-xs font-bold text-text-muted border border-white/5 uppercase tracking-wide">
-                   {selectedMatch.user.industry}
-                 </span>
-              </div>
-           </div>
-
-           <div className="p-6 space-y-8">
-              {/* About Section */}
-              <div>
-                 <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">About</h4>
-                 <p className="text-sm text-text-main leading-relaxed opacity-90">
-                    {selectedMatch.user.bio || "No bio available."}
-                 </p>
-              </div>
-
-              {/* Location */}
-              {selectedMatch.user.location && (selectedMatch.user.location.city || selectedMatch.user.location.state) && (
-                <div>
-                   <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Location</h4>
-                   <div className="flex items-center gap-2 text-sm text-text-main">
-                      <MapPin size={16} className="text-secondary" />
-                      {selectedMatch.user.location.city}, {selectedMatch.user.location.state}
-                   </div>
-                </div>
-              )}
-
-              {/* Main Goal */}
-              <div>
-                 <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Current Focus</h4>
-                 <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 flex items-start gap-3">
-                    <Flag size={16} className="text-primary mt-0.5 shrink-0" />
-                    <p className="text-sm text-primary font-medium">{selectedMatch.user.mainGoal}</p>
-                 </div>
-              </div>
-
-              {/* Tags */}
-              {selectedMatch.user.tags && selectedMatch.user.tags.length > 0 && (
-                <div>
-                   <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Interests</h4>
-                   <div className="flex flex-wrap gap-2">
-                      {selectedMatch.user.tags.map(tag => (
-                        <span key={tag} className="text-xs px-2.5 py-1 bg-background border border-white/10 rounded-md text-text-muted flex items-center gap-1">
-                           <Tag size={10} /> {tag}
-                        </span>
-                      ))}
-                   </div>
-                </div>
-              )}
-              
-              {/* Join Date */}
-              <div>
-                 <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Member Since</h4>
-                 <div className="flex items-center gap-2 text-sm text-text-muted">
-                    <Clock size={14} />
-                    {new Date(matches.find(m => m.id === selectedMatch.id)?.timestamp || Date.now()).toLocaleDateString([], {month: 'long', year: 'numeric'})}
-                 </div>
-              </div>
-           </div>
+           <ProfileDetailView match={selectedMatch} />
         </div>
       )}
     </div>

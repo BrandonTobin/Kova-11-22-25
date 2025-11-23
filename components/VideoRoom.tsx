@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Webcam from 'react-webcam';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft } from 'lucide-react';
 import { Match, Goal, User } from '../types';
 import { generateSharedGoals, generateMeetingSummary } from '../services/geminiService';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
@@ -252,12 +252,23 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         </div>
       )}
 
-      {/* Main Video Grid Area */}
-      <div className="flex-1 flex flex-col relative h-[60vh] md:h-auto">
+      {/* Main Video Section (Takes Priority on Mobile) */}
+      <div className="flex-1 flex flex-col relative h-full min-h-0">
+        
+        {/* Mobile Top Bar (Only visible on small screens) */}
+        <div className="md:hidden h-14 bg-surface border-b border-white/5 flex items-center justify-between px-4 shrink-0 z-10">
+           <button onClick={onReturnToDashboard} className="p-2 text-text-muted hover:text-white">
+              <ArrowLeft size={20} />
+           </button>
+           <span className="font-bold text-text-main text-sm">Co-working Session</span>
+           <div className="w-8"></div> {/* Spacer for balance */}
+        </div>
+
+        {/* Video Grid - Scrolls if too many participants */}
         <div className={`flex-1 grid ${getGridClass()} gap-4 p-4 overflow-y-auto`}>
           
           {/* 1. Local User (You) */}
-          <div className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 group min-h-[200px]">
+          <div className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 group min-h-[180px]">
             {isScreenSharing ? (
               <video 
                 ref={screenShareVideoRef}
@@ -291,7 +302,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
           {/* 2. Remote Participants */}
           {participants.map((participant) => (
-            <div key={participant.id} className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[200px]">
+            <div key={participant.id} className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[180px]">
               <img 
                 src={participant.user.imageUrl} 
                 alt={participant.user.name} 
@@ -313,8 +324,8 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           ))}
         </div>
 
-        {/* Controls Bar */}
-        <div className="h-20 bg-surface border-t border-white/5 flex items-center justify-center gap-2 md:gap-6 px-4 overflow-x-auto no-scrollbar">
+        {/* Controls Bar - Always visible, scrolls horizontally on small screens */}
+        <div className="h-20 bg-surface border-t border-white/5 flex items-center justify-center gap-3 md:gap-6 px-4 shrink-0 overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setMicOn(!micOn)}
             className={`p-3 md:p-4 rounded-full transition-all border shrink-0 ${micOn ? 'bg-background hover:bg-primary hover:border-primary border-white/10' : 'bg-red-500 hover:bg-red-600 border-red-500'}`}
@@ -361,8 +372,8 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         </div>
       </div>
 
-      {/* Sidebar Tools */}
-      <div className="w-full md:w-96 bg-surface border-l border-white/5 flex flex-col h-[40vh] md:h-full">
+      {/* Sidebar Tools - Collapsed to bottom or side based on screen */}
+      <div className="w-full md:w-96 bg-surface border-t md:border-t-0 md:border-l border-white/5 flex flex-col h-[35vh] md:h-full shrink-0">
         <div className="flex border-b border-white/5">
           <button 
             onClick={() => setActiveTab('goals')}

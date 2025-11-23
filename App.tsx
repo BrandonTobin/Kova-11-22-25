@@ -11,14 +11,15 @@ import ProfileEditor from './components/ProfileEditor';
 import LoginScreen from './components/LoginScreen';
 import RegisterScreen from './components/RegisterScreen';
 import SwipeDeck from './components/SwipeDeck';
+import MatchPopup from './components/MatchPopup';
 
 /* 
   SUPABASE TABLES SCHEMA ASSUMPTION:
   
   users: { id, kova_id, email, password, name, role, ... }
-  matches: { id, user1_id, user2_id, timestamp }
+  matches: { id, user1_id, user2_id, created_at }
   messages: { id, match_id, sender_id, text, timestamp }
-  swipes: { id, swiper_id, swiped_id, direction, timestamp }
+  swipes: { id, swiper_id, swiped_id, direction, created_at }
 */
 
 // Helper to map Database snake_case to Frontend camelCase
@@ -38,7 +39,10 @@ const mapDbUserToAppUser = (dbUser: any): User => ({
   age: dbUser.age,
   gender: dbUser.gender,
   stage: dbUser.stage,
-  location: dbUser.location || { city: '', state: '' },
+  location: {
+  city: dbUser.city || '',
+  state: dbUser.state || '',
+},
   mainGoal: dbUser.main_goal,
   securityQuestion: dbUser.security_question,
   securityAnswer: dbUser.security_answer,
@@ -61,7 +65,8 @@ const mapAppUserToDbUser = (user: User) => ({
   age: user.age,
   gender: user.gender,
   stage: user.stage,
-  location: user.location,
+  city: user.location?.city || '',
+  state: user.location?.state || '',
   main_goal: user.mainGoal,
   security_question: user.securityQuestion,
   security_answer: user.securityAnswer,
@@ -81,6 +86,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [matchedUser, setMatchedUser] = useState<User | null>(null);
 
   // --- Theme Effect ---
   useEffect(() => {
@@ -97,11 +103,12 @@ const App: React.FC = () => {
   const refreshMatches = async (currentUserId: string) => {
     try {
       // Fetch matches where current user is user1 OR user2
+      // Using 'created_at' as the sort key
       const { data: matchRows, error } = await supabase
         .from('matches')
         .select('*')
         .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`)
-        .order('timestamp', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       if (!matchRows) return;
@@ -132,7 +139,7 @@ const App: React.FC = () => {
           fullMatches.push({
             id: row.id,
             user: mapDbUserToAppUser(otherUserData),
-            timestamp: new Date(row.timestamp),
+            timestamp: new Date(row.created_at), // Use created_at from DB
             lastMessage: lastMsg?.text || "New Match! Say hello.",
             unread: 0 
           });
@@ -148,7 +155,7 @@ const App: React.FC = () => {
   // 2. Fetch Discover Queue
   const refreshDiscover = async (currentUserId: string) => {
     try {
-      // 1. Get IDs of people I've already swiped on
+      // 1. Get IDs of people I've already swiped on (left or right)
       const { data: swipes, error: swipeError } = await supabase
         .from('swipes')
         .select('swiped_id')
@@ -158,29 +165,21 @@ const App: React.FC = () => {
       
       const swipedIds = swipes?.map(s => s.swiped_id) || [];
       
-      // 2. Fetch users that are NOT me AND NOT in swipedIds
-      let query = supabase
+      // 2. Fetch ALL users
+      // We fetch all then filter locally to ensure robust exclusion
+      const { data: allUsers, error: usersError } = await supabase
         .from('users')
-        .select('*')
-        .neq('id', currentUserId);
+        .select('*');
 
-      if (swipedIds.length > 0) {
-        // Syntax for 'not in' with Supabase JS: .not('id', 'in', '(id1,id2)')
-        // But passing array to 'in' is simpler if we invert logic? 
-        // Supabase .in() is inclusive. We need exclusion.
-        // Using a filter approach for small datasets is okay, but let's try .not
-        // Format: (id1,id2,id3)
-        const idString = `(${swipedIds.map(id => `"${id}"`).join(',')})`;
-        query = query.not('id', 'in', idString);
-      }
+      if (usersError) throw usersError;
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      if (data) {
-        const mappedUsers = data.map(mapDbUserToAppUser);
-        setDiscoverQueue(mappedUsers);
+      if (allUsers) {
+        // Filter in JS: Exclude self AND anyone in swipedIds
+        const candidates = allUsers
+            .filter(u => u.id !== currentUserId && !swipedIds.includes(u.id))
+            .map(mapDbUserToAppUser);
+            
+        setDiscoverQueue(candidates);
       }
     } catch (err) {
       console.error("Error loading discover queue:", err);
@@ -290,6 +289,7 @@ const App: React.FC = () => {
     setCurrentView(ViewState.LOGIN);
     setActiveVideoMatch(null);
     setLoginError('');
+    setMatchedUser(null);
   };
 
   // --- Feature Handlers ---
@@ -340,8 +340,8 @@ const App: React.FC = () => {
          .insert([
            {
              user1_id: user.id,
-             user2_id: targetUser.id,
-             timestamp: new Date().toISOString()
+             user2_id: targetUser.id
+             // created_at is auto-generated
            }
          ]);
 
@@ -361,39 +361,67 @@ const App: React.FC = () => {
     if (!user) return;
 
     try {
-      // 1. Record the swipe in Supabase
+      // Optimistically remove from local queue immediately so UI feels fast
+      setDiscoverQueue(prev => prev.filter(u => u.id !== swipedUser.id));
+
+      // 1. Insert swipe record
       const { error } = await supabase
         .from('swipes')
         .insert([{
           swiper_id: user.id,
           swiped_id: swipedUser.id,
-          direction: direction,
-          timestamp: new Date().toISOString()
+          direction: direction
+          // created_at is auto-generated
         }]);
       
-      if (error) throw error;
+      if (error) {
+        console.error("Error inserting swipe:", error);
+        return; // Stop if swipe failed to save
+      }
 
-      // 2. If it's a right swipe, check for immediate match feedback 
-      // (Relying on DB trigger for actual match creation, but we can check if they liked us back for UI popup)
+      // 2. If Swipe Right, Check for Match (Mutual Swipe)
       if (direction === 'right') {
-         const { data: theirSwipe } = await supabase
-           .from('swipes')
-           .select('*')
-           .eq('swiper_id', swipedUser.id)
-           .eq('swiped_id', user.id)
-           .eq('direction', 'right')
-           .single();
+         // Check if the other user has swiped right on ME
+         const { data: reciprocalSwipe } = await supabase
+            .from('swipes')
+            .select('*')
+            .eq('swiper_id', swipedUser.id)
+            .eq('swiped_id', user.id)
+            .eq('direction', 'right')
+            .single();
         
-        if (theirSwipe) {
-           // It's a match! The DB trigger 'handle_mutual_like' should have created the match row.
-           // We can optionally show a popup here.
-           // For now, let's just refresh matches so it appears in the list.
-           // refreshMatches(user.id); // Optional: do in background
-        }
+         if (reciprocalSwipe) {
+             // Mutual Like Found!
+             
+             // Check if match already exists in matches table (safety check)
+             const { data: existingMatch } = await supabase
+               .from('matches')
+               .select('id')
+               .or(`and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`)
+               .single();
+
+             if (!existingMatch) {
+                // Create the match
+                const { error: matchError } = await supabase.from('matches').insert([{
+                    user1_id: user.id,
+                    user2_id: swipedUser.id
+                }]);
+
+                if (!matchError) {
+                    // Show Popup and Update
+                    setMatchedUser(swipedUser);
+                    refreshMatches(user.id); 
+                }
+             } else {
+                 // Match existed already (maybe from trigger?), just show popup
+                 setMatchedUser(swipedUser);
+                 refreshMatches(user.id);
+             }
+         }
       }
 
     } catch (err) {
-      console.error("Swipe error:", err);
+      console.error("Swipe logic error:", err);
     }
   };
 
@@ -468,6 +496,18 @@ const App: React.FC = () => {
     return (
       <div className={`flex flex-col h-screen bg-background text-text-main transition-colors duration-300 overflow-hidden ${isDarkMode ? 'dark' : ''}`}>
         
+        {matchedUser && (
+            <MatchPopup 
+               matchedUser={matchedUser} 
+               currentUser={user} 
+               onClose={() => setMatchedUser(null)} 
+               onChat={() => {
+                   setMatchedUser(null);
+                   setCurrentView(ViewState.MATCHES);
+               }} 
+            />
+        )}
+
         <div className="flex-1 overflow-hidden relative">
           {currentView === ViewState.DISCOVER && (
              <SwipeDeck users={discoverQueue} onSwipe={handleSwipe} />

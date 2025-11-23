@@ -157,7 +157,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
              age: data.age,
              gender: data.gender,
              stage: data.stage,
-             location: data.location || { city: '', state: '' },
+             location: {
+  city: data.city || '',
+  state: data.state || '',
+},
              mainGoal: data.main_goal,
              securityQuestion: '',
              securityAnswer: ''

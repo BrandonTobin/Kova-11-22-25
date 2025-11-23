@@ -5,6 +5,14 @@ import { User, Match, Message } from '../types';
 import { generateIcebreaker } from '../services/geminiService';
 import { supabase } from '../supabaseClient';
 
+// Supabase sends `timestamp without time zone` as a plain string (UTC).
+// We force it to be treated as UTC by appending `Z`, then JS converts to local.
+const parseSupabaseTimestamp = (value: string | null | undefined): Date => {
+  if (!value) return new Date();
+  const iso = typeof value === 'string' && !value.endsWith('Z') ? `${value}Z` : value;
+  return new Date(iso);
+};
+
 interface ChatInterfaceProps {
   matches: Match[];
   currentUser: User;
@@ -29,22 +37,47 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
 
+  // --- Time Formatting Helper (Local Time) ---
+  const formatLocalTime = (dateInput: Date | string) => {
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatSidebarDate = (dateInput: Date | string) => {
+    const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+    const now = new Date();
+    const isToday = date.getDate() === now.getDate() && 
+                    date.getMonth() === now.getMonth() && 
+                    date.getFullYear() === now.getFullYear();
+
+    if (isToday) {
+       return formatLocalTime(date);
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, selectedMatchId]);
 
-  // Load Messages from Supabase when match selected
+  // Load Messages & Subscribe to Realtime Updates
   useEffect(() => {
+    if (!selectedMatchId) return;
+    
+    let isMounted = true;
+
+    // 1. Initial Load of History
     const loadMessages = async () => {
-      if (!selectedMatchId) return;
       setIsLoadingMessages(true);
       
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .eq('match_id', selectedMatchId)
-        .order('timestamp', { ascending: true });
+        .order('created_at', { ascending: true });
+
+      if (!isMounted) return;
 
       if (error) {
         console.error("Error loading messages:", error);
@@ -54,7 +87,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
            matchId: msg.match_id,
            senderId: msg.sender_id,
            text: msg.text,
-           timestamp: new Date(msg.timestamp)
+           // Explicitly convert to Date object for local time rendering
+           timestamp: parseSupabaseTimestamp(msg.created_at || msg.timestamp)
         }));
         setMessages(loadedMsgs);
       }
@@ -62,18 +96,57 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
     };
 
     loadMessages();
+
+    // 2. Realtime Subscription
+    const channel = supabase
+      .channel(`match_messages:${selectedMatchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `match_id=eq.${selectedMatchId}`,
+        },
+        (payload) => {
+          if (!isMounted) return;
+
+          const newRow = payload.new as any;
+          const newMsg: Message = {
+            id: newRow.id,
+            matchId: newRow.match_id,
+            senderId: newRow.sender_id,
+            text: newRow.text,
+            // Explicitly convert to Date object for local time rendering
+            timestamp: parseSupabaseTimestamp(newRow.created_at || newRow.timestamp)
+          };
+
+          setMessages((prev) => {
+            // Deduplication: If we already have this message (e.g. from initial load or optimistic update), don't add it again.
+            if (prev.some(m => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        }
+      )
+      .subscribe();
+
+    // 3. Cleanup
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
   }, [selectedMatchId]);
 
   const handleSendMessage = async (text: string = inputText) => {
     if (!text.trim() || !selectedMatchId || !currentUser) return;
 
-    // Optimistic Update
+    // Optimistic Update (Show immediately in UI with local time)
     const optimisticMsg: Message = {
       id: `temp-${Date.now()}`,
       matchId: selectedMatchId,
       senderId: currentUser.id,
       text: text,
-      timestamp: new Date(),
+      timestamp: new Date(), // Local browser time
     };
 
     setMessages(prev => [...prev, optimisticMsg]);
@@ -81,34 +154,49 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
 
     try {
       // Save to Supabase
+      // We do NOT send 'id' or 'created_at' - let the DB generate them.
       const { data, error } = await supabase
         .from('messages')
         .insert([{
           match_id: selectedMatchId,
           sender_id: currentUser.id,
-          text: text,
-          timestamp: new Date().toISOString()
+          text: text
         }])
         .select()
         .single();
 
       if (error) throw error;
       
-      // Update the optimistic message with real ID from DB
+      // Update state after successful send
       if (data) {
-         setMessages(prev => prev.map(m => m.id === optimisticMsg.id ? { ...m, id: data.id } : m));
+         setMessages(prev => {
+             // Check if the Realtime subscription already added the real message while we were waiting
+             const alreadyHasRealMsg = prev.some(m => m.id === data.id);
+
+             if (alreadyHasRealMsg) {
+                 // If Realtime beat us to it, just remove our optimistic temp message
+                 return prev.filter(m => m.id !== optimisticMsg.id);
+             } else {
+                 // Otherwise, update our optimistic message with the real ID and timestamp from DB
+                 return prev.map(m => m.id === optimisticMsg.id ? { 
+                     ...m, 
+                     id: data.id,
+                     // Ensure newly created timestamp is also converted to Date object
+                     timestamp: new Date(data.created_at)
+                 } : m);
+             }
+         });
       }
 
     } catch (err) {
       console.error("Failed to send message:", err);
-      // Fallback: Remove optimistic message if failure (or show error icon)
+      // Optionally allow retry or show error state for the temp message
     }
   };
 
   const handleAiIcebreaker = async () => {
     if (!selectedMatch) return;
     setIsGenerating(true);
-    // Note: generateIcebreaker is a stateless utility, works fine.
     const icebreaker = await generateIcebreaker(currentUser, selectedMatch.user);
     setInputText(icebreaker);
     setIsGenerating(false);
@@ -158,9 +246,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
              gender: data.gender,
              stage: data.stage,
              location: {
-  city: data.city || '',
-  state: data.state || '',
-},
+                city: data.city || '',
+                state: data.state || '',
+             },
              mainGoal: data.main_goal,
              securityQuestion: '',
              securityAnswer: ''
@@ -177,7 +265,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
 
   const handleSendRequest = () => {
     if (foundUser) {
-      // Call parent handler which does the heavy lifting of inserting the match
       onConnectById(foundUser);
       setShowConnectModal(false);
       setSearchId('');
@@ -272,7 +359,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline mb-1">
                     <h3 className="font-medium text-text-main truncate">{match.user.name}</h3>
-                    <span className="text-xs text-text-muted">{match.timestamp.toLocaleDateString()}</span>
+                    {/* Render local time for sidebar */}
+                    <span className="text-xs text-text-muted">
+                      {formatSidebarDate(match.timestamp)}
+                    </span>
                   </div>
                   <p className="text-sm text-text-muted truncate">{match.lastMessage || "Chat started"}</p>
                 </div>
@@ -328,7 +418,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                    <div className={`max-w-[70%] p-3 rounded-2xl border ${isMe ? 'bg-primary border-primary text-white rounded-tr-sm' : 'bg-surface border-white/5 text-text-main rounded-tl-sm'}`}>
                      <p className="text-sm md:text-base">{msg.text}</p>
                      <span className={`text-[10px] block mt-1 opacity-70 ${isMe ? 'text-white/70' : 'text-text-muted'}`}>
-                       {msg.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                       {/* Use formatLocalTime to ensure correct timezone display */}
+                       {formatLocalTime(msg.timestamp)}
                      </span>
                    </div>
                  </div>

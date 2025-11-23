@@ -72,6 +72,14 @@ const mapAppUserToDbUser = (user: User) => ({
   security_answer: user.securityAnswer,
 });
 
+// Supabase sends `timestamp without time zone` as a plain string (UTC).
+// We force it to be treated as UTC by appending `Z`, then JS converts to local.
+const parseSupabaseTimestamp = (value: string | null | undefined): Date => {
+  if (!value) return new Date();
+  const iso = typeof value === 'string' && !value.endsWith('Z') ? `${value}Z` : value;
+  return new Date(iso);
+};
+
 const App: React.FC = () => {
   // --- State ---
   const [user, setUser] = useState<User | null>(null);
@@ -110,6 +118,8 @@ const App: React.FC = () => {
         .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`)
         .order('created_at', { ascending: false });
 
+      console.log('refreshMatches rows', matchRows);
+
       if (error) throw error;
       if (!matchRows) return;
 
@@ -130,16 +140,17 @@ const App: React.FC = () => {
           // Fetch last message for this match to show in sidebar
           const { data: lastMsg } = await supabase
             .from('messages')
-            .select('text, timestamp')
+            .select('text, created_at')
             .eq('match_id', row.id)
-            .order('timestamp', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(1)
             .single();
 
           fullMatches.push({
             id: row.id,
             user: mapDbUserToAppUser(otherUserData),
-            timestamp: new Date(row.created_at), // Use created_at from DB
+            // Explicitly parse created_at to Date object
+            timestamp: parseSupabaseTimestamp(lastMsg?.created_at || row.created_at),
             lastMessage: lastMsg?.text || "New Match! Say hello.",
             unread: 0 
           });
@@ -361,62 +372,35 @@ const App: React.FC = () => {
     if (!user) return;
 
     try {
-      // Optimistically remove from local queue immediately so UI feels fast
+      // Optimistically remove from Discover
       setDiscoverQueue(prev => prev.filter(u => u.id !== swipedUser.id));
 
-      // 1. Insert swipe record
-      const { error } = await supabase
+      // 1. Save swipe
+      const { error: swipeError } = await supabase
         .from('swipes')
         .insert([{
           swiper_id: user.id,
           swiped_id: swipedUser.id,
           direction: direction
-          // created_at is auto-generated
         }]);
       
-      if (error) {
-        console.error("Error inserting swipe:", error);
-        return; // Stop if swipe failed to save
+      if (swipeError) {
+        console.error("Error inserting swipe:", swipeError);
+        return;
       }
 
-      // 2. If Swipe Right, Check for Match (Mutual Swipe)
+      // 2. If right swipe, see if a match now exists (created by trigger)
       if (direction === 'right') {
-         // Check if the other user has swiped right on ME
-         const { data: reciprocalSwipe } = await supabase
-            .from('swipes')
+         const { data: matchRow, error: matchQueryError } = await supabase
+            .from('matches')
             .select('*')
-            .eq('swiper_id', swipedUser.id)
-            .eq('swiped_id', user.id)
-            .eq('direction', 'right')
+            .or(`and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`)
             .single();
         
-         if (reciprocalSwipe) {
-             // Mutual Like Found!
-             
-             // Check if match already exists in matches table (safety check)
-             const { data: existingMatch } = await supabase
-               .from('matches')
-               .select('id')
-               .or(`and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`)
-               .single();
-
-             if (!existingMatch) {
-                // Create the match
-                const { error: matchError } = await supabase.from('matches').insert([{
-                    user1_id: user.id,
-                    user2_id: swipedUser.id
-                }]);
-
-                if (!matchError) {
-                    // Show Popup and Update
-                    setMatchedUser(swipedUser);
-                    refreshMatches(user.id); 
-                }
-             } else {
-                 // Match existed already (maybe from trigger?), just show popup
-                 setMatchedUser(swipedUser);
-                 refreshMatches(user.id);
-             }
+         if (!matchQueryError && matchRow) {
+             // A real match exists – show popup and refresh list
+             setMatchedUser(swipedUser);
+             await refreshMatches(user.id);
          }
       }
 

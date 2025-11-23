@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, MessageSquare, User as UserIcon, Search, LogOut, Sun, Moon, Loader2 } from 'lucide-react';
 import { ViewState, User, Match } from './types';
 import { supabase } from './supabaseClient';
+import { DEFAULT_PROFILE_IMAGE } from './constants';
 
 import ChatInterface from './components/ChatInterface';
 import VideoRoom from './components/VideoRoom';
@@ -13,14 +14,8 @@ import RegisterScreen from './components/RegisterScreen';
 import SwipeDeck from './components/SwipeDeck';
 import MatchPopup from './components/MatchPopup';
 
-/* 
-  SUPABASE TABLES SCHEMA ASSUMPTION:
-  
-  users: { id, kova_id, email, name, role, ... } (NO PASSWORD COLUMN)
-  matches: { id, user1_id, user2_id, created_at }
-  messages: { id, match_id, sender_id, text, created_at }
-  swipes: { id, swiper_id, swiped_id, direction, created_at }
-*/
+// --- CONFIGURATION ---
+const STORAGE_KEY = 'kova_current_user_id';
 
 // Helper to map Database snake_case to Frontend camelCase
 const mapDbUserToAppUser = (dbUser: any): User => ({
@@ -28,11 +23,11 @@ const mapDbUserToAppUser = (dbUser: any): User => ({
   kovaId: dbUser.kova_id,
   name: dbUser.name,
   email: dbUser.email,
-  password: '', // Password is now handled by Supabase Auth, not stored in public table
+  password: dbUser.password, // We are storing/reading raw password per instruction
   role: dbUser.role,
   industry: dbUser.industry,
   bio: dbUser.bio,
-  imageUrl: dbUser.image_url,
+  imageUrl: (dbUser.image_url && !dbUser.image_url.startsWith('blob:')) ? dbUser.image_url : DEFAULT_PROFILE_IMAGE,
   tags: dbUser.tags || [],
   badges: dbUser.badges || [],
   dob: dbUser.dob,
@@ -40,40 +35,53 @@ const mapDbUserToAppUser = (dbUser: any): User => ({
   gender: dbUser.gender,
   stage: dbUser.stage,
   location: {
-  city: dbUser.city || '',
-  state: dbUser.state || '',
-},
+    city: dbUser.city || '',
+    state: dbUser.state || '',
+  },
   mainGoal: dbUser.main_goal,
   securityQuestion: dbUser.security_question,
   securityAnswer: dbUser.security_answer,
 });
 
 // Helper to map Frontend camelCase to Database snake_case
-const mapAppUserToDbUser = (user: User) => ({
-  // id is explicitly passed during insert to match Auth ID
-  kova_id: user.kovaId,
-  name: user.name,
-  email: user.email,
-  // password: user.password, // DO NOT store raw password in public table
-  role: user.role,
-  industry: user.industry,
-  bio: user.bio,
-  image_url: user.imageUrl,
-  tags: user.tags,
-  badges: user.badges,
-  dob: user.dob,
-  age: user.age,
-  gender: user.gender,
-  stage: user.stage,
-  city: user.location?.city || '',
-  state: user.location?.state || '',
-  main_goal: user.mainGoal,
-  security_question: user.securityQuestion,
-  security_answer: user.securityAnswer,
-});
+const mapAppUserToDbUser = (user: User) => {
+  // Final safeguard: Ensure we never save a blob URL to the DB
+  let safeImageUrl = user.imageUrl;
+  if (!safeImageUrl || safeImageUrl.startsWith('blob:')) {
+    safeImageUrl = DEFAULT_PROFILE_IMAGE;
+  }
+
+  const payload: any = {
+    kova_id: user.kovaId,
+    name: user.name,
+    email: user.email,
+    password: user.password, // Include password for storage
+    role: user.role,
+    industry: user.industry,
+    bio: user.bio,
+    image_url: safeImageUrl,
+    tags: user.tags,
+    badges: user.badges,
+    dob: user.dob,
+    age: user.age,
+    gender: user.gender,
+    stage: user.stage,
+    city: user.location?.city || '',
+    state: user.location?.state || '',
+    main_goal: user.mainGoal,
+    security_question: user.securityQuestion,
+    security_answer: user.securityAnswer,
+  };
+  
+  // Only include ID if it's set, otherwise let DB generate UUID
+  if (user.id) {
+    payload.id = user.id;
+  }
+  
+  return payload;
+};
 
 // Supabase sends `timestamp without time zone` as a plain string (UTC).
-// We force it to be treated as UTC by appending `Z`, then JS converts to local.
 const parseSupabaseTimestamp = (value: string | null | undefined): Date => {
   if (!value) return new Date();
   const iso = typeof value === 'string' && !value.endsWith('Z') ? `${value}Z` : value;
@@ -91,7 +99,8 @@ const App: React.FC = () => {
   
   // UI State
   const [loginError, setLoginError] = useState('');
-  const [isLoading, setIsLoading] = useState(true); // Start true to check session
+  const [registerError, setRegisterError] = useState('');
+  const [isLoading, setIsLoading] = useState(true); 
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [matchedUser, setMatchedUser] = useState<User | null>(null);
@@ -105,78 +114,52 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // --- Session Persistence & Auth Listener ---
+  // --- Session Persistence (LocalStorage) ---
   useEffect(() => {
-    // 1. Check for active session on mount
-    const checkSession = async () => {
+    const restoreSession = async () => {
+      setIsLoading(true); // Start loading
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          await fetchUserProfile(session.user.id);
+        const storedId = localStorage.getItem(STORAGE_KEY);
+        
+        if (storedId) {
+          // Fetch user directly from public.users
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', storedId)
+            .single();
+
+          if (error) {
+            console.error("Session restore failed:", error);
+            localStorage.removeItem(STORAGE_KEY);
+            setUser(null);
+            setCurrentView(ViewState.LOGIN);
+          } else if (data) {
+            const appUser = mapDbUserToAppUser(data);
+            setUser(appUser);
+            // Load initial data
+            await refreshMatches(appUser.id);
+            setCurrentView(ViewState.DISCOVER);
+          }
         } else {
           setCurrentView(ViewState.LOGIN);
-          setIsLoading(false);
         }
-      } catch (error) {
-        console.error("Session check error:", error);
-        setIsLoading(false);
+      } catch (err) {
+        console.error("Unexpected session error:", err);
+      } finally {
+        setIsLoading(false); // Always stop loading
       }
     };
 
-    checkSession();
-
-    // 2. Listen for auth changes (login, logout, auto-refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        await fetchUserProfile(session.user.id);
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setCurrentView(ViewState.LOGIN);
-        setMatches([]);
-        setDiscoverQueue([]);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    restoreSession();
   }, []);
 
+
   // --- Data Loaders ---
-
-  // Helper to load the full profile from 'users' table based on Auth ID
-  const fetchUserProfile = async (userId: string) => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) throw error;
-      
-      if (data) {
-        const appUser = mapDbUserToAppUser(data);
-        setUser(appUser);
-        // Load app data
-        await refreshMatches(appUser.id);
-        // Only switch view if we are currently on Login (prevent resetting view on refresh if possible, though ViewState defaults to Login)
-        setCurrentView(prev => prev === ViewState.LOGIN ? ViewState.DISCOVER : prev);
-      }
-    } catch (err) {
-      console.error("Error fetching profile:", err);
-      // If auth exists but profile doesn't, might need to handle that edge case
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // 1. Fetch Matches
   const refreshMatches = async (currentUserId: string) => {
     try {
-      // Fetch matches where current user is user1 OR user2
-      // Using 'created_at' as the sort key
       const { data: matchRows, error } = await supabase
         .from('matches')
         .select('*')
@@ -191,10 +174,8 @@ const App: React.FC = () => {
       const fullMatches: Match[] = [];
 
       for (const row of matchRows) {
-        // Determine who the "other" person is
         const otherUserId = row.user1_id === currentUserId ? row.user2_id : row.user1_id;
         
-        // Fetch their profile
         const { data: otherUserData } = await supabase
           .from('users')
           .select('*')
@@ -202,7 +183,6 @@ const App: React.FC = () => {
           .single();
 
         if (otherUserData) {
-          // Fetch last message for this match to show in sidebar
           const { data: lastMsg } = await supabase
             .from('messages')
             .select('text, created_at')
@@ -214,14 +194,12 @@ const App: React.FC = () => {
           fullMatches.push({
             id: row.id,
             user: mapDbUserToAppUser(otherUserData),
-            // Explicitly parse created_at to Date object
             timestamp: parseSupabaseTimestamp(lastMsg?.created_at || row.created_at),
             lastMessage: lastMsg?.text || "New Match! Say hello.",
             unread: 0 
           });
         }
       }
-      
       setMatches(fullMatches);
     } catch (err) {
       console.error("Error loading matches:", err);
@@ -231,7 +209,6 @@ const App: React.FC = () => {
   // 2. Fetch Discover Queue
   const refreshDiscover = async (currentUserId: string) => {
     try {
-      // 1. Get IDs of people I've already swiped on (left or right)
       const { data: swipes, error: swipeError } = await supabase
         .from('swipes')
         .select('swiped_id')
@@ -241,8 +218,6 @@ const App: React.FC = () => {
       
       const swipedIds = swipes?.map(s => s.swiped_id) || [];
       
-      // 2. Fetch ALL users
-      // We fetch all then filter locally to ensure robust exclusion
       const { data: allUsers, error: usersError } = await supabase
         .from('users')
         .select('*');
@@ -250,7 +225,6 @@ const App: React.FC = () => {
       if (usersError) throw usersError;
 
       if (allUsers) {
-        // Filter in JS: Exclude self AND anyone in swipedIds
         const candidates = allUsers
             .filter(u => u.id !== currentUserId && !swipedIds.includes(u.id))
             .map(mapDbUserToAppUser);
@@ -263,7 +237,6 @@ const App: React.FC = () => {
   };
 
   // --- Effects to trigger data loading ---
-
   useEffect(() => {
     if (!user) return;
 
@@ -277,76 +250,106 @@ const App: React.FC = () => {
   }, [currentView, user]);
 
 
-  // --- Auth Handlers ---
+  // --- Auth Handlers (Custom Table Auth) ---
 
   const handleSignIn = async (email: string, pass: string) => {
     setIsLoading(true);
     setLoginError('');
     
     try {
-      // Use Supabase Auth
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: pass,
-      });
+      // Direct query to public.users table
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .eq('password', pass)
+        .single();
 
-      if (error) throw error;
+      if (error || !data) {
+        throw new Error("Invalid email or password.");
+      }
 
-      // Success - The onAuthStateChange listener will handle fetching profile and updating state
+      const appUser = mapDbUserToAppUser(data);
       
+      // Persist session
+      localStorage.setItem(STORAGE_KEY, appUser.id);
+      
+      // Set State
+      setUser(appUser);
+      await refreshMatches(appUser.id);
+      setCurrentView(ViewState.DISCOVER);
+
     } catch (err: any) {
       console.error("Login error:", err);
-      setLoginError(err.message || 'Invalid email or password.');
+      setLoginError(err.message || 'Login failed.');
+    } finally {
       setIsLoading(false);
     }
   };
 
   const handleRegister = async (newUser: User) => {
     setIsLoading(true);
-    setLoginError('');
+    setRegisterError('');
     
     try {
-      // 1. Sign up with Supabase Auth
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUser.email,
-        password: newUser.password,
-      });
-
-      if (authError) throw authError;
-      if (!authData.user) throw new Error("Registration failed: No user returned");
-
-      // 2. Insert into public.users table
-      // CRITICAL: Use the ID generated by Supabase Auth
-      const dbUserPayload = {
-        ...mapAppUserToDbUser(newUser),
-        id: authData.user.id 
-      };
-      
-      const { error: profileError } = await supabase
+      // 1. Check for duplicate email manually
+      const { data: existingUser } = await supabase
         .from('users')
-        .insert([dbUserPayload]);
+        .select('id')
+        .eq('email', newUser.email)
+        .maybeSingle();
 
-      if (profileError) {
-        // If profile creation fails, we should ideally rollback auth, but for now just throw
-        console.error("Profile creation failed:", profileError);
-        throw new Error("Failed to create user profile.");
+      if (existingUser) {
+        throw new Error("An account with this email already exists. Please sign in instead.");
       }
 
-      // 3. Fetch and set user (The Auth Listener will likely pick this up, but we can force it for speed)
-      await fetchUserProfile(authData.user.id);
-      setCurrentView(ViewState.DISCOVER);
+      // 2. Map to DB format (includes password)
+      // Note: newUser.imageUrl is already sanitized/generated in RegisterScreen component
+      const dbUserPayload = mapAppUserToDbUser(newUser);
+      
+      // Ensure we don't send an empty ID string, let DB generate UUID
+      if (!dbUserPayload.id) delete dbUserPayload.id;
 
+      const { data, error } = await supabase
+        .from('users')
+        .insert([dbUserPayload])
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (!data) throw new Error("Registration failed.");
+
+      const createdUser = mapDbUserToAppUser(data);
+
+      // Persist session
+      localStorage.setItem(STORAGE_KEY, createdUser.id);
+
+      // Set State
+      setUser(createdUser);
+      setCurrentView(ViewState.DISCOVER);
+      
     } catch (err: any) {
       console.error("Registration error:", err);
-      setLoginError("Registration failed: " + (err.message || "Unknown error"));
+      // Handle Supabase unique violation explicitly just in case race condition
+      if (err.code === '23505') {
+        setRegisterError("An account with this email already exists. Please sign in instead.");
+      } else {
+        setRegisterError(err.message || "Registration failed. Please try again.");
+      }
+    } finally {
       setIsLoading(false);
     }
   };
 
   const handleSignOut = async () => {
     setIsLoading(true);
-    await supabase.auth.signOut();
-    // onAuthStateChange handles state clearing
+    // Clear Local Storage
+    localStorage.removeItem(STORAGE_KEY);
+    // Reset State
+    setUser(null);
+    setMatches([]);
+    setDiscoverQueue([]);
+    setCurrentView(ViewState.LOGIN);
     setIsLoading(false);
   };
 
@@ -355,8 +358,8 @@ const App: React.FC = () => {
   const handleUpdateProfile = async (updatedUser: User) => {
     try {
       const dbUser = mapAppUserToDbUser(updatedUser);
-      // Remove sensitive/key fields from update just in case
-      const { ...updatePayload } = dbUser;
+      // Keep password if it exists, otherwise remove it from update payload if empty
+      const { id, ...updatePayload } = dbUser;
       
       const { error } = await supabase
         .from('users')
@@ -377,7 +380,6 @@ const App: React.FC = () => {
     if (!user) return;
     
     try {
-      // 1. Check if match already exists
       const { data: existingMatch } = await supabase
         .from('matches')
         .select('*')
@@ -385,27 +387,23 @@ const App: React.FC = () => {
         .single();
 
       if (existingMatch) {
-         // Already matched, just switch view
          alert(`You are already matched with ${targetUser.name}!`);
          await refreshMatches(user.id);
          setCurrentView(ViewState.MATCHES);
          return;
       }
 
-       // 2. Insert into matches table
        const { error } = await supabase
          .from('matches')
          .insert([
            {
              user1_id: user.id,
              user2_id: targetUser.id
-             // created_at is auto-generated
            }
          ]);
 
        if (error) throw error;
 
-       // 3. Refresh and go to matches
        await refreshMatches(user.id);
        setCurrentView(ViewState.MATCHES);
 
@@ -419,10 +417,8 @@ const App: React.FC = () => {
     if (!user) return;
 
     try {
-      // Optimistically remove from Discover
       setDiscoverQueue(prev => prev.filter(u => u.id !== swipedUser.id));
 
-      // 1. Save swipe
       const { error: swipeError } = await supabase
         .from('swipes')
         .insert([{
@@ -436,7 +432,6 @@ const App: React.FC = () => {
         return;
       }
 
-      // 2. If right swipe, see if a match now exists (created by trigger)
       if (direction === 'right') {
          const { data: matchRow, error: matchQueryError } = await supabase
             .from('matches')
@@ -445,7 +440,6 @@ const App: React.FC = () => {
             .single();
         
          if (!matchQueryError && matchRow) {
-             // A real match exists – show popup and refresh list
              setMatchedUser(swipedUser);
              await refreshMatches(user.id);
          }
@@ -456,10 +450,8 @@ const App: React.FC = () => {
     }
   };
 
-  // --- Security Recovery (Using Supabase Auth Reset) ---
+  // --- Security Recovery ---
   const handleGetSecurityQuestion = async (email: string): Promise<string | null> => {
-    // Deprecated with Supabase Auth, but keeping for compat.
-    // We won't actually use this for the reset flow anymore if we are strict about Auth.
     const { data } = await supabase
       .from('users')
       .select('security_question')
@@ -469,18 +461,25 @@ const App: React.FC = () => {
   };
 
   const handleResetPassword = async (email: string, answer: string, newPass: string) => {
-      // Standard Supabase Auth Password Reset
-      // Note: This sends an email. We cannot change the password directly without a session.
-      try {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: window.location.origin, // Redirect back here
-        });
-
-        if (error) return { success: false, message: error.message };
-        return { success: true, message: 'Password reset email sent! Please check your inbox.' };
-      } catch (err) {
-        return { success: false, message: 'Failed to send reset email.' };
+      // Verify security answer first
+      const { data } = await supabase
+        .from('users')
+        .select('security_answer')
+        .eq('email', email)
+        .single();
+      
+      if (!data || data.security_answer.toLowerCase() !== answer.toLowerCase()) {
+         return { success: false, message: 'Incorrect security answer.' };
       }
+
+      // Update password directly in public.users
+      const { error } = await supabase
+        .from('users')
+        .update({ password: newPass })
+        .eq('email', email);
+
+      if (error) return { success: false, message: error.message };
+      return { success: true, message: 'Password reset successful! Please log in.' };
   };
 
   // --- Render ---
@@ -490,7 +489,10 @@ const App: React.FC = () => {
       return (
         <LoginScreen 
           onLogin={handleSignIn} 
-          onRegisterClick={() => setCurrentView(ViewState.REGISTER)}
+          onRegisterClick={() => {
+            setRegisterError(''); // Reset error when switching
+            setCurrentView(ViewState.REGISTER);
+          }}
           error={loginError}
           isLoading={isLoading}
           onGetSecurityQuestion={handleGetSecurityQuestion}
@@ -503,15 +505,19 @@ const App: React.FC = () => {
       return (
         <RegisterScreen 
           onRegister={handleRegister}
-          onBack={() => setCurrentView(ViewState.LOGIN)}
+          onBack={() => {
+            setRegisterError('');
+            setCurrentView(ViewState.LOGIN);
+          }}
           isLoading={isLoading}
+          error={registerError}
+          onClearError={() => setRegisterError('')}
         />
       );
     }
 
     // Protected Views
     if (!user) {
-       // Fallback loading state if session check is slow
        if (isLoading) {
           return (
             <div className="flex items-center justify-center h-screen bg-background">
@@ -522,7 +528,10 @@ const App: React.FC = () => {
        return (
         <LoginScreen 
           onLogin={handleSignIn} 
-          onRegisterClick={() => setCurrentView(ViewState.REGISTER)}
+          onRegisterClick={() => {
+             setRegisterError('');
+             setCurrentView(ViewState.REGISTER);
+          }}
           error={loginError}
           isLoading={isLoading}
         />

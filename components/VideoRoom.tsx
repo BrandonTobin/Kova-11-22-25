@@ -4,6 +4,7 @@ import Webcam from 'react-webcam';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X } from 'lucide-react';
 import { Match, Goal, User } from '../types';
 import { generateSharedGoals, generateMeetingSummary } from '../services/geminiService';
+import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface VideoRoomProps {
   match: Match; // The initial person called
@@ -173,7 +174,12 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                   .map(match => (
                     <div key={match.id} className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5 hover:border-gold/30 transition-colors">
                        <div className="flex items-center gap-3">
-                          <img src={match.user.imageUrl} alt={match.user.name} className="w-10 h-10 rounded-full object-cover" />
+                          <img 
+                            src={match.user.imageUrl} 
+                            alt={match.user.name} 
+                            className="w-10 h-10 rounded-full object-cover" 
+                            onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                          />
                           <div>
                              <p className="font-bold text-sm text-text-main">{match.user.name}</p>
                              <p className="text-xs text-text-muted">{match.user.role}</p>
@@ -286,7 +292,12 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           {/* 2. Remote Participants */}
           {participants.map((participant) => (
             <div key={participant.id} className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[200px]">
-              <img src={participant.user.imageUrl} alt={participant.user.name} className="w-full h-full object-cover" />
+              <img 
+                src={participant.user.imageUrl} 
+                alt={participant.user.name} 
+                className="w-full h-full object-cover" 
+                onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+              />
               
               {/* Name Tag */}
               <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded-lg text-sm font-medium backdrop-blur-sm text-white flex items-center gap-2">

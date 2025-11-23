@@ -3,13 +3,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
 import { Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, Ban, Trash2, Globe, Lock, Info, MapPin } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
+import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface ProfileEditorProps {
   user: User;
   onSave: (updatedUser: User) => void;
 }
-
-const DEFAULT_PROFILE_IMAGE = 'https://picsum.photos/400/400?grayscale';
 
 const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave }) => {
   const [formData, setFormData] = useState<User>(user);
@@ -146,6 +145,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave }) => {
               src={formData.imageUrl || DEFAULT_PROFILE_IMAGE} 
               alt="Profile" 
               className={`w-full h-full object-cover transition-transform duration-500 ${isEditing ? 'group-hover:scale-105' : ''}`}
+              onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
             />
             
             {/* Hover Overlay */}

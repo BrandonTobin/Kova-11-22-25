@@ -3,11 +3,14 @@ import React, { useState, useRef } from 'react';
 import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, User as UserIcon, Calendar, Briefcase, Flag, Hash, Mail, Lock, ChevronDown, Loader2 } from 'lucide-react';
 import { User } from '../types';
 import { SECURITY_QUESTIONS } from '../constants';
+import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface RegisterScreenProps {
   onRegister: (user: User) => void;
   onBack: () => void;
   isLoading?: boolean;
+  error?: string;
+  onClearError?: () => void;
 }
 
 const TITLES = ['Founder', 'Co-Founder', 'Investor', 'CEO', 'CTO', 'COO', 'CMO', 'Freelancer', 'Solo Founder', 'Entrepreneur', 'Student', 'Other'];
@@ -22,7 +25,7 @@ const US_STATES = [
   "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
 ];
 
-const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isLoading = false }) => {
+const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isLoading = false, error, onClearError }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [errors, setErrors] = useState<{email?: string, password?: string, general?: string}>({});
   const [formData, setFormData] = useState({
@@ -96,9 +99,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
 
     if (!isValid) return;
     
-    // We let Supabase/App.tsx handle the ID generation for UUID if needed, 
-    // but for the 'User' object passed back, we can set a temp ID or let the parent handler overwrite it.
-    // The Kova ID however is specific to our business logic.
+    // Use a stable UI Avatars URL based on the name.
+    // We ignore the uploaded blob file because we don't have Supabase Storage buckets configured.
+    // This prevents "blob:..." URLs from breaking on refresh.
+    const safeImageUrl = `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(formData.fullName)}`;
 
     const newUser: User = {
       id: '', // Will be assigned by Supabase DB trigger or App handler
@@ -109,7 +113,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       role: formData.title === 'Other' ? formData.customTitle : formData.title,
       industry: 'Tech',
       bio: `Hi, I'm ${formData.fullName}. I'm currently in the ${formData.stage} stage looking to ${formData.mainGoal === 'Other' ? formData.customGoal : formData.mainGoal}.`,
-      imageUrl: formData.imagePreview || 'https://picsum.photos/400/400?grayscale',
+      imageUrl: safeImageUrl,
       tags: [formData.stage],
       badges: [],
       dob: formData.dob,
@@ -281,7 +285,12 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                >
                  {formData.imagePreview ? (
                     <div className="flex items-center gap-3">
-                       <img src={formData.imagePreview} alt="Preview" className="w-12 h-12 rounded-full object-cover border border-white/10" />
+                       <img 
+                          src={formData.imagePreview} 
+                          alt="Preview" 
+                          className="w-12 h-12 rounded-full object-cover border border-white/10"
+                          onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                       />
                        <span className="text-sm text-text-main font-medium">Change Photo</span>
                     </div>
                  ) : (
@@ -334,6 +343,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                     onChange={e => {
                       setFormData({...formData, email: e.target.value});
                       if (errors.email) setErrors({...errors, email: undefined});
+                      if (onClearError) onClearError();
                     }}
                     className={`w-full bg-background border ${errors.email ? 'border-red-500' : 'border-white/10'} rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none transition-all placeholder-gray-500/50`} 
                     placeholder="you@startup.com" 
@@ -390,6 +400,15 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                </div>
             </div>
 
+            {/* Registration Error (from Prop) */}
+            {error && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+                 <AlertCircle size={16} className="shrink-0" /> 
+                 <span>{error}</span>
+              </div>
+            )}
+
+            {/* Internal Validation Errors */}
             {errors.general && (
               <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs flex items-center gap-2">
                  <AlertCircle size={14} /> {errors.general}

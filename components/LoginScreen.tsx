@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { ArrowRight, UserPlus, Mail, Lock, ShieldAlert, KeyRound, ArrowLeft, CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
+import { ArrowRight, UserPlus, Mail, Lock, KeyRound, ArrowLeft, CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: (email: string, pass: string) => void;
@@ -27,7 +27,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && password) {
+    if (email && password && !isLoading) {
       onLogin(email, password);
     }
   };

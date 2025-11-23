@@ -3,6 +3,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { User } from '../types';
 import { MessageSquare, X, Sparkles } from 'lucide-react';
+import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface MatchPopupProps {
   matchedUser: User;
@@ -39,6 +40,7 @@ const MatchPopup: React.FC<MatchPopupProps> = ({ matchedUser, currentUser, onClo
                 src={currentUser.imageUrl} 
                 alt="You" 
                 className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border-4 border-gold shadow-xl" 
+                onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
               />
               <div className="absolute -bottom-2 -right-2 bg-surface p-2 rounded-full border border-gold/30">
                 <Sparkles className="text-gold w-5 h-5" />
@@ -49,6 +51,7 @@ const MatchPopup: React.FC<MatchPopupProps> = ({ matchedUser, currentUser, onClo
                 src={matchedUser.imageUrl} 
                 alt={matchedUser.name} 
                 className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border-4 border-gold shadow-xl" 
+                onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
               />
             </div>
           </div>

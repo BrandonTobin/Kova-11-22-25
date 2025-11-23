@@ -1,6 +1,7 @@
 
-
 import { User, Badge, Match, Message } from './types';
+
+export const DEFAULT_PROFILE_IMAGE = 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=User';
 
 export const ALL_BADGES: Badge[] = [
   { id: '1', icon: '🚀', name: 'Early Adopter', color: 'text-gold', criteria: 'Join Kova during the beta launch phase.' },
@@ -43,7 +44,7 @@ export const BLANK_USER_TEMPLATE: User = {
   role: '',
   industry: '',
   bio: '',
-  imageUrl: '',
+  imageUrl: DEFAULT_PROFILE_IMAGE,
   tags: [],
   badges: [],
   dob: '',

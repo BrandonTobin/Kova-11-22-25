@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from 'framer-motion';
 import { User } from '../types';
 import { X, Check, Briefcase, Tag, MapPin, Star } from 'lucide-react';
+import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface SwipeDeckProps {
   users: User[];
@@ -61,9 +63,10 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
       {nextUser && (
         <div className="absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl border border-white/5 shadow-xl overflow-hidden transform scale-95 translate-y-4 -z-10 opacity-60 filter grayscale-[0.5]">
           <img
-            src={nextUser.imageUrl}
+            src={nextUser.imageUrl || DEFAULT_PROFILE_IMAGE}
             alt={nextUser.name}
             className="w-full h-3/5 object-cover"
+            onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
           />
            <div className="p-6 bg-surface h-2/5 flex flex-col">
              <h2 className="text-2xl font-bold text-text-main mb-1">{nextUser.name}</h2>
@@ -104,9 +107,10 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
           {/* Image Section */}
           <div className="relative h-[60%] w-full bg-gray-900">
             <img
-              src={activeUser.imageUrl}
+              src={activeUser.imageUrl || DEFAULT_PROFILE_IMAGE}
               alt={activeUser.name}
               className="w-full h-full object-cover pointer-events-none"
+              onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
             

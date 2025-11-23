@@ -7,6 +7,7 @@
     "display-capture"
   ],
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0"
+    "@supabase/supabase-js": "^2.39.0",
+    "react-webcam": "^7.2.0"
   }
 }

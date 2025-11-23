@@ -3,7 +3,22 @@ import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { User, Badge } from '../types';
 import { supabase } from '../supabaseClient';
-import { TrendingUp, Target, Award, Sparkles, Calendar, Clock, ArrowRight, Activity, Zap, X, Lock, HelpCircle, RotateCcw, Loader2 } from 'lucide-react';
+import {
+  TrendingUp,
+  Target,
+  Award,
+  Sparkles,
+  Calendar,
+  Clock,
+  ArrowRight,
+  Activity,
+  Zap,
+  X,
+  Lock,
+  HelpCircle,
+  RotateCcw,
+  Loader2,
+} from 'lucide-react';
 import { ALL_BADGES } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 
@@ -14,7 +29,7 @@ interface DashboardProps {
 interface CalendarDay {
   date: Date;
   dateKey: string; // 'YYYY-MM-DD'
-  count: number;   // raw activity count
+  count: number; // raw activity count
   intensity: number; // 0-4
   isInCurrentYear: boolean;
 }
@@ -70,19 +85,23 @@ const BadgeCard: React.FC<BadgeCardProps> = ({ badge, isEarned }) => {
   const [showInfo, setShowInfo] = useState(false);
 
   return (
-    <div 
+    <div
       className={`relative p-4 rounded-2xl border flex flex-col items-center text-center gap-3 transition-all duration-300 group h-40 justify-center ${
-        isEarned 
-          ? 'bg-surface border-gold/30 shadow-lg shadow-gold/5 scale-100' 
+        isEarned
+          ? 'bg-surface border-gold/30 shadow-lg shadow-gold/5 scale-100'
           : 'bg-background border-surface opacity-70'
       }`}
     >
       {!showInfo ? (
         <>
-          <div className={`text-4xl mb-1 transition-transform ${isEarned ? 'group-hover:scale-110 filter drop-shadow-md' : 'grayscale opacity-30'}`}>
+          <div
+            className={`text-4xl mb-1 transition-transform ${
+              isEarned ? 'group-hover:scale-110 filter drop-shadow-md' : 'grayscale opacity-30'
+            }`}
+          >
             {badge.icon}
           </div>
-          
+
           <h3 className={`font-bold text-sm ${isEarned ? 'text-text-main' : 'text-text-muted'}`}>
             {badge.name}
           </h3>
@@ -97,8 +116,8 @@ const BadgeCard: React.FC<BadgeCardProps> = ({ badge, isEarned }) => {
                 <Lock size={10} /> Locked
               </span>
             )}
-            
-            <button 
+
+            <button
               onClick={() => setShowInfo(true)}
               className="text-[10px] text-secondary hover:text-gold flex items-center gap-1 mt-1 opacity-80 hover:opacity-100 transition-opacity"
             >
@@ -110,7 +129,7 @@ const BadgeCard: React.FC<BadgeCardProps> = ({ badge, isEarned }) => {
         <div className="absolute inset-0 bg-surface p-4 rounded-2xl flex flex-col items-center justify-center animate-in fade-in zoom-in duration-200 z-10 border border-gold/30">
           <h4 className="text-xs font-bold text-gold mb-2">{badge.name}</h4>
           <p className="text-xs text-text-muted leading-relaxed mb-3">{badge.criteria}</p>
-          <button 
+          <button
             onClick={() => setShowInfo(false)}
             className="text-[10px] bg-background hover:bg-primary text-text-main px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors border border-white/10"
           >
@@ -128,6 +147,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Heatmap constants
+  const CELL_SIZE = 15;
+  const CELL_GAP = 3;
+  const GRID_OFFSET = CELL_SIZE + CELL_GAP;
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
   useEffect(() => {
     const loadDashboardData = async () => {
       setIsLoading(true);
@@ -141,7 +166,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(now.getDate() - 7);
-        
+
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(now.getDate() - 14);
 
@@ -157,38 +182,35 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
         let lastWeekMinutes = 0;
 
         sessions?.forEach((s: any) => {
-            const startTime = new Date(s.started_at);
-            const endTime = s.ended_at ? new Date(s.ended_at) : null;
-            
-            // Calculate duration in minutes manually
-            const minutes = endTime 
-              ? Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000)) 
-              : 0;
+          const startTime = new Date(s.started_at);
+          const endTime = s.ended_at ? new Date(s.ended_at) : null;
 
-            totalMinutes += minutes;
+          const minutes = endTime
+            ? Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000))
+            : 0;
 
-            if (startTime >= sevenDaysAgo) {
-                thisWeekMinutes += minutes;
-            } else if (startTime >= fourteenDaysAgo && startTime < sevenDaysAgo) {
-                lastWeekMinutes += minutes;
-            }
+          totalMinutes += minutes;
+
+          if (startTime >= sevenDaysAgo) {
+            thisWeekMinutes += minutes;
+          } else if (startTime >= fourteenDaysAgo && startTime < sevenDaysAgo) {
+            lastWeekMinutes += minutes;
+          }
         });
 
         const totalHours = parseFloat((totalMinutes / 60).toFixed(1));
-        const hoursChange = lastWeekMinutes > 0 
-            ? Math.round(((thisWeekMinutes - lastWeekMinutes) / lastWeekMinutes) * 100) 
-            : thisWeekMinutes > 0 ? 100 : 0;
-
+        const hoursChange =
+          lastWeekMinutes > 0
+            ? Math.round(((thisWeekMinutes - lastWeekMinutes) / lastWeekMinutes) * 100)
+            : thisWeekMinutes > 0
+            ? 100
+            : 0;
 
         // --- 2. Fetch Goals ---
-        const { data: goalsData } = await supabase
-            .from('goals')
-            .select('*')
-            .eq('user_id', user.id);
+        const { data: goalsData } = await supabase.from('goals').select('*').eq('user_id', user.id);
 
         const totalGoals = goalsData?.length || 0;
         const completedGoals = goalsData?.filter((g: any) => g.completed).length || 0;
-
 
         // --- 3. Weekly Focus (Hours per day from sessions) ---
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -223,20 +245,36 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           return { name: dayName, value: hours };
         });
 
-
         // --- 4. Consistency Heatmap (Full Year - GitHub Style) ---
         const startIso = startOfYear.toISOString();
         const endIso = endOfYear.toISOString();
-        
-        const { data: recentSwipes } = await supabase.from('swipes').select('created_at').eq('swiper_id', user.id).gte('created_at', startIso).lte('created_at', endIso);
-        const { data: recentMsgs } = await supabase.from('messages').select('created_at').eq('sender_id', user.id).gte('created_at', startIso).lte('created_at', endIso);
-        const { data: recentSessions } = await supabase.from('sessions').select('started_at').or(`host_id.eq.${user.id},partner_id.eq.${user.id}`).gte('started_at', startIso).lte('started_at', endIso);
+
+        const { data: recentSwipes } = await supabase
+          .from('swipes')
+          .select('created_at')
+          .eq('swiper_id', user.id)
+          .gte('created_at', startIso)
+          .lte('created_at', endIso);
+
+        const { data: recentMsgs } = await supabase
+          .from('messages')
+          .select('created_at')
+          .eq('sender_id', user.id)
+          .gte('created_at', startIso)
+          .lte('created_at', endIso);
+
+        const { data: recentSessions } = await supabase
+          .from('sessions')
+          .select('started_at')
+          .or(`host_id.eq.${user.id},partner_id.eq.${user.id}`)
+          .gte('started_at', startIso)
+          .lte('started_at', endIso);
 
         const activityCounts = new Map<string, number>();
-        
+
         const recordActivity = (isoDate: string) => {
-            const dateKey = new Date(isoDate).toLocaleDateString('en-CA');
-            activityCounts.set(dateKey, (activityCounts.get(dateKey) || 0) + 1);
+          const dateKey = new Date(isoDate).toLocaleDateString('en-CA');
+          activityCounts.set(dateKey, (activityCounts.get(dateKey) || 0) + 1);
         };
 
         recentSwipes?.forEach((s: any) => recordActivity(s.created_at));
@@ -245,7 +283,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         // Build Calendar Grid aligned to start on Sunday
         const calendarDays: CalendarDay[] = [];
-        
+
         // Find Sunday before Jan 1
         const startDayOfWeek = startOfYear.getDay(); // 0=Sun..6=Sat
         const gridStart = new Date(startOfYear);
@@ -258,57 +296,69 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         const d = new Date(gridStart);
         while (d <= gridEnd) {
-            const dateKey = d.toLocaleDateString('en-CA');
-            const count = activityCounts.get(dateKey) || 0;
-            const intensity = mapCountToIntensity(count);
-            
-            // Should show color if within year boundaries and not in future
-            const isInYear = d >= startOfYear && d <= endOfYear;
-            const isFuture = d > now;
+          const dateKey = d.toLocaleDateString('en-CA');
+          const count = activityCounts.get(dateKey) || 0;
+          const intensity = mapCountToIntensity(count);
 
-            calendarDays.push({
-                date: new Date(d),
-                dateKey,
-                count,
-                intensity: (isInYear && !isFuture) ? intensity : 0,
-                isInCurrentYear: isInYear
-            });
-            
-            d.setDate(d.getDate() + 1);
+          const isInYear = d >= startOfYear && d <= endOfYear;
+          const isFuture = d > now;
+
+          calendarDays.push({
+            date: new Date(d),
+            dateKey,
+            count,
+            intensity: isInYear && !isFuture ? intensity : 0,
+            isInCurrentYear: isInYear,
+          });
+
+          d.setDate(d.getDate() + 1);
         }
 
         // --- 5. Upcoming Sessions ---
         const { data: scheduled } = await supabase
-             .from('scheduled_sessions')
-             .select('*')
-             .eq('user_id', user.id)
-             .gte('scheduled_at', now.toISOString())
-             .order('scheduled_at', { ascending: true })
-             .limit(5);
-
+          .from('scheduled_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('scheduled_at', now.toISOString())
+          .order('scheduled_at', { ascending: true })
+          .limit(5);
 
         setMetrics({
-            totalHours,
-            hoursChange,
-            totalGoals,
-            completedGoals,
-            weeklyMessages,
-            calendarDays,
-            scheduledSessions: scheduled || []
+          totalHours,
+          hoursChange,
+          totalGoals,
+          completedGoals,
+          weeklyMessages,
+          calendarDays,
+          scheduledSessions: scheduled || [],
         });
-
       } catch (err) {
-        console.error("Dashboard data load error:", err);
-        setError("Failed to load dashboard metrics.");
+        console.error('Dashboard data load error:', err);
+        setError('Failed to load dashboard metrics.');
       } finally {
         setIsLoading(false);
       }
     };
 
     if (user?.id) {
-        loadDashboardData();
+      loadDashboardData();
     }
   }, [user.id]);
+
+  // --- Month label positions (in columns) ---
+  const monthLabels: { month: number; colIndex: number }[] = [];
+  if (metrics && metrics.calendarDays) {
+    metrics.calendarDays.forEach((day, index) => {
+      if (day.isInCurrentYear && day.date.getDate() === 1) {
+        const month = day.date.getMonth();
+        const exists = monthLabels.some((m) => m.month === month);
+        if (!exists) {
+          const colIndex = Math.floor(index / 7); // week column for this day
+          monthLabels.push({ month, colIndex });
+        }
+      }
+    });
+  }
 
   if (isLoading) {
     return (
@@ -320,30 +370,42 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
   }
 
   if (error || !metrics) {
-      return (
-          <div className="h-full w-full p-8 bg-background text-text-main">
-              <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-400 text-center">
-                  {error || "Could not load data."}
-              </div>
-          </div>
-      );
+    return (
+      <div className="h-full w-full p-8 bg-background text-text-main">
+        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl text-red-400 text-center">
+          {error || 'Could not load data.'}
+        </div>
+      </div>
+    );
   }
 
-  // --- Helpers for Heatmap Rendering ---
-  const weeks: CalendarDay[][] = [];
-  for (let i = 0; i < metrics.calendarDays.length; i += 7) {
-      weeks.push(metrics.calendarDays.slice(i, i + 7));
-  }
+  // Find index of last in-year day
+  const lastInYearIndex = metrics.calendarDays.reduceRight(
+    (acc, day, index) => (acc === -1 && day.isInCurrentYear ? index : acc),
+    -1
+  );
 
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  // Fallback: if somehow not found, keep current behavior
+  const visibleWeeks =
+    lastInYearIndex === -1
+      ? Math.ceil(metrics.calendarDays.length / 7)
+      : Math.floor(lastInYearIndex / 7) + 1;
+
+  const GRID_WIDTH = visibleWeeks * GRID_OFFSET - CELL_GAP;
+  const GRID_HEIGHT = 7 * CELL_SIZE + 6 * CELL_GAP;
 
   return (
     <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
-      
       {/* Badges Modal */}
       {showBadgesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={() => setShowBadgesModal(false)}>
-          <div className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+          onClick={() => setShowBadgesModal(false)}
+        >
+          <div
+            className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex justify-between items-center mb-8">
               <div>
                 <h2 className="text-2xl font-bold text-text-main flex items-center gap-2">
@@ -351,24 +413,30 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
                 </h2>
                 <p className="text-text-muted mt-1">Earn badges by staying consistent and collaborating.</p>
               </div>
-              <button onClick={() => setShowBadgesModal(false)} className="p-2 rounded-full hover:bg-background text-text-muted hover:text-white transition-colors">
+              <button
+                onClick={() => setShowBadgesModal(false)}
+                className="p-2 rounded-full hover:bg-background text-text-muted hover:text-white transition-colors"
+              >
                 <X size={24} />
               </button>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {ALL_BADGES.map(badge => {
-                const isEarned = user.badges.some(b => b.id === badge.id);
+              {ALL_BADGES.map((badge) => {
+                const isEarned = user.badges.some((b) => b.id === badge.id);
                 return <BadgeCard key={badge.id} badge={badge} isEarned={isEarned} />;
               })}
             </div>
-            
+
             <div className="mt-8 text-center">
               <p className="text-xs text-text-muted">
                 Progress: <span className="text-gold font-bold">{user.badges.length}</span> / {ALL_BADGES.length} Unlocked
               </p>
               <div className="w-full max-w-md mx-auto h-1.5 bg-background rounded-full mt-2 overflow-hidden border border-white/5">
-                 <div className="h-full bg-gradient-to-r from-primary to-gold" style={{ width: `${(user.badges.length / ALL_BADGES.length) * 100}%` }}></div>
+                <div
+                  className="h-full bg-gradient-to-r from-primary to-gold"
+                  style={{ width: `${(user.badges.length / ALL_BADGES.length) * 100}%` }}
+                ></div>
               </div>
             </div>
           </div>
@@ -376,7 +444,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
       )}
 
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-text-main mb-2">Welcome back, {getDisplayName(user.name).split(' ')[0]}</h1>
+        <h1 className="text-3xl font-bold text-text-main mb-2">
+          Welcome back, {getDisplayName(user.name).split(' ')[0]}
+        </h1>
         <p className="text-text-muted">Here's your growth overview.</p>
       </header>
 
@@ -390,22 +460,32 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
           <div>
             <h3 className="text-lg font-bold text-text-main mb-1 flex items-center gap-2">
               Kova AI Insight
-              <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">Beta</span>
+              <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
+                Beta
+              </span>
             </h3>
             <p className="text-text-muted text-sm leading-relaxed max-w-3xl">
-              "You've been crushing your morning sessions! 🚀 Your focus score peaks between 9 AM and 11 AM. Try scheduling a deep-work block this Thursday to maintain your streak."
+              "You've been crushing your morning sessions! 🚀 Your focus score peaks between 9 AM and 11 AM. Try
+              scheduling a deep-work block this Thursday to maintain your streak."
             </p>
           </div>
         </div>
       </div>
 
       {/* Key Stats Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-primary/20 rounded-xl text-primary group-hover:bg-primary group-hover:text-white transition-colors"><TrendingUp size={22} /></div>
-            <span className={`text-sm font-medium flex items-center gap-1 ${metrics.hoursChange >= 0 ? 'text-gold' : 'text-red-400'}`}>
-                <Activity size={12}/> {metrics.hoursChange > 0 ? '+' : ''}{metrics.hoursChange}%
+            <div className="p-2.5 bg-primary/20 rounded-xl text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+              <TrendingUp size={22} />
+            </div>
+            <span
+              className={`text-sm font-medium flex items-center gap-1 ${
+                metrics.hoursChange >= 0 ? 'text-gold' : 'text-red-400'
+              }`}
+            >
+              <Activity size={12} /> {metrics.hoursChange > 0 ? '+' : ''}
+              {metrics.hoursChange}%
             </span>
           </div>
           <h3 className="text-2xl font-bold text-text-main">{metrics.totalHours} hrs</h3>
@@ -414,234 +494,278 @@ const Dashboard: React.FC<DashboardProps> = ({ user }) => {
 
         <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-secondary/20 rounded-xl text-secondary group-hover:bg-secondary group-hover:text-white transition-colors"><Target size={22} /></div>
+            <div className="p-2.5 bg-secondary/20 rounded-xl text-secondary group-hover:bg-secondary group-hover:text-white transition-colors">
+              <Target size={22} />
+            </div>
             <span className="text-primary text-sm font-medium">
-                {metrics.totalGoals > 0 ? Math.round((metrics.completedGoals / metrics.totalGoals) * 100) : 0}%
+              {metrics.totalGoals > 0 ? Math.round((metrics.completedGoals / metrics.totalGoals) * 100) : 0}%
             </span>
           </div>
-          <h3 className="text-2xl font-bold text-text-main">{metrics.completedGoals} / {metrics.totalGoals}</h3>
+          <h3 className="text-2xl font-bold text-text-main">
+            {metrics.completedGoals} / {metrics.totalGoals}
+          </h3>
           <p className="text-sm text-text-muted">Goals Completed</p>
         </div>
 
-        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
+        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group relative">
           <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-gold/10 rounded-xl text-gold group-hover:bg-gold group-hover:text-surface transition-colors"><Award size={22} /></div>
-            <span className="text-text-muted text-sm font-medium">Lvl {Math.floor(user.badges.length / 3) + 1}</span>
+            <div className="p-2.5 bg-gold/10 rounded-xl text-gold group-hover:bg-gold group-hover:text-surface transition-colors">
+              <Award size={22} />
+            </div>
+            <span className="text-text-muted text-sm font-medium">
+              Lvl {Math.floor(user.badges.length / 3) + 1}
+            </span>
           </div>
           <h3 className="text-2xl font-bold text-text-main">{user.badges.length}</h3>
           <p className="text-sm text-text-muted">Badges Earned</p>
+
+          <button
+            onClick={() => setShowBadgesModal(true)}
+            className="mt-3 inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-gold border border-dashed border-white/10 rounded-full px-3 py-1 transition-colors"
+          >
+            See all available badges <ArrowRight size={12} />
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Charts */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Weekly Focus Chart */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg min-h-[300px]">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-                <Clock size={18} className="text-text-muted"/> Weekly Focus Hours
-              </h3>
-              <select className="bg-background border border-white/10 text-xs rounded-lg px-2 py-1 text-text-muted outline-none focus:border-gold/50">
-                <option>This Week</option>
-              </select>
-            </div>
-            <div className="h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={metrics.weeklyMessages}>
-                  <XAxis dataKey="name" stroke="#C7C8C9" fontSize={12} tickLine={false} axisLine={false} dy={10} />
-                  <YAxis 
-                    stroke="#C7C8C9" 
-                    fontSize={12} 
-                    tickLine={false} 
-                    axisLine={false} 
-                    domain={[0, 12]}
-                    ticks={[0, 2, 4, 6, 8, 10, 12]}
-                    tickFormatter={(value: number) => (value === 12 ? '12+h' : `${value}h`)}
-                  />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#111414', borderColor: '#D6A756', borderRadius: '12px', color: '#F5F4EE', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-                    cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
-                    formatter={(value: number) => [`${value} hrs`, 'Focus']}
-                  />
-                  <Bar dataKey="value" name="Focus Hours" radius={[2, 2, 2, 2]} barSize={32}>
-                    {metrics.weeklyMessages.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.value > 5 ? '#D6A756' : '#4FB1A7'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+      {/* 2. Charts & Sessions Grid */}
+      <div className="flex flex-col gap-6">
+        {/* Weekly Focus Chart - Full Width */}
+        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg min-h-[300px]">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
+              <Clock size={18} className="text-text-muted" /> Weekly Focus Hours
+            </h3>
+            <select className="bg-background border border-white/10 text-xs rounded-lg px-2 py-1 text-text-muted outline-none focus:border-gold/50">
+              <option>This Week</option>
+            </select>
           </div>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={metrics.weeklyMessages}>
+                <XAxis dataKey="name" stroke="#C7C8C9" fontSize={12} tickLine={false} axisLine={false} dy={10} />
+                <YAxis
+                  stroke="#C7C8C9"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                  domain={[0, 12]}
+                  ticks={[0, 2, 4, 6, 8, 10, 12]}
+                  tickFormatter={(value: number) => (value === 12 ? '12+h' : `${value}h`)}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#111414',
+                    borderColor: '#D6A756',
+                    borderRadius: '12px',
+                    color: '#F5F4EE',
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)',
+                  }}
+                  cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
+                  formatter={(value: number) => [`${value} hrs`, 'Focus']}
+                />
+                <Bar dataKey="value" name="Focus Hours" radius={[2, 2, 2, 2]} barSize={32}>
+                  {metrics.weeklyMessages.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.value > 5 ? '#D6A756' : '#4FB1A7'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
 
-          {/* 2. Consistency Heatmap (GitHub Style) */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg overflow-hidden">
-            <div className="flex items-center justify-between mb-6">
+        {/* Bottom Row: Heatmap & Upcoming Sessions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 3. Consistency Heatmap */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-                <Zap size={18} className="text-gold"/> Consistency Heatmap
+                <Zap size={18} className="text-gold" /> Consistency Heatmap
               </h3>
               <span className="text-xs text-text-muted">{new Date().getFullYear()}</span>
             </div>
-            
-            <div className="overflow-x-auto no-scrollbar w-full pb-2">
-               <div className="flex items-start gap-2 min-w-max">
-                  {/* Y-Axis Labels (Days) - Aligned to grid height */}
-                  <div className="flex flex-col justify-between pt-[2px] text-[10px] text-text-muted h-[88px] shrink-0 font-medium leading-[10px]">
-                     <span>Mon</span>
-                     <span>Wed</span>
-                     <span>Fri</span>
+
+            {/* Heatmap Container - Scrollable if too narrow */}
+            <div className="w-full pb-2 overflow-x-auto no-scrollbar">
+              <div className="flex items-start gap-4 w-full justify-center min-w-max">
+                {/* Y-axis labels (Mon / Wed / Fri) */}
+                <div
+                  className="relative shrink-0 text-[10px] text-text-muted font-medium w-8 text-right mr-2 pt-[20px]"
+                  style={{ height: GRID_HEIGHT + 20 }} // +20 for padding matching months row offset approx
+                >
+                  {[
+                    { label: 'Mon', dayIndex: 1 },
+                    { label: 'Wed', dayIndex: 3 },
+                    { label: 'Fri', dayIndex: 5 },
+                  ].map(({ label, dayIndex }) => (
+                    <span
+                      key={label}
+                      className="absolute right-0 flex items-center justify-end"
+                      style={{
+                        // Align to top of the row
+                        top: 20 + (dayIndex * GRID_OFFSET), 
+                        height: CELL_SIZE,
+                      }}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Right side: months + grid */}
+                <div className="flex flex-col gap-[3px]">
+                  {/* Month labels */}
+                  <div className="relative h-[16px]" style={{ width: GRID_WIDTH }}>
+                    {monthLabels.map((item) => (
+                      <span
+                        key={item.month}
+                        className="absolute text-[10px] text-text-muted -translate-x-1/2"
+                        style={{
+                          left: item.colIndex * GRID_OFFSET + CELL_SIZE / 2,
+                          top: 0,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {MONTH_NAMES[item.month]}
+                      </span>
+                    ))}
                   </div>
 
-                  <div className="flex flex-col gap-1">
-                      {/* X-Axis Labels (Months) */}
-                      <div className="flex text-[10px] text-text-muted gap-[2px]">
-                          {weeks.map((week, weekIndex) => {
-                              // Only consider days that are actually in the current year
-                              const firstCurrentYearDay = week.find(d => d.isInCurrentYear);
-                            
-                              if (!firstCurrentYearDay) {
-                                // Week is completely outside the current year – keep the column
-                                // width but don’t render a month label.
-                                return <div key={weekIndex} className="w-[10px]" />;
-                              }
-                            
-                              const currentMonth = firstCurrentYearDay.date.getMonth();
-                            
-                              const prevWeek = weeks[weekIndex - 1];
-                              const prevCurrentYearDay = prevWeek?.find(d => d.isInCurrentYear);
-                              const prevMonth = prevCurrentYearDay ? prevCurrentYearDay.date.getMonth() : -1;
-                            
-                              // Show label on the first week where this month appears
-                              // and only if that first current-year day is within the first 7 days of the month
-                              const showLabel =
-                                currentMonth !== prevMonth &&
-                                firstCurrentYearDay.date.getDate() <= 7;
-                            
-                              return (
-                                <div key={weekIndex} className="w-[10px] text-left overflow-visible">
-                                  {showLabel ? monthNames[currentMonth] : ''}
-                                </div>
-                              );
-                          })}
-                      </div>
+                  {/* Heatmap grid */}
+                  <div className="relative" style={{ width: GRID_WIDTH, height: GRID_HEIGHT }}>
+                    {metrics.calendarDays.map((day, index) => {
+                      const weekIndex = Math.floor(index / 7);
+                      const dayOfWeek = day.date.getDay(); // 0=Sun..6=Sat
 
-                      {/* The Grid */}
-                      <div className="grid grid-flow-col grid-rows-7 gap-[2px]">
-                          {metrics.calendarDays.map((day) => (
-                              <div key={day.dateKey} className="relative group">
-                                <div 
-                                    className={`w-[10px] h-[10px] rounded-sm transition-all duration-300 ${
-                                      day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent'
-                                    }`} 
-                                />
-                                {/* Tooltip - Positioned Below */}
-                                {day.isInCurrentYear && (
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block z-20 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none">
-                                        <p className="font-semibold text-text-muted">{day.date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                                        <p className="font-bold mt-0.5">
-                                           {day.count === 0 ? 'No activity' : `${day.count} contribution${day.count !== 1 ? 's' : ''}`}
-                                        </p>
-                                    </div>
-                                )}
-                              </div>
-                          ))}
-                      </div>
+                      // Do not render cells that would sit beyond the visible width
+                      if (weekIndex >= visibleWeeks) return null;
+
+                      const left = weekIndex * GRID_OFFSET;
+                      const top = dayOfWeek * GRID_OFFSET;
+                      
+                      // Flip tooltip for bottom rows (Thu-Sat) to prevent clipping
+                      const isBottomRow = dayOfWeek >= 4; 
+
+                      return (
+                        <div
+                          key={day.dateKey}
+                          className="absolute group"
+                          style={{
+                            width: CELL_SIZE,
+                            height: CELL_SIZE,
+                            left,
+                            top,
+                          }}
+                        >
+                          <div
+                            className={`w-full h-full rounded-[3px] transition-all duration-300 ${
+                              day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent'
+                            }`}
+                          />
+                          {day.isInCurrentYear && (
+                            <div className={`absolute ${isBottomRow ? 'bottom-full mb-1' : 'top-full mt-1'} left-1/2 -translate-x-1/2 hidden group-hover:block z-50 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none`}>
+                              <p className="font-semibold text-text-muted">
+                                {day.date.toLocaleDateString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </p>
+                              <p className="font-bold mt-0.5">
+                                {day.count === 0
+                                  ? 'No activity'
+                                  : `${day.count} contribution${day.count !== 1 ? 's' : ''}`}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-               </div>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center justify-start gap-4 mt-4 text-xs text-text-muted">
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-4 mt-4 text-xs text-text-muted w-full">
               <span className="mr-1">Less</span>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-surface border border-white/5"></div>
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-surface border border-white/5"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-secondary border border-secondary/50"></div>
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-secondary border border-secondary/50"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary border border-primary-hover"></div>
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-primary border border-primary-hover"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary/40 border border-primary/20"></div>
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-primary/40 border border-primary/20"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50"></div>
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50"></div>
               </div>
               <span className="ml-1">More</span>
             </div>
           </div>
-        </div>
 
-        {/* Right Column: Sidebar */}
-        <div className="space-y-6">
-          {/* 3. Clean Badges Area */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-text-main">Earned Badges</h3>
-              <Award size={18} className="text-gold" />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {user.badges.length > 0 ? (
-                user.badges.map(badge => (
-                  <div key={badge.id} className="flex items-center gap-2 bg-background/80 px-3 py-2 rounded-full border border-gold/20 shadow-sm hover:border-gold/50 transition-colors cursor-default group">
-                    <span className="text-lg filter drop-shadow-md group-hover:scale-110 transition-transform">{badge.icon}</span>
-                    <span className="text-xs font-bold text-gold tracking-wide uppercase">{badge.name}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="text-sm text-text-muted italic w-full text-center py-4 border border-dashed border-white/10 rounded-xl">
-                  No badges yet. Complete your first session!
-                </div>
-              )}
-              <button 
-                onClick={() => setShowBadgesModal(true)}
-                className="w-full mt-2 py-2 rounded-lg border border-dashed border-white/10 text-text-muted text-xs hover:bg-background hover:text-gold transition-colors flex items-center justify-center gap-1"
-              >
-                See all available badges <ArrowRight size={12} />
-              </button>
-            </div>
-          </div>
-          
           {/* 4. Upcoming Sessions */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex-1">
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main">Upcoming Sessions</h3>
               <Calendar size={18} className="text-text-muted" />
             </div>
-             <div className="space-y-4">
-                {metrics.scheduledSessions.length > 0 ? (
-                    metrics.scheduledSessions.map(session => (
-                        <div key={session.id} className="group p-3 rounded-xl bg-background/50 border border-white/5 hover:bg-background hover:border-gold/30 transition-all cursor-pointer">
-                           <div className="flex justify-between items-start mb-2">
-                              <div className="flex items-center gap-2">
-                                 <span className="text-xs font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
-                                     {new Date(session.scheduled_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                                 </span>
-                                 <span className="text-sm font-bold text-text-main">
-                                     {new Date(session.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                 </span>
-                              </div>
-                              <ArrowRight size={16} className="text-text-muted group-hover:text-gold transition-colors transform group-hover:translate-x-1" />
-                           </div>
-                           <div>
-                              <h4 className="font-medium text-text-main group-hover:text-gold transition-colors">{session.title}</h4>
-                              <div className="flex items-center gap-2 mt-1">
-                                 <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold border border-primary-hover">P</div>
-                                 <p className="text-xs text-text-muted">
-                                    {session.partner_email ? `with ${session.partner_email}` : 'Solo Session'}
-                                 </p>
-                              </div>
-                           </div>
+            <div className="space-y-4 flex-1">
+              {metrics.scheduledSessions.length > 0 ? (
+                metrics.scheduledSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className="group p-3 rounded-xl bg-background/50 border border-white/5 hover:bg-background hover:border-gold/30 transition-all cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
+                          {new Date(session.scheduled_at).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                        <span className="text-sm font-bold text-text-main">
+                          {new Date(session.scheduled_at).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <ArrowRight
+                        size={16}
+                        className="text-text-muted group-hover:text-gold transition-colors transform group-hover:translate-x-1"
+                      />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-text-main group-hover:text-gold transition-colors">
+                        {session.title}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold border border-primary-hover">
+                          P
                         </div>
-                    ))
-                ) : (
-                    <div className="text-sm text-text-muted text-center py-4">No upcoming sessions scheduled.</div>
-                )}
+                        <p className="text-xs text-text-muted">
+                          {session.partner_email ? `with ${session.partner_email}` : 'Solo Session'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-text-muted text-center py-4">No upcoming sessions scheduled.</div>
+              )}
+            </div>
 
-                <button className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20">
-                   <Calendar size={16} /> Schedule New
-                </button>
-             </div>
+            <div className="mt-4 pt-2">
+              <button className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20">
+                <Calendar size={16} /> Schedule New
+              </button>
+            </div>
           </div>
         </div>
       </div>

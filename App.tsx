@@ -15,6 +15,40 @@ import RegisterScreen from './components/RegisterScreen';
 import SwipeDeck from './components/SwipeDeck';
 import MatchPopup from './components/MatchPopup';
 
+// --- ERROR BOUNDARY ---
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("App Error Boundary caught:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white p-4 text-center">
+          <h2 className="text-2xl font-bold mb-4 text-red-400">Something went wrong.</h2>
+          <p className="text-gray-400 mb-4 max-w-md">{this.state.error?.message}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // --- CONFIGURATION ---
 const STORAGE_KEY = 'kova_current_user_id';
 const VIEW_STORAGE_KEY = 'kova_last_view';
@@ -90,7 +124,7 @@ const parseSupabaseTimestamp = (value: string | null | undefined): Date => {
   return new Date(iso);
 };
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   // --- State ---
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.LOGIN);
@@ -694,7 +728,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <>
+    <ErrorBoundary>
       <div className="fixed top-4 right-4 z-[100]">
          <button 
              onClick={() => setIsDarkMode(!isDarkMode)} 
@@ -705,8 +739,10 @@ const App: React.FC = () => {
            </button>
       </div>
       {renderContent()}
-    </>
+    </ErrorBoundary>
   );
 };
 
-export default App;
+export default function App() {
+  return <AppContent />;
+}

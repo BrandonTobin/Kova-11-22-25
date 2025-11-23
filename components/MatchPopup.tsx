@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { User } from '../types';
 import { MessageSquare, X, Sparkles } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
+import { getDisplayName } from '../utils/nameUtils';
 
 interface MatchPopupProps {
   matchedUser: User;
@@ -31,7 +32,7 @@ const MatchPopup: React.FC<MatchPopupProps> = ({ matchedUser, currentUser, onClo
             <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-gold to-secondary italic transform -rotate-2 font-serif">
               It's a Match!
             </h2>
-            <p className="text-text-muted mt-2">You and {matchedUser.name} have connected.</p>
+            <p className="text-text-muted mt-2">You and {getDisplayName(matchedUser.name)} have connected.</p>
           </div>
 
           <div className="flex items-center justify-center gap-4 mb-10">

@@ -5,6 +5,7 @@ import { User, Match, Message } from '../types';
 import { generateIcebreaker } from '../services/geminiService';
 import { supabase } from '../supabaseClient';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
+import { getDisplayName } from '../utils/nameUtils';
 
 // Supabase sends `timestamp without time zone` as a plain string (UTC).
 // We force it to be treated as UTC by appending `Z`, then JS converts to local.
@@ -29,6 +30,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   
+  // Search Matches State
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Connect Modal State
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [searchId, setSearchId] = useState('');
@@ -41,6 +45,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
+
+  // Filter Matches based on search
+  const filteredMatches = matches.filter((match) => {
+    const rawName = match.user.name || '';
+    const displayName = getDisplayName(rawName);
+    return displayName.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   // --- Time Formatting Helper (Local Time) ---
   const formatLocalTime = (dateInput: Date | string) => {
@@ -92,6 +103,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, selectedMatchId]);
+
+  // Safety: If selected match is removed from the list (e.g. unmatch), clear selection
+  useEffect(() => {
+    if (selectedMatchId && !matches.find(m => m.id === selectedMatchId)) {
+      setSelectedMatchId(null);
+    }
+  }, [matches, selectedMatchId]);
 
   // Load Messages & Subscribe to Realtime Updates
   useEffect(() => {
@@ -323,7 +341,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
             className="w-24 h-24 rounded-full object-cover border-4 border-surface shadow-xl mb-4" 
             onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
             />
-            <h2 className="text-xl font-bold text-text-main">{match.user.name}</h2>
+            <h2 className="text-xl font-bold text-text-main">{getDisplayName(match.user.name)}</h2>
             <p className="text-sm text-gold font-medium mt-1">{match.user.role}</p>
             
             <div className="flex gap-2 mt-4">
@@ -435,7 +453,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                       onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                     />
                     <div>
-                       <p className="font-bold text-text-main">{foundUser.name}</p>
+                       <p className="font-bold text-text-main">{getDisplayName(foundUser.name)}</p>
                        <p className="text-xs text-text-muted">{foundUser.role} • {foundUser.industry}</p>
                     </div>
                  </div>
@@ -474,25 +492,46 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
 
       {/* --- Column 1: Sidebar List (Left Side) --- */}
       <div className={`w-full md:w-72 lg:w-80 bg-surface border-r border-white/5 flex flex-col shrink-0 ${selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
-        <div className="p-4 border-b border-white/5 flex justify-between items-center bg-surface sticky top-0 z-10">
-          <h2 className="text-xl font-bold text-text-main">Messages</h2>
-          <button 
-            onClick={() => setShowConnectModal(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold transition-colors rounded-lg border border-white/10"
-          >
-             <UserPlus size={14} /> Add via Kova ID
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {matches.length === 0 ? (
-             <div className="p-8 text-center text-text-muted flex flex-col items-center gap-4">
-               <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border border-white/5">
-                 <Bot size={32} className="opacity-20" />
+        <div className="flex flex-col bg-surface border-b border-white/5 shrink-0">
+            <div className="p-4 pb-2 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-text-main">Messages</h2>
+              <button 
+                onClick={() => setShowConnectModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold transition-colors rounded-lg border border-white/10"
+              >
+                 <UserPlus size={14} /> Add via Kova ID
+              </button>
+            </div>
+            
+            {/* Search Bar */}
+            <div className="px-4 pb-4">
+               <div className="relative">
+                 <input
+                   type="text"
+                   value={searchTerm}
+                   onChange={(e) => setSearchTerm(e.target.value)}
+                   placeholder="Search connections..."
+                   className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70"
+                 />
+                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} />
                </div>
-               <p>No matches yet. Start swiping or add by ID!</p>
-             </div>
+            </div>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto">
+          {filteredMatches.length === 0 ? (
+             matches.length === 0 ? (
+                 <div className="p-8 text-center text-text-muted flex flex-col items-center gap-4">
+                   <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border border-white/5">
+                     <Bot size={32} className="opacity-20" />
+                   </div>
+                   <p>No matches yet. Start swiping or add by ID!</p>
+                 </div>
+             ) : (
+                 <p className="text-center text-text-muted p-6 text-sm">No matches found.</p>
+             )
           ) : (
-            matches.map((match) => (
+            filteredMatches.map((match) => (
               <div
                 key={match.id}
                 onClick={() => setSelectedMatchId(match.id)}
@@ -511,7 +550,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline mb-1">
                     <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>
-                      {match.user.name}
+                      {getDisplayName(match.user.name)}
                     </h3>
                     <span className="text-[10px] text-text-muted shrink-0 ml-2">
                       {formatSidebarDate(match.timestamp)}
@@ -542,7 +581,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                    onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                  />
                  <div className="min-w-0 flex-1">
-                   <h3 className="font-bold text-text-main truncate">{selectedMatch.user.name}</h3>
+                   <h3 className="font-bold text-text-main truncate">{getDisplayName(selectedMatch.user.name)}</h3>
                    <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
                       <span className="text-green-500">●</span> Online
                       <span className="text-white/20">|</span>
@@ -587,7 +626,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                 {messages.length === 0 && !isLoadingMessages && (
                   <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
                      <Sparkles className="w-12 h-12 mb-4 text-gold/50" />
-                     <p>This is the start of your conversation with {selectedMatch.user.name}.</p>
+                     <p>This is the start of your conversation with {getDisplayName(selectedMatch.user.name)}.</p>
                      <p className="text-xs mt-2">Say hello or generate an icebreaker!</p>
                   </div>
                 )}

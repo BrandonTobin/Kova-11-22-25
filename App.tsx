@@ -4,6 +4,7 @@ import { LayoutDashboard, MessageSquare, User as UserIcon, Search, LogOut, Sun, 
 import { ViewState, User, Match } from './types';
 import { supabase } from './supabaseClient';
 import { DEFAULT_PROFILE_IMAGE } from './constants';
+import { getDisplayName } from './utils/nameUtils';
 
 import ChatInterface from './components/ChatInterface';
 import VideoRoom from './components/VideoRoom';
@@ -16,6 +17,7 @@ import MatchPopup from './components/MatchPopup';
 
 // --- CONFIGURATION ---
 const STORAGE_KEY = 'kova_current_user_id';
+const VIEW_STORAGE_KEY = 'kova_last_view';
 
 // Helper to map Database snake_case to Frontend camelCase
 const mapDbUserToAppUser = (dbUser: any): User => ({
@@ -100,7 +102,8 @@ const App: React.FC = () => {
   // UI State
   const [loginError, setLoginError] = useState('');
   const [registerError, setRegisterError] = useState('');
-  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoading, setIsLoading] = useState(false); // For network actions (login/register)
+  const [isBootstrapping, setIsBootstrapping] = useState(true); // For initial app load
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [matchedUser, setMatchedUser] = useState<User | null>(null);
@@ -114,10 +117,9 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
-  // --- Session Persistence (LocalStorage) ---
+  // --- Session Persistence & Bootstrapping ---
   useEffect(() => {
-    const restoreSession = async () => {
-      setIsLoading(true); // Start loading
+    const bootstrapApp = async () => {
       try {
         const storedId = localStorage.getItem(STORAGE_KEY);
         
@@ -129,30 +131,46 @@ const App: React.FC = () => {
             .eq('id', storedId)
             .single();
 
-          if (error) {
+          if (error || !data) {
             console.error("Session restore failed:", error);
             localStorage.removeItem(STORAGE_KEY);
             setUser(null);
             setCurrentView(ViewState.LOGIN);
-          } else if (data) {
+          } else {
             const appUser = mapDbUserToAppUser(data);
             setUser(appUser);
-            // Load initial data
-            await refreshMatches(appUser.id);
-            setCurrentView(ViewState.DISCOVER);
+            
+            // Restore last view if available, else default to DISCOVER
+            const storedView = localStorage.getItem(VIEW_STORAGE_KEY) as ViewState | null;
+            if (storedView && storedView !== ViewState.LOGIN && storedView !== ViewState.REGISTER) {
+              setCurrentView(storedView);
+            } else {
+              setCurrentView(ViewState.DISCOVER);
+            }
+            
+            // Start background data fetch
+            refreshMatches(appUser.id);
           }
         } else {
           setCurrentView(ViewState.LOGIN);
         }
       } catch (err) {
         console.error("Unexpected session error:", err);
+        setCurrentView(ViewState.LOGIN);
       } finally {
-        setIsLoading(false); // Always stop loading
+        setIsBootstrapping(false); // Finish bootstrapping
       }
     };
 
-    restoreSession();
+    bootstrapApp();
   }, []);
+
+  // --- Persist View State ---
+  useEffect(() => {
+    if (user && currentView !== ViewState.LOGIN && currentView !== ViewState.REGISTER) {
+      localStorage.setItem(VIEW_STORAGE_KEY, currentView);
+    }
+  }, [currentView, user]);
 
 
   // --- Data Loaders ---
@@ -277,7 +295,10 @@ const App: React.FC = () => {
       // Set State
       setUser(appUser);
       await refreshMatches(appUser.id);
-      setCurrentView(ViewState.DISCOVER);
+      
+      // Restore view if available, else discover
+      const storedView = localStorage.getItem(VIEW_STORAGE_KEY) as ViewState | null;
+      setCurrentView(storedView || ViewState.DISCOVER);
 
     } catch (err: any) {
       console.error("Login error:", err);
@@ -326,6 +347,7 @@ const App: React.FC = () => {
 
       // Set State
       setUser(createdUser);
+      // New users default to Discover
       setCurrentView(ViewState.DISCOVER);
       
     } catch (err: any) {
@@ -345,6 +367,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     // Clear Local Storage
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(VIEW_STORAGE_KEY);
     // Reset State
     setUser(null);
     setMatches([]);
@@ -387,7 +410,7 @@ const App: React.FC = () => {
         .single();
 
       if (existingMatch) {
-         alert(`You are already matched with ${targetUser.name}!`);
+         alert(`You are already matched with ${getDisplayName(targetUser.name)}!`);
          await refreshMatches(user.id);
          setCurrentView(ViewState.MATCHES);
          return;
@@ -415,6 +438,17 @@ const App: React.FC = () => {
 
   const handleUnmatch = async (matchId: string) => {
     try {
+      // 1. Delete associated messages first to satisfy Foreign Key constraints
+      const { error: msgError } = await supabase
+        .from('messages')
+        .delete()
+        .eq('match_id', matchId);
+
+      if (msgError) {
+        console.warn("Error deleting messages (ignoring):", msgError);
+      }
+
+      // 2. Delete the match
       const { error } = await supabase
         .from('matches')
         .delete()
@@ -422,10 +456,17 @@ const App: React.FC = () => {
 
       if (error) throw error;
 
+      // 3. Update local state
       setMatches(prev => prev.filter(m => m.id !== matchId));
-    } catch (err) {
+      
+      // If active in video, close it
+      if (activeVideoMatch?.id === matchId) {
+        setActiveVideoMatch(null);
+        setCurrentView(ViewState.DASHBOARD);
+      }
+    } catch (err: any) {
       console.error("Error unmatching:", err);
-      alert("Failed to unmatch. Please try again.");
+      alert(`Failed to unmatch: ${err.message || "Unknown error"}`);
     }
   };
 
@@ -501,12 +542,43 @@ const App: React.FC = () => {
   // --- Render ---
 
   const renderContent = () => {
-    if (currentView === ViewState.LOGIN) {
+    // 1. Bootstrapping (Initial Load)
+    if (isBootstrapping) {
+       return (
+          <div className="flex flex-col items-center justify-center h-screen bg-background text-text-muted gap-4">
+             <div className="relative">
+                <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-gold animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                   <div className="w-8 h-8 rounded-full bg-gold/20"></div>
+                </div>
+             </div>
+             <p className="animate-pulse text-sm font-medium tracking-wide">Initializing Kova...</p>
+          </div>
+       );
+    }
+
+    // 2. Authentication Views
+    if (!user) {
+      if (currentView === ViewState.REGISTER) {
+        return (
+          <RegisterScreen 
+            onRegister={handleRegister}
+            onBack={() => {
+              setRegisterError('');
+              setCurrentView(ViewState.LOGIN);
+            }}
+            isLoading={isLoading}
+            error={registerError}
+            onClearError={() => setRegisterError('')}
+          />
+        );
+      }
+      // Default to Login
       return (
         <LoginScreen 
           onLogin={handleSignIn} 
           onRegisterClick={() => {
-            setRegisterError(''); // Reset error when switching
+            setRegisterError('');
             setCurrentView(ViewState.REGISTER);
           }}
           error={loginError}
@@ -517,43 +589,7 @@ const App: React.FC = () => {
       );
     }
 
-    if (currentView === ViewState.REGISTER) {
-      return (
-        <RegisterScreen 
-          onRegister={handleRegister}
-          onBack={() => {
-            setRegisterError('');
-            setCurrentView(ViewState.LOGIN);
-          }}
-          isLoading={isLoading}
-          error={registerError}
-          onClearError={() => setRegisterError('')}
-        />
-      );
-    }
-
-    // Protected Views
-    if (!user) {
-       if (isLoading) {
-          return (
-            <div className="flex items-center justify-center h-screen bg-background">
-               <Loader2 className="w-10 h-10 text-primary animate-spin" />
-            </div>
-          );
-       }
-       return (
-        <LoginScreen 
-          onLogin={handleSignIn} 
-          onRegisterClick={() => {
-             setRegisterError('');
-             setCurrentView(ViewState.REGISTER);
-          }}
-          error={loginError}
-          isLoading={isLoading}
-        />
-       );
-    }
-
+    // 3. Main Application Views (Authenticated)
     return (
       <div className={`flex flex-col h-screen bg-background text-text-main transition-colors duration-300 overflow-hidden ${isDarkMode ? 'dark' : ''}`}>
         

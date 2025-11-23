@@ -4,6 +4,7 @@ import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from '
 import { User } from '../types';
 import { X, Check, Briefcase, Tag, MapPin, Star } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
+import { getDisplayName } from '../utils/nameUtils';
 
 interface SwipeDeckProps {
   users: User[];
@@ -69,7 +70,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
             onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
           />
            <div className="p-6 bg-surface h-2/5 flex flex-col">
-             <h2 className="text-2xl font-bold text-text-main mb-1">{nextUser.name}</h2>
+             <h2 className="text-2xl font-bold text-text-main mb-1">{getDisplayName(nextUser.name)}</h2>
              <p className="text-secondary text-sm">{nextUser.role}</p>
            </div>
         </div>
@@ -136,7 +137,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
           <div className="flex-1 p-6 flex flex-col bg-surface relative">
             <div>
               <div className="flex justify-between items-start mb-1">
-                <h2 className="text-3xl font-bold text-text-main tracking-tight">{activeUser.name}, {activeUser.age}</h2>
+                <h2 className="text-3xl font-bold text-text-main tracking-tight">{getDisplayName(activeUser.name)}, {activeUser.age}</h2>
                 <div className="flex items-center gap-1 text-gold bg-gold/10 px-2 py-1 rounded-lg border border-gold/20">
                    <Star size={12} fill="currentColor" /> 
                    <span className="text-xs font-bold">{activeUser.badges.length}</span>

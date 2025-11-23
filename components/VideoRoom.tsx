@@ -4,7 +4,9 @@ import Webcam from 'react-webcam';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft } from 'lucide-react';
 import { Match, Goal, User } from '../types';
 import { generateSharedGoals, generateMeetingSummary } from '../services/geminiService';
+import { startSession, endSession } from '../services/sessionService'; // Import Session Service
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
+import { getDisplayName } from '../utils/nameUtils';
 
 interface VideoRoomProps {
   match: Match; // The initial person called
@@ -18,6 +20,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
   // Call State
   const [participants, setParticipants] = useState<Match[]>([match]);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   // Local Media State
   const [micOn, setMicOn] = useState(true);
@@ -40,7 +43,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
   const [summaryText, setSummaryText] = useState('');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
-  // Mock goals init
+  // --- Session Tracking ---
+  useEffect(() => {
+    // Only start if we don't have a session ID yet
+    if (!sessionId && currentUser && match?.user) {
+      startSession(currentUser.id, match.user.id).then((id) => {
+        if (id) setSessionId(id);
+      });
+    }
+    
+    // Note: We rely on explicit "End Call" actions to close the session, 
+    // matching the user's instruction to handle it via buttons.
+  }, []); // Run once on mount
+
+  // Mock goals init (You can replace this with Supabase goals later if needed)
   useEffect(() => {
     setGoals([
         { id: '1', text: 'Intro & Catch up (5 min)', completed: true },
@@ -114,6 +130,29 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     }
   };
 
+  const handleEndCall = async () => {
+    // End session tracking explicitly
+    if (sessionId) {
+      try {
+        await endSession(sessionId);
+      } catch (e) {
+        console.error('Failed to end session', e);
+      }
+    }
+    onEndCall();
+  };
+
+  const handleReturnToDashboard = async () => {
+     if (sessionId) {
+      try {
+        await endSession(sessionId);
+      } catch (e) {
+        console.error('Failed to end session', e);
+      }
+    }
+    onReturnToDashboard();
+  };
+
   const handleEndCallClick = async () => {
     // Stop screen share if active before ending
     if (screenStreamRef.current) {
@@ -126,9 +165,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
       setSummaryText(summary);
       setIsGeneratingSummary(false);
       setShowSummary(true);
+      
+      // We do NOT end the DB session here yet. 
+      // We wait until the user clicks "Back to Dashboard" in the summary modal
+      // OR if the summary generation fails and we fallback.
     } catch (e) {
-      // Fallback if error, just exit
-      onEndCall();
+      // Fallback if error, just exit and close session
+      handleEndCall();
     }
   };
 
@@ -181,7 +224,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                             onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                           />
                           <div>
-                             <p className="font-bold text-sm text-text-main">{match.user.name}</p>
+                             <p className="font-bold text-sm text-text-main">{getDisplayName(match.user.name)}</p>
                              <p className="text-xs text-text-muted">{match.user.role}</p>
                           </div>
                        </div>
@@ -242,7 +285,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                </div>
 
                <button 
-                 onClick={onReturnToDashboard}
+                 onClick={handleReturnToDashboard}
                  className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
                >
                  Back to Dashboard <ArrowRight size={20} />
@@ -257,7 +300,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         
         {/* Mobile Top Bar (Only visible on small screens) */}
         <div className="md:hidden h-14 bg-surface border-b border-white/5 flex items-center justify-between px-4 shrink-0 z-10">
-           <button onClick={onReturnToDashboard} className="p-2 text-text-muted hover:text-white">
+           <button onClick={handleReturnToDashboard} className="p-2 text-text-muted hover:text-white">
               <ArrowLeft size={20} />
            </button>
            <span className="font-bold text-text-main text-sm">Co-working Session</span>
@@ -312,7 +355,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
               
               {/* Name Tag */}
               <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded-lg text-sm font-medium backdrop-blur-sm text-white flex items-center gap-2">
-                {participant.user.name}
+                {getDisplayName(participant.user.name)}
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
               </div>
               

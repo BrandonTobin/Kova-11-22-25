@@ -14,6 +14,8 @@ import {
   HelpCircle,
   RotateCcw,
   Loader2,
+  CheckCircle,
+  BarChart3
 } from 'lucide-react';
 
 import { supabase } from '../supabaseClient';
@@ -25,7 +27,7 @@ import { getDisplayName } from '../utils/nameUtils';
 
 interface DashboardProps {
   user: User;
-  matches?: any[]; // Added to satisfy prop passing from App.tsx if needed, though not used for stats logic here
+  matches?: any[];
   onUpgrade?: () => void;
 }
 
@@ -44,6 +46,19 @@ interface WeeklySummary {
   avgSessionMinutes: number;
 }
 
+interface GoalStats30 {
+  total: number;
+  completed: number;
+  active: number;
+  percentage: number;
+}
+
+interface ProInsightsData {
+  focusHours7d: number;
+  completedGoals7d: number;
+  activeDays7d: number;
+}
+
 interface DashboardMetrics {
   totalHours: number;
   hoursChange: number;
@@ -56,6 +71,8 @@ interface DashboardMetrics {
   calendarDaysGoals: CalendarDay[];
   scheduledSessions: ScheduledSession[];
   weeklySummary: WeeklySummary;
+  goalStats30: GoalStats30;
+  insights: ProInsightsData;
 }
 
 interface ScheduledSession {
@@ -251,7 +268,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
                 sessions: 4,
                 activeDays: 3,
                 avgSessionMinutes: 45
-            }
+            },
+            goalStats30: { total: 0, completed: 0, active: 0, percentage: 0 },
+            insights: { focusHours7d: 0, completedGoals7d: 0, activeDays7d: 0 }
         });
         return;
     }
@@ -271,6 +290,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
 
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(now.getDate() - 14);
+        
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(now.getDate() - 30);
 
         // ---- sessions ----
         const { data: sessions } = await supabase
@@ -346,30 +368,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
         const goalCounts = new Map<string, number>();
         goalsData?.forEach((g: any) => {
             if (g.completed) {
-                // Fallback to created_at if completed_at missing, for demo purposes
+                // Fallback to created_at if completed_at missing
                 const d = g.completed_at ? new Date(g.completed_at) : new Date(g.created_at);
                 const dk = d.toLocaleDateString('en-CA');
                 goalCounts.set(dk, (goalCounts.get(dk) || 0) + 1);
             }
         });
 
-        // ---- Weekly focus bar chart (kept in data structure for compat, but UI removed) ----
-        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const weeklyMinutesMap = new Map<string, number>();
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(now);
-          d.setDate(now.getDate() - i);
-          const dateKey = d.toLocaleDateString('en-CA');
-          weeklyMinutesMap.set(dateKey, 0);
-        }
-        sessions?.forEach((s: any) => {
-          const startTime = new Date(s.started_at);
-          const dateKey = startTime.toLocaleDateString('en-CA');
-          if (weeklyMinutesMap.has(dateKey)) {
-             // logic simplified for brevity since chart is gone
-          }
-        });
-        const weeklyMessages: any[] = []; // Unused now
+        // Calculate 30 Day Goal Stats
+        const recentGoals = goalsData?.filter((g: any) => new Date(g.created_at) >= thirtyDaysAgo) || [];
+        const totalGoals30 = recentGoals.length;
+        const completedGoals30 = recentGoals.filter((g: any) => g.completed).length;
+        const activeGoals30 = totalGoals30 - completedGoals30;
+        const pctGoals30 = totalGoals30 > 0 ? Math.round((completedGoals30 / totalGoals30) * 100) : 0;
+
+        // Calculate 7 Day Completed Goals for Insights
+        const completedGoals7d = goalsData?.filter((g: any) => 
+            g.completed && new Date(g.completed_at || g.created_at) >= sevenDaysAgo
+        ).length || 0;
 
         // ---- heatmap activity (Consistency Mode continued) ----
         const startIso = startOfYear.toISOString();
@@ -419,13 +435,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
           hoursChange,
           totalGoals,
           completedGoals,
-          weeklyMessages,
+          weeklyMessages: [],
           calendarDays,
           calendarDaysProductivity,
           calendarDaysConsistency,
           calendarDaysGoals,
           scheduledSessions: scheduled || [],
           weeklySummary,
+          goalStats30: {
+              total: totalGoals30,
+              completed: completedGoals30,
+              active: activeGoals30,
+              percentage: pctGoals30
+          },
+          insights: {
+              focusHours7d: weeklySummary.focusHours,
+              completedGoals7d: completedGoals7d,
+              activeDays7d: weeklySummary.activeDays
+          }
         });
       } catch (err) {
         console.error('Dashboard data load error:', err);
@@ -713,7 +740,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
         </div>
       </div>
 
-      {/* Bottom row: Heatmap + Upcoming Sessions */}
+      {/* Middle row: Heatmap + Upcoming Sessions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
         {/* Heatmap */}
         <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
@@ -972,6 +999,123 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
               <Calendar size={16} /> Schedule New
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Bottom analytics row (Goal Progress + Pro Insights) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        {/* Left: Goal Progress (Free) */}
+        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
+              <Target size={18} className="text-secondary" /> Goal Progress
+            </h3>
+            <span className="text-xs text-text-muted">Last 30 Days</span>
+          </div>
+          
+          <p className="text-sm text-text-muted mb-6">
+            Track your momentum on active goals.
+          </p>
+
+          {metrics.goalStats30.total === 0 ? (
+             <div className="flex-1 flex flex-col items-center justify-center text-center py-6 border border-dashed border-white/10 rounded-xl bg-background/30">
+                <p className="text-text-muted text-sm">No goals found in the last 30 days.</p>
+                <p className="text-xs text-text-muted mt-1">Create a goal in your next session to see stats.</p>
+             </div>
+          ) : (
+             <div className="grid grid-cols-2 gap-4">
+                <div className="bg-background p-4 rounded-xl border border-white/5">
+                   <p className="text-xs uppercase tracking-wider text-text-muted font-bold mb-1">Total Goals</p>
+                   <p className="text-2xl font-bold text-text-main">{metrics.goalStats30.total}</p>
+                </div>
+                <div className="bg-background p-4 rounded-xl border border-white/5">
+                   <p className="text-xs uppercase tracking-wider text-text-muted font-bold mb-1">Completed</p>
+                   <div className="flex items-end gap-2">
+                      <p className="text-2xl font-bold text-secondary">{metrics.goalStats30.completed}</p>
+                      <span className="text-xs text-text-muted mb-1.5">({metrics.goalStats30.percentage}%)</span>
+                   </div>
+                </div>
+                <div className="bg-background p-4 rounded-xl border border-white/5">
+                   <p className="text-xs uppercase tracking-wider text-text-muted font-bold mb-1">Active</p>
+                   <p className="text-2xl font-bold text-text-main">{metrics.goalStats30.active}</p>
+                </div>
+                <div className="bg-background p-4 rounded-xl border border-white/5 flex items-center justify-center">
+                   <div className="text-center">
+                      <CheckCircle size={24} className={`mx-auto mb-1 ${metrics.goalStats30.percentage >= 80 ? 'text-gold' : 'text-text-muted'}`} />
+                      <p className="text-xs font-bold text-text-main">
+                        {metrics.goalStats30.percentage >= 80 ? 'Crushing it!' : 'Keep pushing'}
+                      </p>
+                   </div>
+                </div>
+             </div>
+          )}
+        </div>
+
+        {/* Right: Kova Pro Insights (Gated) */}
+        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col relative overflow-hidden">
+           <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
+                 <BarChart3 size={18} className="text-gold" /> Kova Pro Insights
+              </h3>
+              {!isPro && (
+                <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
+                  Pro
+                </span>
+              )}
+           </div>
+
+           {!isPro ? (
+              <div className="flex flex-col h-full justify-between relative z-10">
+                 <div className="space-y-4 text-sm text-text-muted mb-4">
+                    <p>Unlock AI-powered weekly breakdowns of your focus, goals, and networking activity.</p>
+                    <ul className="space-y-2 text-xs list-disc list-inside text-text-muted/80 pl-2">
+                       <li>Smart recap of your focus hours</li>
+                       <li>Highlights of your goal streaks</li>
+                       <li>Suggestions for your next week</li>
+                    </ul>
+                 </div>
+                 <button
+                    onClick={onUpgrade}
+                    className="mt-auto w-full py-3 rounded-xl bg-gradient-to-r from-gold to-amber-600 text-surface font-bold text-sm hover:opacity-90 transition-opacity shadow-lg"
+                 >
+                    Upgrade to Pro – $7.99/month
+                 </button>
+              </div>
+           ) : (
+              <div className="flex flex-col h-full">
+                 <p className="text-sm text-text-main font-medium mb-4">Here's your latest snapshot:</p>
+                 <ul className="space-y-3 text-sm text-text-muted flex-1">
+                    <li className="flex items-start gap-2">
+                       <span className="text-gold mt-1">•</span>
+                       <span>
+                          You've logged <span className="text-text-main font-bold">{metrics.insights.focusHours7d.toFixed(1)} hrs</span> of focus time in the last 7 days.
+                       </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                       <span className="text-gold mt-1">•</span>
+                       <span>
+                          You completed <span className="text-text-main font-bold">{metrics.insights.completedGoals7d}</span> goals this week.
+                       </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                       <span className="text-gold mt-1">•</span>
+                       <span>
+                          You had sessions on <span className="text-text-main font-bold">{metrics.insights.activeDays7d}</span> different days.
+                       </span>
+                    </li>
+                 </ul>
+                 <div className="mt-4 pt-4 border-t border-white/5">
+                    <p className="text-xs text-text-muted italic">
+                       "Consistency is key. Try to beat your 7-day focus record next week!"
+                    </p>
+                 </div>
+              </div>
+           )}
+           
+           {/* Background effect for locked card */}
+           {!isPro && (
+              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-gold/5 rounded-full blur-3xl pointer-events-none"></div>
+           )}
         </div>
       </div>
     </div>

@@ -301,7 +301,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
              },
              mainGoal: data.main_goal,
              securityQuestion: '',
-             securityAnswer: ''
+             securityAnswer: '',
+             subscriptionTier: data.subscription_tier || 'free',
+             proExpiresAt: data.pro_expires_at || null,
            };
            setFoundUser(appUser);
         }

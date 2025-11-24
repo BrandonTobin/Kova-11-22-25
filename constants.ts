@@ -54,5 +54,7 @@ export const BLANK_USER_TEMPLATE: User = {
   location: { city: '', state: '' },
   mainGoal: '',
   securityQuestion: '',
-  securityAnswer: ''
+  securityAnswer: '',
+  subscriptionTier: 'free',
+  proExpiresAt: null
 };

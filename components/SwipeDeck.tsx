@@ -2,16 +2,19 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from 'framer-motion';
 import { User } from '../types';
-import { X, Check, Briefcase, Tag, MapPin, Star } from 'lucide-react';
+import { X, Check, Briefcase, Tag, MapPin, Star, Lock, Crown } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 
 interface SwipeDeckProps {
   users: User[];
   onSwipe: (direction: 'left' | 'right', user: User) => void;
+  remainingLikes?: number | null;
+  isPro?: boolean;
+  onUpgrade?: () => void;
 }
 
-const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
+const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, isPro = false, onUpgrade }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [exitX, setExitX] = useState<number | null>(null);
 
@@ -23,11 +26,19 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
   const opacityLike = useTransform(x, [50, 150], [0, 1]);
   const opacityNope = useTransform(x, [-50, -150], [0, 1]);
 
+  const isLikesExhausted = !isPro && remainingLikes !== null && remainingLikes <= 0;
+
   const onDragEnd = (_e: any, info: PanInfo) => {
     const threshold = 100;
     if (info.offset.x > threshold) {
-      setExitX(1000);
-      setTimeout(() => handleSwipe('right'), 200);
+      if (isLikesExhausted) {
+        // If out of likes, snap back and show upgrade
+        x.set(0);
+        onUpgrade?.();
+      } else {
+        setExitX(1000);
+        setTimeout(() => handleSwipe('right'), 200);
+      }
     } else if (info.offset.x < -threshold) {
       setExitX(-1000);
       setTimeout(() => handleSwipe('left'), 200);
@@ -60,6 +71,23 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8">
       
+      {/* Likes Counter Badge */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border border-white/10 flex items-center gap-2 shadow-lg">
+         {isPro ? (
+           <>
+             <Crown size={14} className="text-gold fill-gold" />
+             <span className="text-xs font-bold text-white uppercase tracking-wider">Kova Pro</span>
+           </>
+         ) : (
+           <>
+             <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
+             <span className={`text-xs font-bold ${isLikesExhausted ? 'text-red-400' : 'text-white'}`}>
+                {remainingLikes ?? '--'} / 30
+             </span>
+           </>
+         )}
+      </div>
+
       {/* Next Card (Background Stack) */}
       {nextUser && (
         <div className="absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl border border-white/5 shadow-xl overflow-hidden transform scale-95 translate-y-4 -z-10 opacity-60 filter grayscale-[0.5]">
@@ -114,6 +142,23 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
               onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
+            
+            {/* Limit Reached Overlay */}
+            {isLikesExhausted && (
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-30 flex flex-col items-center justify-center text-center p-6">
+                    <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4 border border-white/20">
+                       <Lock size={32} className="text-white" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">Daily Limit Reached</h3>
+                    <p className="text-white/70 mb-6">Upgrade to Kova Pro for unlimited matching.</p>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); onUpgrade?.(); }}
+                      className="bg-gradient-to-r from-gold to-amber-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg transform hover:scale-105 transition-all"
+                    >
+                        Unlock Unlimited
+                    </button>
+                </div>
+            )}
             
             {/* Badges Overlay */}
             <div className="absolute top-4 right-4 flex flex-wrap justify-end gap-2 max-w-[80%]">
@@ -182,10 +227,17 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe }) => {
           </button>
 
           <button 
-            className="w-16 h-16 rounded-full bg-surface border border-green-500/30 text-green-500 flex items-center justify-center hover:bg-green-500 hover:text-white transition-all shadow-2xl hover:scale-110 hover:border-green-500 group"
-            onClick={() => { setExitX(1000); setTimeout(() => handleSwipe('right'), 200); }}
+            className={`w-16 h-16 rounded-full border flex items-center justify-center transition-all shadow-2xl group ${isLikesExhausted ? 'bg-surface border-white/10 text-text-muted cursor-not-allowed' : 'bg-surface border-green-500/30 text-green-500 hover:bg-green-500 hover:text-white hover:scale-110 hover:border-green-500'}`}
+            onClick={() => { 
+                if (isLikesExhausted) {
+                    onUpgrade?.();
+                } else {
+                    setExitX(1000); 
+                    setTimeout(() => handleSwipe('right'), 200); 
+                }
+            }}
           >
-            <Check size={32} className="group-hover:scale-110 transition-transform" />
+            {isLikesExhausted ? <Lock size={28} /> : <Check size={32} className="group-hover:scale-110 transition-transform" />}
           </button>
       </div>
     </div>

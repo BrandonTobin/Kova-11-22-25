@@ -123,7 +123,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       location: { city: formData.city, state: formData.state },
       mainGoal: formData.mainGoal === 'Other' ? formData.customGoal : formData.mainGoal,
       securityQuestion: formData.securityQuestion,
-      securityAnswer: formData.securityAnswer
+      securityAnswer: formData.securityAnswer,
+      subscriptionTier: 'free',
+      proExpiresAt: null
     };
 
     onRegister(newUser);

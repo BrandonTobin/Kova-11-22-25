@@ -9,6 +9,8 @@ export enum ViewState {
   LOGIN = 'LOGIN'
 }
 
+export type SubscriptionTier = 'free' | 'pro';
+
 export interface User {
   id: string;
   kovaId: string;
@@ -23,6 +25,10 @@ export interface User {
   // Auth fields
   email: string;
   password: string;
+
+  // Subscription
+  subscriptionTier: SubscriptionTier;
+  proExpiresAt: string | null;
 
   // Personal details
   dob: string;
@@ -76,4 +82,13 @@ export interface Goal {
 export interface ChartData {
   name: string;
   value: number;
+}
+
+// Helper function to check Pro status
+export function isProUser(user: User | null): boolean {
+  if (!user) return false;
+  if (user.subscriptionTier !== 'pro') return false;
+  // If tier is pro but no expiry date, assume lifetime or error (fail safe to true for now)
+  if (!user.proExpiresAt) return true; 
+  return new Date(user.proExpiresAt).getTime() > Date.now();
 }

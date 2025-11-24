@@ -1,22 +1,25 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { User } from '../types';
-import { Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, Ban, Trash2, Globe, Lock, Info, MapPin } from 'lucide-react';
+import { User, isProUser } from '../types';
+import { Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, Trash2, Crown } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface ProfileEditorProps {
   user: User;
   onSave: (updatedUser: User) => void;
+  onUpgrade: () => void;
 }
 
-const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave }) => {
+const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }) => {
   const [formData, setFormData] = useState<User>(user);
   const [isEditing, setIsEditing] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const isPro = isProUser(user);
 
   // Sync local state if prop updates (optional, but good practice)
   useEffect(() => {
@@ -118,6 +121,42 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave }) => {
           </button>
         )}
       </div>
+
+      {/* Upgrade / Pro Status Card */}
+      {isPro ? (
+        <div className="bg-gradient-to-r from-gold/10 to-background p-5 rounded-xl border border-gold/30 mb-6 flex items-center gap-4 shadow-lg shadow-gold/5">
+            <div className="w-12 h-12 bg-gradient-to-br from-gold to-amber-500 rounded-full flex items-center justify-center text-white shadow-md shrink-0">
+                <CheckCircle size={24} strokeWidth={3} />
+            </div>
+            <div>
+                <h3 className="font-bold text-gold text-lg flex items-center gap-2">
+                    Kova Pro Active
+                    <Crown size={16} fill="currentColor" />
+                </h3>
+                <p className="text-xs text-text-muted mt-0.5">You have full access to all premium features.</p>
+            </div>
+        </div>
+      ) : (
+        <div className="bg-gradient-to-br from-surface to-background p-6 rounded-2xl border border-gold/30 mb-6 relative overflow-hidden shadow-lg group">
+            <div className="absolute top-0 right-0 w-40 h-40 bg-gold/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                    <h3 className="text-xl font-bold text-text-main flex items-center gap-2">
+                        Upgrade to Kova Pro <Crown size={20} className="text-gold fill-gold" />
+                    </h3>
+                    <p className="text-sm text-text-muted mt-1 max-w-md leading-relaxed">
+                        Unlock unlimited swipes, advanced heatmaps, and premium AI insights.
+                    </p>
+                </div>
+                <button
+                    onClick={onUpgrade}
+                    className="px-6 py-3 bg-gradient-to-r from-gold to-amber-600 hover:to-amber-700 text-white font-bold rounded-xl shadow-lg transform hover:scale-105 transition-all whitespace-nowrap"
+                >
+                    Get Pro
+                </button>
+            </div>
+        </div>
+      )}
 
       {/* Kova ID Section - Always Read Only */}
       <div className="bg-background p-4 rounded-xl border border-gold/30 mb-4 flex items-center justify-between shadow-sm">

@@ -1,315 +1,201 @@
 
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, MessageSquare, User as UserIcon, Search, LogOut, Sun, Moon, Loader2 } from 'lucide-react';
-import { ViewState, User, Match } from './types';
 import { supabase } from './supabaseClient';
-import { DEFAULT_PROFILE_IMAGE } from './constants';
-import { getDisplayName } from './utils/nameUtils';
-
-import ChatInterface from './components/ChatInterface';
-import VideoRoom from './components/VideoRoom';
-import Dashboard from './components/Dashboard';
-import ProfileEditor from './components/ProfileEditor';
 import LoginScreen from './components/LoginScreen';
 import RegisterScreen from './components/RegisterScreen';
 import SwipeDeck from './components/SwipeDeck';
 import MatchPopup from './components/MatchPopup';
+import ChatInterface from './components/ChatInterface';
+import VideoRoom from './components/VideoRoom';
+import Dashboard from './components/Dashboard';
+import ProfileEditor from './components/ProfileEditor';
+import { User, Match, ViewState, isProUser } from './types';
+import { LayoutGrid, MessageSquare, Users, User as UserIcon, LogOut, X, Crown, Search } from 'lucide-react';
+import { DEFAULT_PROFILE_IMAGE } from './constants';
 
-// --- ERROR BOUNDARY ---
-class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: Error | null }> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("App Error Boundary caught:", error, errorInfo);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white p-4 text-center">
-          <h2 className="text-2xl font-bold mb-4 text-red-400">Something went wrong.</h2>
-          <p className="text-gray-400 mb-4 max-w-md">{this.state.error?.message}</p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Reload App
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-// --- CONFIGURATION ---
-const STORAGE_KEY = 'kova_current_user_id';
-const VIEW_STORAGE_KEY = 'kova_last_view';
-
-// Helper to map Database snake_case to Frontend camelCase
-const mapDbUserToAppUser = (dbUser: any): User => ({
-  id: dbUser.id,
-  kovaId: dbUser.kova_id,
-  name: dbUser.name,
-  email: dbUser.email,
-  password: dbUser.password, // We are storing/reading raw password per instruction
-  role: dbUser.role,
-  industry: dbUser.industry,
-  bio: dbUser.bio,
-  imageUrl: (dbUser.image_url && !dbUser.image_url.startsWith('blob:')) ? dbUser.image_url : DEFAULT_PROFILE_IMAGE,
-  tags: dbUser.tags || [],
-  badges: dbUser.badges || [],
-  dob: dbUser.dob,
-  age: dbUser.age,
-  gender: dbUser.gender,
-  stage: dbUser.stage,
-  location: {
-    city: dbUser.city || '',
-    state: dbUser.state || '',
-  },
-  mainGoal: dbUser.main_goal,
-  securityQuestion: dbUser.security_question,
-  securityAnswer: dbUser.security_answer,
-});
-
-// Helper to map Frontend camelCase to Database snake_case
-const mapAppUserToDbUser = (user: User) => {
-  // Final safeguard: Ensure we never save a blob URL to the DB
-  let safeImageUrl = user.imageUrl;
-  if (!safeImageUrl || safeImageUrl.startsWith('blob:')) {
-    safeImageUrl = DEFAULT_PROFILE_IMAGE;
-  }
-
-  const payload: any = {
-    kova_id: user.kovaId,
-    name: user.name,
-    email: user.email,
-    password: user.password, // Include password for storage
-    role: user.role,
-    industry: user.industry,
-    bio: user.bio,
-    image_url: safeImageUrl,
-    tags: user.tags,
-    badges: user.badges,
-    dob: user.dob,
-    age: user.age,
-    gender: user.gender,
-    stage: user.stage,
-    city: user.location?.city || '',
-    state: user.location?.state || '',
-    main_goal: user.mainGoal,
-    security_question: user.securityQuestion,
-    security_answer: user.securityAnswer,
-  };
-  
-  // Only include ID if it's set, otherwise let DB generate UUID
-  if (user.id) {
-    payload.id = user.id;
-  }
-  
-  return payload;
-};
-
-// Supabase sends `timestamp without time zone` as a plain string (UTC).
-const parseSupabaseTimestamp = (value: string | null | undefined): Date => {
-  if (!value) return new Date();
-  const iso = typeof value === 'string' && !value.endsWith('Z') ? `${value}Z` : value;
-  return new Date(iso);
-};
-
-const AppContent: React.FC = () => {
-  // --- State ---
+function App() {
+  // --- State: Auth & User ---
   const [user, setUser] = useState<User | null>(null);
-  const [currentView, setCurrentView] = useState<ViewState>(ViewState.LOGIN);
-  
-  // Data containers
-  const [discoverQueue, setDiscoverQueue] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
+  const [showRegister, setShowRegister] = useState(false);
+
+  // --- State: App Data ---
+  const [usersToSwipe, setUsersToSwipe] = useState<User[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
-  
-  // UI State
-  const [loginError, setLoginError] = useState('');
-  const [registerError, setRegisterError] = useState('');
-  const [isLoading, setIsLoading] = useState(false); // For network actions (login/register)
-  const [isBootstrapping, setIsBootstrapping] = useState(true); // For initial app load
+  const [swipedUserIds, setSwipedUserIds] = useState<Set<string>>(new Set());
+  const [dailySwipes, setDailySwipes] = useState(0);
+
+  // --- State: UI/Navigation ---
+  const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // --- State: Interaction ---
+  const [newMatch, setNewMatch] = useState<User | null>(null);
+  const [showMatchPopup, setShowMatchPopup] = useState(false);
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [matchedUser, setMatchedUser] = useState<User | null>(null);
 
-  // --- Theme Effect ---
+  // --- 1. Initialize & Auth Check ---
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDarkMode]);
-
-  // --- Session Persistence & Bootstrapping ---
-  useEffect(() => {
-    const bootstrapApp = async () => {
-      try {
-        const storedId = localStorage.getItem(STORAGE_KEY);
-        
-        if (storedId) {
-          // Fetch user directly from public.users
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', storedId)
-            .single();
-
-          if (error || !data) {
-            console.error("Session restore failed:", error);
-            localStorage.removeItem(STORAGE_KEY);
-            setUser(null);
-            setCurrentView(ViewState.LOGIN);
-          } else {
-            const appUser = mapDbUserToAppUser(data);
-            setUser(appUser);
-            
-            // Restore last view if available, else default to DISCOVER
-            const storedView = localStorage.getItem(VIEW_STORAGE_KEY) as ViewState | null;
-            if (storedView && storedView !== ViewState.LOGIN && storedView !== ViewState.REGISTER) {
-              setCurrentView(storedView);
-            } else {
-              setCurrentView(ViewState.DISCOVER);
-            }
-            
-            // Start background data fetch
-            refreshMatches(appUser.id);
-          }
-        } else {
-          setCurrentView(ViewState.LOGIN);
-        }
-      } catch (err) {
-        console.error("Unexpected session error:", err);
-        setCurrentView(ViewState.LOGIN);
-      } finally {
-        setIsBootstrapping(false); // Finish bootstrapping
-      }
-    };
-
-    bootstrapApp();
+    checkSession();
   }, []);
 
-  // --- Persist View State ---
+  // --- 2. Data Fetching on User Change ---
   useEffect(() => {
-    if (user && currentView !== ViewState.LOGIN && currentView !== ViewState.REGISTER) {
-      localStorage.setItem(VIEW_STORAGE_KEY, currentView);
+    if (user) {
+      fetchMatches();
+      fetchUsersToSwipe();
     }
-  }, [currentView, user]);
+  }, [user?.id]);
 
-
-  // --- Data Loaders ---
-
-  // 1. Fetch Matches
-  const refreshMatches = async (currentUserId: string) => {
+  const checkSession = async () => {
+    setIsLoading(true);
     try {
-      const { data: matchRows, error } = await supabase
-        .from('matches')
-        .select('*')
-        .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`)
-        .order('created_at', { ascending: false });
+      // Check Local Storage for persistent ID
+      const storedId = localStorage.getItem('kova_current_user_id');
+      if (storedId) {
+        await fetchUserProfile(storedId);
+      } else {
+        setUser(null);
+      }
+    } catch (error) {
+      console.error("Session check failed", error);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-      console.log('refreshMatches rows', matchRows);
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
       if (error) throw error;
-      if (!matchRows) return;
-
-      const fullMatches: Match[] = [];
-
-      for (const row of matchRows) {
-        const otherUserId = row.user1_id === currentUserId ? row.user2_id : row.user1_id;
-        
-        const { data: otherUserData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', otherUserId)
-          .single();
-
-        if (otherUserData) {
-          const { data: lastMsg } = await supabase
-            .from('messages')
-            .select('text, created_at')
-            .eq('match_id', row.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
-
-          fullMatches.push({
-            id: row.id,
-            user: mapDbUserToAppUser(otherUserData),
-            timestamp: parseSupabaseTimestamp(lastMsg?.created_at || row.created_at),
-            lastMessage: lastMsg?.text || "New Match! Say hello.",
-            unread: 0 
-          });
-        }
+      
+      if (data) {
+        const mappedUser: User = {
+          ...data,
+          imageUrl: data.image_url || DEFAULT_PROFILE_IMAGE,
+          kovaId: data.kova_id,
+          mainGoal: data.main_goal,
+          subscriptionTier: data.subscription_tier || 'free',
+          proExpiresAt: data.pro_expires_at,
+          location: { city: data.city || '', state: data.state || '' },
+          securityQuestion: '', 
+          securityAnswer: '' 
+        };
+        setUser(mappedUser);
+        // Restore last view if possible, or default to DISCOVER
+        setCurrentView(ViewState.DISCOVER);
       }
-      setMatches(fullMatches);
-    } catch (err) {
-      console.error("Error loading matches:", err);
+    } catch (error) {
+      console.error("Error fetching profile", error);
+      // If fetch fails (e.g. user deleted), clear session
+      localStorage.removeItem('kova_current_user_id');
+      setUser(null);
     }
   };
 
-  // 2. Fetch Discover Queue
-  const refreshDiscover = async (currentUserId: string) => {
-    try {
-      const { data: swipes, error: swipeError } = await supabase
+  const fetchUsersToSwipe = async () => {
+    if (!user) return;
+    
+    // Fetch IDs user has already swiped on
+    const { data: swipes } = await supabase
+      .from('swipes')
+      .select('swiped_id')
+      .eq('swiper_id', user.id);
+      
+    const swipedIds = new Set<string>((swipes?.map((s: any) => s.swiped_id) as string[]) || []);
+    swipedIds.add(user.id); // Don't show self
+    setSwipedUserIds(swipedIds);
+
+    // Count daily swipes for limit
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const { count } = await supabase
         .from('swipes')
-        .select('swiped_id')
-        .eq('swiper_id', currentUserId);
-      
-      if (swipeError) throw swipeError;
-      
-      const swipedIds = swipes?.map(s => s.swiped_id) || [];
-      
-      const { data: allUsers, error: usersError } = await supabase
-        .from('users')
-        .select('*');
+        .select('*', { count: 'exact', head: true })
+        .eq('swiper_id', user.id)
+        .gte('created_at', today.toISOString());
+    
+    setDailySwipes(count || 0);
 
-      if (usersError) throw usersError;
-
-      if (allUsers) {
-        const candidates = allUsers
-            .filter(u => u.id !== currentUserId && !swipedIds.includes(u.id))
-            .map(mapDbUserToAppUser);
-            
-        setDiscoverQueue(candidates);
-      }
-    } catch (err) {
-      console.error("Error loading discover queue:", err);
+    // Fetch candidates
+    const { data: candidates } = await supabase
+      .from('users')
+      .select('*')
+      .limit(50); 
+      
+    if (candidates) {
+      const filtered = candidates
+        .filter((c: any) => !swipedIds.has(c.id))
+        .map((c: any) => ({
+            ...c,
+            imageUrl: c.image_url || DEFAULT_PROFILE_IMAGE,
+            kovaId: c.kova_id,
+            mainGoal: c.main_goal,
+            location: { city: c.city, state: c.state },
+            subscriptionTier: c.subscription_tier || 'free',
+            proExpiresAt: c.pro_expires_at
+        }));
+      setUsersToSwipe(filtered);
     }
   };
 
-  // --- Effects to trigger data loading ---
-  useEffect(() => {
+  const fetchMatches = async () => {
     if (!user) return;
 
-    if (currentView === ViewState.MATCHES) {
-      refreshMatches(user.id);
+    const { data, error } = await supabase
+      .from('matches')
+      .select(`
+        id,
+        created_at,
+        user1:user1_id(*),
+        user2:user2_id(*)
+      `)
+      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+
+    if (data) {
+      const formattedMatches: Match[] = data
+        .map((m: any) => {
+          if (!m.user1 || !m.user2) return null;
+
+          const otherUserRaw = m.user1.id === user.id ? m.user2 : m.user1;
+          
+          const otherUser: User = {
+              ...otherUserRaw,
+              imageUrl: otherUserRaw.image_url || DEFAULT_PROFILE_IMAGE,
+              kovaId: otherUserRaw.kova_id,
+              mainGoal: otherUserRaw.main_goal,
+              location: { city: otherUserRaw.city, state: otherUserRaw.state },
+              subscriptionTier: otherUserRaw.subscription_tier || 'free',
+              proExpiresAt: otherUserRaw.pro_expires_at
+          };
+
+          return {
+              id: m.id,
+              user: otherUser,
+              timestamp: new Date(m.created_at),
+              unread: 0
+          };
+        })
+        .filter((m): m is Match => m !== null);
+
+      setMatches(formattedMatches);
     }
+  };
 
-    if (currentView === ViewState.DISCOVER) {
-      refreshDiscover(user.id);
-    }
-  }, [currentView, user]);
+  // --- Actions ---
 
-
-  // --- Auth Handlers (Custom Table Auth) ---
-
-  const handleSignIn = async (email: string, pass: string) => {
+  const handleLogin = async (email: string, pass: string) => {
     setIsLoading(true);
-    setLoginError('');
+    setAuthError('');
     
     try {
-      // Direct query to public.users table
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -318,431 +204,333 @@ const AppContent: React.FC = () => {
         .single();
 
       if (error || !data) {
-        throw new Error("Invalid email or password.");
+        setAuthError('Invalid email or password.');
+        setIsLoading(false);
+        return;
       }
 
-      const appUser = mapDbUserToAppUser(data);
-      
-      // Persist session
-      localStorage.setItem(STORAGE_KEY, appUser.id);
-      
-      // Set State
-      setUser(appUser);
-      await refreshMatches(appUser.id);
-      
-      // Restore view if available, else discover
-      const storedView = localStorage.getItem(VIEW_STORAGE_KEY) as ViewState | null;
-      setCurrentView(storedView || ViewState.DISCOVER);
+      localStorage.setItem('kova_current_user_id', data.id);
+      await fetchUserProfile(data.id);
 
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login error:", err);
-      setLoginError(err.message || 'Login failed.');
-    } finally {
+      setAuthError('An unexpected error occurred.');
       setIsLoading(false);
     }
   };
 
   const handleRegister = async (newUser: User) => {
     setIsLoading(true);
-    setRegisterError('');
-    
+    setAuthError('');
+
     try {
-      // 1. Check for duplicate email manually
-      const { data: existingUser } = await supabase
+      const { data: existing } = await supabase
         .from('users')
         .select('id')
         .eq('email', newUser.email)
         .maybeSingle();
 
-      if (existingUser) {
-        throw new Error("An account with this email already exists. Please sign in instead.");
+      if (existing) {
+        setAuthError('An account with this email already exists.');
+        setIsLoading(false);
+        return;
       }
 
-      // 2. Map to DB format (includes password)
-      // Note: newUser.imageUrl is already sanitized/generated in RegisterScreen component
-      const dbUserPayload = mapAppUserToDbUser(newUser);
-      
-      // Ensure we don't send an empty ID string, let DB generate UUID
-      if (!dbUserPayload.id) delete dbUserPayload.id;
-
-      const { data, error } = await supabase
+      const { data: createdUser, error: createError } = await supabase
         .from('users')
-        .insert([dbUserPayload])
+        .insert([{
+           kova_id: newUser.kovaId,
+           email: newUser.email,
+           password: newUser.password,
+           name: newUser.name,
+           role: newUser.role,
+           industry: newUser.industry,
+           bio: newUser.bio,
+           image_url: newUser.imageUrl,
+           tags: newUser.tags,
+           badges: newUser.badges,
+           dob: newUser.dob,
+           age: newUser.age,
+           gender: newUser.gender,
+           stage: newUser.stage,
+           city: newUser.location.city,
+           state: newUser.location.state,
+           main_goal: newUser.mainGoal,
+           security_question: newUser.securityQuestion,
+           security_answer: newUser.securityAnswer,
+           subscription_tier: 'free'
+        }])
         .select()
         .single();
 
-      if (error) throw error;
-      if (!data) throw new Error("Registration failed.");
+      if (createError) throw createError;
 
-      const createdUser = mapDbUserToAppUser(data);
+      if (createdUser) {
+        localStorage.setItem('kova_current_user_id', createdUser.id);
+        await fetchUserProfile(createdUser.id);
+      }
 
-      // Persist session
-      localStorage.setItem(STORAGE_KEY, createdUser.id);
-
-      // Set State
-      setUser(createdUser);
-      // New users default to Discover
-      setCurrentView(ViewState.DISCOVER);
-      
     } catch (err: any) {
       console.error("Registration error:", err);
-      // Handle Supabase unique violation explicitly just in case race condition
-      if (err.code === '23505') {
-        setRegisterError("An account with this email already exists. Please sign in instead.");
-      } else {
-        setRegisterError(err.message || "Registration failed. Please try again.");
-      }
-    } finally {
+      setAuthError(err.message || "Registration failed.");
       setIsLoading(false);
     }
   };
 
-  const handleSignOut = async () => {
-    setIsLoading(true);
-    // Clear Local Storage
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(VIEW_STORAGE_KEY);
-    // Reset State
+  const handleLogout = async () => {
+    localStorage.removeItem('kova_current_user_id');
     setUser(null);
-    setMatches([]);
-    setDiscoverQueue([]);
     setCurrentView(ViewState.LOGIN);
-    setIsLoading(false);
-  };
-
-  // --- Feature Handlers ---
-
-  const handleUpdateProfile = async (updatedUser: User) => {
-    try {
-      const dbUser = mapAppUserToDbUser(updatedUser);
-      // Keep password if it exists, otherwise remove it from update payload if empty
-      const { id, ...updatePayload } = dbUser;
-      
-      const { error } = await supabase
-        .from('users')
-        .update(updatePayload)
-        .eq('id', updatedUser.id);
-
-      if (error) throw error;
-
-      setUser(updatedUser); 
-    } catch (err) {
-      console.error("Profile update failed:", err);
-      alert("Failed to save profile.");
-    }
-  };
-
-  // Connect By ID via Supabase
-  const handleConnectById = async (targetUser: User) => {
-    if (!user) return;
-    
-    try {
-      const { data: existingMatch } = await supabase
-        .from('matches')
-        .select('*')
-        .or(`and(user1_id.eq.${user.id},user2_id.eq.${targetUser.id}),and(user1_id.eq.${targetUser.id},user2_id.eq.${user.id})`)
-        .single();
-
-      if (existingMatch) {
-         alert(`You are already matched with ${getDisplayName(targetUser.name)}!`);
-         await refreshMatches(user.id);
-         setCurrentView(ViewState.MATCHES);
-         return;
-      }
-
-       const { error } = await supabase
-         .from('matches')
-         .insert([
-           {
-             user1_id: user.id,
-             user2_id: targetUser.id
-           }
-         ]);
-
-       if (error) throw error;
-
-       await refreshMatches(user.id);
-       setCurrentView(ViewState.MATCHES);
-
-    } catch (err) {
-      console.error("Failed to connect:", err);
-      alert("Failed to create connection.");
-    }
-  };
-
-  const handleUnmatch = async (matchId: string) => {
-    try {
-      // 1. Delete associated messages first to satisfy Foreign Key constraints
-      const { error: msgError } = await supabase
-        .from('messages')
-        .delete()
-        .eq('match_id', matchId);
-
-      if (msgError) {
-        console.warn("Error deleting messages (ignoring):", msgError);
-      }
-
-      // 2. Delete the match
-      const { error } = await supabase
-        .from('matches')
-        .delete()
-        .eq('id', matchId);
-
-      if (error) throw error;
-
-      // 3. Update local state
-      setMatches(prev => prev.filter(m => m.id !== matchId));
-      
-      // If active in video, close it
-      if (activeVideoMatch?.id === matchId) {
-        setActiveVideoMatch(null);
-        setCurrentView(ViewState.DASHBOARD);
-      }
-    } catch (err: any) {
-      console.error("Error unmatching:", err);
-      alert(`Failed to unmatch: ${err.message || "Unknown error"}`);
-    }
   };
 
   const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
     if (!user) return;
 
-    try {
-      setDiscoverQueue(prev => prev.filter(u => u.id !== swipedUser.id));
+    setUsersToSwipe(prev => prev.filter(u => u.id !== swipedUser.id));
+    if (direction === 'right') {
+        setDailySwipes(prev => prev + 1);
+    }
 
-      const { error: swipeError } = await supabase
+    await supabase.from('swipes').insert([{
+      swiper_id: user.id,
+      swiped_id: swipedUser.id,
+      direction: direction
+    }]);
+
+    if (direction === 'right') {
+      const { data: reciprocal } = await supabase
         .from('swipes')
-        .insert([{
-          swiper_id: user.id,
-          swiped_id: swipedUser.id,
-          direction: direction
-        }]);
-      
-      if (swipeError) {
-        console.error("Error inserting swipe:", swipeError);
-        return;
-      }
-
-      if (direction === 'right') {
-         const { data: matchRow, error: matchQueryError } = await supabase
-            .from('matches')
-            .select('*')
-            .or(`and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`)
-            .single();
-        
-         if (!matchQueryError && matchRow) {
-             setMatchedUser(swipedUser);
-             await refreshMatches(user.id);
-         }
-      }
-
-    } catch (err) {
-      console.error("Swipe logic error:", err);
-    }
-  };
-
-  // --- Security Recovery ---
-  const handleGetSecurityQuestion = async (email: string): Promise<string | null> => {
-    const { data } = await supabase
-      .from('users')
-      .select('security_question')
-      .eq('email', email)
-      .single();
-    return data?.security_question || null;
-  };
-
-  const handleResetPassword = async (email: string, answer: string, newPass: string) => {
-      // Verify security answer first
-      const { data } = await supabase
-        .from('users')
-        .select('security_answer')
-        .eq('email', email)
+        .select('*')
+        .eq('swiper_id', swipedUser.id)
+        .eq('swiped_id', user.id)
+        .eq('direction', 'right')
         .single();
-      
-      if (!data || data.security_answer.toLowerCase() !== answer.toLowerCase()) {
-         return { success: false, message: 'Incorrect security answer.' };
+
+      if (reciprocal) {
+        const { data: matchData, error } = await supabase
+          .from('matches')
+          .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
+          .select()
+          .single();
+
+        if (!error && matchData) {
+          setNewMatch(swipedUser);
+          setShowMatchPopup(true);
+          fetchMatches();
+        }
       }
-
-      // Update password directly in public.users
-      const { error } = await supabase
-        .from('users')
-        .update({ password: newPass })
-        .eq('email', email);
-
-      if (error) return { success: false, message: error.message };
-      return { success: true, message: 'Password reset successful! Please log in.' };
+    }
   };
 
-  // --- Render ---
+  const handleUpdateProfile = async (updatedUser: User) => {
+    if (!user) return;
+    setIsLoading(true);
 
-  const renderContent = () => {
-    // 1. Bootstrapping (Initial Load)
-    if (isBootstrapping) {
-       return (
-          <div className="flex flex-col items-center justify-center h-screen bg-background text-text-muted gap-4">
-             <div className="relative">
-                <div className="w-16 h-16 rounded-full border-4 border-white/10 border-t-gold animate-spin"></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                   <div className="w-8 h-8 rounded-full bg-gold/20"></div>
-                </div>
-             </div>
-             <p className="animate-pulse text-sm font-medium tracking-wide">Initializing Kova...</p>
-          </div>
-       );
+    const { error } = await supabase
+      .from('users')
+      .update({
+        name: updatedUser.name,
+        role: updatedUser.role,
+        industry: updatedUser.industry,
+        bio: updatedUser.bio,
+        image_url: updatedUser.imageUrl,
+        tags: updatedUser.tags,
+        stage: updatedUser.stage,
+        main_goal: updatedUser.mainGoal
+      })
+      .eq('id', user.id);
+
+    if (!error) {
+      setUser(updatedUser);
     }
+    setIsLoading(false);
+  };
 
-    // 2. Authentication Views
-    if (!user) {
-      if (currentView === ViewState.REGISTER) {
-        return (
-          <RegisterScreen 
-            onRegister={handleRegister}
-            onBack={() => {
-              setRegisterError('');
-              setCurrentView(ViewState.LOGIN);
-            }}
-            isLoading={isLoading}
-            error={registerError}
-            onClearError={() => setRegisterError('')}
-          />
-        );
-      }
-      // Default to Login
+  const handleConnectById = async (targetUser: User) => {
+     if (!user) return;
+     const existing = matches.find(m => m.user.id === targetUser.id);
+     if (existing) {
+        alert("You are already matched!");
+        return;
+     }
+     const { error } = await supabase
+        .from('matches')
+        .insert([{ user1_id: user.id, user2_id: targetUser.id }]);
+        
+     if (!error) {
+        fetchMatches();
+        setCurrentView(ViewState.MATCHES);
+     } else {
+        alert("Failed to connect.");
+     }
+  };
+
+  const handleUnmatch = async (matchId: string) => {
+     const { error } = await supabase.from('matches').delete().eq('id', matchId);
+     if (!error) {
+        setMatches(prev => prev.filter(m => m.id !== matchId));
+     }
+  };
+
+  // --- Navigation Configuration ---
+  const navItems = [
+    { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
+    { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
+    { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
+    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
+  ];
+
+  // --- Render Views ---
+
+  if (isLoading && !user) {
+    return (
+      <div className="h-screen w-full bg-background flex flex-col items-center justify-center text-text-main">
+        <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="animate-pulse">Loading Kova...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    if (showRegister) {
       return (
-        <LoginScreen 
-          onLogin={handleSignIn} 
-          onRegisterClick={() => {
-            setRegisterError('');
-            setCurrentView(ViewState.REGISTER);
-          }}
-          error={loginError}
+        <RegisterScreen 
+          onRegister={handleRegister} 
+          onBack={() => setShowRegister(false)}
           isLoading={isLoading}
-          onGetSecurityQuestion={handleGetSecurityQuestion}
-          onVerifyAndReset={handleResetPassword}
+          error={authError}
         />
       );
     }
-
-    // 3. Main Application Views (Authenticated)
     return (
-      <div className={`flex flex-col h-screen bg-background text-text-main transition-colors duration-300 overflow-hidden ${isDarkMode ? 'dark' : ''}`}>
-        
-        {matchedUser && (
-            <MatchPopup 
-               matchedUser={matchedUser} 
-               currentUser={user} 
-               onClose={() => setMatchedUser(null)} 
-               onChat={() => {
-                   setMatchedUser(null);
-                   setCurrentView(ViewState.MATCHES);
-               }} 
-            />
-        )}
+      <LoginScreen 
+        onLogin={handleLogin} 
+        onRegisterClick={() => setShowRegister(true)}
+        error={authError}
+        isLoading={isLoading}
+      />
+    );
+  }
 
-        <div className="flex-1 overflow-hidden relative">
+  return (
+    <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
+      
+      {/* Global Modals */}
+      {showMatchPopup && newMatch && (
+        <MatchPopup 
+          matchedUser={newMatch} 
+          currentUser={user}
+          onClose={() => { setShowMatchPopup(false); setNewMatch(null); }}
+          onChat={() => { 
+            setShowMatchPopup(false); 
+            setNewMatch(null);
+            setCurrentView(ViewState.MATCHES); 
+          }}
+        />
+      )}
+
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+           <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative">
+              <button onClick={() => setShowUpgradeModal(false)} className="absolute top-4 right-4 text-text-muted hover:text-white"><X /></button>
+              <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
+                 <Crown size={32} fill="currentColor" />
+              </div>
+              <h2 className="text-2xl font-bold text-text-main mb-2">Upgrade to Kova Pro</h2>
+              
+              <div className="space-y-1 mb-6">
+                <p className="text-text-muted">Unlock unlimited swipes, deep analytics, and AI insights.</p>
+                <p className="text-xs text-gold/80 italic">More premium features coming soon...</p>
+              </div>
+
+              <div className="mb-6 bg-gold/5 border border-gold/20 rounded-xl p-3 inline-block px-6">
+                 <p className="text-2xl font-bold text-gold">$7.99 <span className="text-sm font-normal text-text-muted">/ month</span></p>
+              </div>
+
+              <button 
+                onClick={() => setShowUpgradeModal(false)} 
+                className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors"
+              >
+                Get Pro
+              </button>
+           </div>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <main className="flex-1 relative overflow-hidden">
           {currentView === ViewState.DISCOVER && (
-             <SwipeDeck users={discoverQueue} onSwipe={handleSwipe} />
+             <SwipeDeck 
+                users={usersToSwipe} 
+                onSwipe={handleSwipe} 
+                remainingLikes={isProUser(user) ? null : 30 - dailySwipes}
+                isPro={isProUser(user)}
+                onUpgrade={() => setShowUpgradeModal(true)}
+             />
           )}
-          
+
           {currentView === ViewState.MATCHES && (
-            <div className="h-full p-4 md:p-6">
-               <ChatInterface 
-                  matches={matches} 
-                  currentUser={user}
-                  onStartVideoCall={(m) => { setActiveVideoMatch(m); setCurrentView(ViewState.VIDEO_ROOM); }}
-                  onConnectById={handleConnectById}
-                  onUnmatch={handleUnmatch}
-               />
-            </div>
+             <ChatInterface 
+                matches={matches} 
+                currentUser={user} 
+                onStartVideoCall={(match) => { setActiveVideoMatch(match); setCurrentView(ViewState.VIDEO_ROOM); }}
+                onConnectById={handleConnectById}
+                onUnmatch={handleUnmatch}
+             />
           )}
-          
+
+          {/* Video Room takes over full screen within main, nav is hidden via conditional rendering below */}
           {currentView === ViewState.VIDEO_ROOM && activeVideoMatch && (
              <VideoRoom 
                match={activeVideoMatch} 
-               allMatches={matches}
+               allMatches={matches} 
                currentUser={user} 
-               onEndCall={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }}
-               onReturnToDashboard={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }}
+               onEndCall={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }} 
+               onReturnToDashboard={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }} 
              />
           )}
 
           {currentView === ViewState.DASHBOARD && (
-             <Dashboard user={user} />
+             <Dashboard user={user} matches={matches} onUpgrade={() => setShowUpgradeModal(true)} />
           )}
 
           {currentView === ViewState.PROFILE && (
              <div className="h-full p-4 md:p-6 overflow-y-auto">
-                <ProfileEditor user={user} onSave={handleUpdateProfile} />
+                <ProfileEditor 
+                  user={user} 
+                  onSave={handleUpdateProfile} 
+                  onUpgrade={() => setShowUpgradeModal(true)}
+                />
              </div>
           )}
-        </div>
+      </main>
 
-        {/* Bottom Nav */}
-        {currentView !== ViewState.VIDEO_ROOM && (
-          <div className="h-20 bg-surface border-t border-white/5 flex justify-around items-center px-4 md:px-20 relative z-30 shadow-[0_-5px_20px_rgba(0,0,0,0.2)]">
-            <button 
-              onClick={() => setCurrentView(ViewState.DISCOVER)}
-              className={`flex flex-col items-center gap-1 transition-colors ${currentView === ViewState.DISCOVER ? 'text-gold scale-110' : 'text-text-muted hover:text-text-main'}`}
-            >
-              <Search size={24} />
-              <span className="text-[10px] font-medium uppercase tracking-wide">Discover</span>
-            </button>
-            
-            <button 
-              onClick={() => setCurrentView(ViewState.MATCHES)}
-              className={`flex flex-col items-center gap-1 transition-colors relative ${currentView === ViewState.MATCHES ? 'text-gold scale-110' : 'text-text-muted hover:text-text-main'}`}
-            >
-              <div className="relative">
-                <MessageSquare size={24} />
-              </div>
-              <span className="text-[10px] font-medium uppercase tracking-wide">Matches</span>
-            </button>
-            
-            <button 
-              onClick={() => setCurrentView(ViewState.DASHBOARD)}
-              className={`flex flex-col items-center gap-1 transition-colors ${currentView === ViewState.DASHBOARD ? 'text-gold scale-110' : 'text-text-muted hover:text-text-main'}`}
-            >
-              <LayoutDashboard size={24} />
-              <span className="text-[10px] font-medium uppercase tracking-wide">Dashboard</span>
-            </button>
-            
-            <button 
-              onClick={() => setCurrentView(ViewState.PROFILE)}
-              className={`flex flex-col items-center gap-1 transition-colors ${currentView === ViewState.PROFILE ? 'text-gold scale-110' : 'text-text-muted hover:text-text-main'}`}
-            >
-              <UserIcon size={24} />
-              <span className="text-[10px] font-medium uppercase tracking-wide">Profile</span>
-            </button>
-
-            <button 
-              onClick={handleSignOut}
-              className="flex flex-col items-center gap-1 text-text-muted hover:text-red-400 transition-colors ml-4"
-            >
-              <LogOut size={24} />
-              <span className="text-[10px] font-medium uppercase tracking-wide">Logout</span>
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <ErrorBoundary>
-      <div className="fixed top-4 right-4 z-[100]">
-         <button 
-             onClick={() => setIsDarkMode(!isDarkMode)} 
-             className="p-3 rounded-full bg-surface text-text-muted hover:text-gold border border-white/10 shadow-lg transition-colors"
-             title="Toggle Theme"
-           >
-             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-           </button>
-      </div>
-      {renderContent()}
-    </ErrorBoundary>
+      {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
+      {currentView !== ViewState.VIDEO_ROOM && (
+        <nav className="bg-black border-t border-white/10 px-6 pb-safe shrink-0 z-50">
+           <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
+              {navItems.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setCurrentView(item.id)}
+                  className={`flex flex-col items-center justify-center w-20 h-full gap-1.5 transition-all duration-200 ${currentView === item.id ? 'text-gold' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  <item.icon size={24} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'} />
+                  <span className="text-[10px] font-bold tracking-widest">{item.label}</span>
+                </button>
+              ))}
+              <button 
+                onClick={handleLogout}
+                className="flex flex-col items-center justify-center w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 transition-all duration-200"
+              >
+                <LogOut size={24} strokeWidth={2} />
+                <span className="text-[10px] font-bold tracking-widest">LOGOUT</span>
+              </button>
+           </div>
+        </nav>
+      )}
+    </div>
   );
-};
-
-export default function App() {
-  return <AppContent />;
 }
+
+export default App;

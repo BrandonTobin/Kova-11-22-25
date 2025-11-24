@@ -11,6 +11,30 @@ export enum ViewState {
 
 export type SubscriptionTier = 'free' | 'pro';
 
+export interface Badge {
+  id: string;
+  icon: string;
+  name: string;
+  color: string;
+  criteria: string;
+}
+
+export interface Goal {
+  id: string;
+  text: string;
+  completed: boolean;
+  created_at?: string;
+  completed_at?: string;
+  user_id?: string;
+}
+
+export interface UserLinks {
+  linkedin?: string;
+  website?: string;
+  twitter?: string;
+  portfolio?: string;
+}
+
 export interface User {
   id: string;
   kovaId: string;
@@ -43,6 +67,15 @@ export interface User {
   };
   mainGoal: string;
 
+  // Extended Profile Fields
+  experienceLevel?: string;
+  communicationStyle?: string;
+  skills?: string[];
+  lookingFor?: string[];
+  availability?: string[];
+  goalsList?: string[]; // Specific text goals for profile display
+  links?: UserLinks;
+
   // Security recovery
   securityQuestion: string;
   securityAnswer: string;
@@ -65,30 +98,7 @@ export interface Message {
   timestamp: Date;
 }
 
-export interface Badge {
-  id: string;
-  icon: string;
-  name: string;
-  color: string;
-  criteria: string;
-}
-
-export interface Goal {
-  id: string;
-  text: string;
-  completed: boolean;
-}
-
-export interface ChartData {
-  name: string;
-  value: number;
-}
-
-// Helper function to check Pro status
-export function isProUser(user: User | null): boolean {
+export const isProUser = (user: User | null): boolean => {
   if (!user) return false;
-  if (user.subscriptionTier !== 'pro') return false;
-  // If tier is pro but no expiry date, assume lifetime or error (fail safe to true for now)
-  if (!user.proExpiresAt) return true; 
-  return new Date(user.proExpiresAt).getTime() > Date.now();
-}
+  return user.subscriptionTier === 'pro';
+};

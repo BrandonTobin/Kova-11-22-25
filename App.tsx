@@ -108,6 +108,14 @@ function App() {
           subscriptionTier: data.subscription_tier || 'free',
           proExpiresAt: data.pro_expires_at,
           location: { city: data.city || '', state: data.state || '' },
+          // Map snake_case DB fields to camelCase
+          experienceLevel: data.experience_level,
+          communicationStyle: data.communication_style,
+          skills: data.skills,
+          lookingFor: data.looking_for,
+          availability: data.availability,
+          goalsList: data.goals_list,
+          links: data.links,
           securityQuestion: '', 
           securityAnswer: '' 
         };
@@ -163,7 +171,14 @@ function App() {
             mainGoal: c.main_goal,
             location: { city: c.city, state: c.state },
             subscriptionTier: c.subscription_tier || 'free',
-            proExpiresAt: c.pro_expires_at
+            proExpiresAt: c.pro_expires_at,
+            experienceLevel: c.experience_level,
+            communicationStyle: c.communication_style,
+            skills: c.skills,
+            lookingFor: c.looking_for,
+            availability: c.availability,
+            goalsList: c.goals_list,
+            links: c.links
         }));
       setUsersToSwipe(filtered);
     }
@@ -196,7 +211,14 @@ function App() {
               mainGoal: otherUserRaw.main_goal,
               location: { city: otherUserRaw.city, state: otherUserRaw.state },
               subscriptionTier: otherUserRaw.subscription_tier || 'free',
-              proExpiresAt: otherUserRaw.pro_expires_at
+              proExpiresAt: otherUserRaw.pro_expires_at,
+              experienceLevel: otherUserRaw.experience_level,
+              communicationStyle: otherUserRaw.communication_style,
+              skills: otherUserRaw.skills,
+              lookingFor: otherUserRaw.looking_for,
+              availability: otherUserRaw.availability,
+              goalsList: otherUserRaw.goals_list,
+              links: otherUserRaw.links
           };
 
           return {
@@ -214,27 +236,44 @@ function App() {
 
   // --- Actions ---
 
+  // LOGIN: now uses Supabase Auth instead of querying users.password
   const handleLogin = async (email: string, pass: string) => {
     setIsLoading(true);
     setAuthError('');
-    
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('email', email)
-        .eq('password', pass)
-        .single();
 
-      if (error || !data) {
+    try {
+      // 1) Auth against Supabase
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass,
+      });
+
+      if (authError || !authData.user) {
+        console.error('Supabase auth error:', authError);
         setAuthError('Invalid email or password.');
         setIsLoading(false);
         return;
       }
 
-      localStorage.setItem('kova_current_user_id', data.id);
-      await fetchUserProfile(data.id);
+      // 2) Fetch profile row from public.users by email
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .single();
 
+      if (profileError || !profile) {
+        console.error('Profile fetch error:', profileError);
+        setAuthError('Account found, but profile is missing.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 3) Store id and hydrate state
+      localStorage.setItem('kova_current_user_id', profile.id);
+      await fetchUserProfile(profile.id);
+
+      setIsLoading(false);
     } catch (err) {
       console.error("Login error:", err);
       setAuthError('An unexpected error occurred.');
@@ -242,11 +281,13 @@ function App() {
     }
   };
 
+  // REGISTER: creates Supabase auth user, then profile row (no password column)
   const handleRegister = async (newUser: User) => {
     setIsLoading(true);
     setAuthError('');
 
     try {
+      // 1) See if a profile with this email already exists
       const { data: existing } = await supabase
         .from('users')
         .select('id')
@@ -259,12 +300,34 @@ function App() {
         return;
       }
 
+      // Ensure we actually have a password passed in from RegisterScreen
+      const password = newUser.password ?? '';
+      if (!password) {
+        setAuthError('Password is missing. Please try registering again.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 2) Create the auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUser.email,
+        password,
+      });
+
+      if (authError || !authData.user) {
+        console.error('Supabase signUp error:', authError);
+        setAuthError(authError?.message ?? 'Failed to create account.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 3) Insert profile row into public.users (no password field)
       const { data: createdUser, error: createError } = await supabase
         .from('users')
         .insert([{
+           id: authData.user.id, // tie profile to auth user
            kova_id: newUser.kovaId,
            email: newUser.email,
-           password: newUser.password,
            name: newUser.name,
            role: newUser.role,
            industry: newUser.industry,
@@ -293,6 +356,7 @@ function App() {
         await fetchUserProfile(createdUser.id);
       }
 
+      setIsLoading(false);
     } catch (err: any) {
       console.error("Registration error:", err);
       setAuthError(err.message || "Registration failed.");
@@ -301,6 +365,11 @@ function App() {
   };
 
   const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error('Error signing out of Supabase auth', e);
+    }
     localStorage.removeItem('kova_current_user_id');
     setUser(null);
     setCurrentView(ViewState.LOGIN);
@@ -359,7 +428,17 @@ function App() {
         image_url: updatedUser.imageUrl,
         tags: updatedUser.tags,
         stage: updatedUser.stage,
-        main_goal: updatedUser.mainGoal
+        main_goal: updatedUser.mainGoal,
+        city: updatedUser.location.city,
+        state: updatedUser.location.state,
+        // Update new fields
+        experience_level: updatedUser.experienceLevel,
+        communication_style: updatedUser.communicationStyle,
+        skills: updatedUser.skills,
+        looking_for: updatedUser.lookingFor,
+        availability: updatedUser.availability,
+        goals_list: updatedUser.goalsList,
+        links: updatedUser.links
       })
       .eq('id', user.id);
 

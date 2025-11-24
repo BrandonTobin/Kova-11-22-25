@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, isProUser, Match } from '../types';
 import { supabase } from '../supabaseClient';
@@ -767,7 +766,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         </div>
       )}
 
-      <header className="mb-8">
+      <header className="mb-8 pr-16">
         <h1 className="text-3xl font-bold text-text-main mb-2">
           Welcome back, {getDisplayName(user.name).split(' ')[0]}
         </h1>

@@ -452,7 +452,7 @@ function App() {
 
         {showUpgradeModal && (
           <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative">
+            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
                 <button onClick={() => setShowUpgradeModal(false)} className="absolute top-4 right-4 text-text-muted hover:text-white"><X /></button>
                 <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
                   <Crown size={32} fill="currentColor" />
@@ -461,9 +461,9 @@ function App() {
                 <p className="text-text-muted mb-6">Unlock unlimited swipes, deep analytics, and AI insights.</p>
                 <button 
                   onClick={() => setShowUpgradeModal(false)} 
-                  className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors"
+                  className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg"
                 >
-                  Get Pro for $19/mo
+                  Get Pro for $7.99/mo
                 </button>
             </div>
           </div>
@@ -508,20 +508,24 @@ function App() {
 
             {currentView === ViewState.PROFILE && (
               <div className="h-full p-4 md:p-6 overflow-y-auto">
-                  <ProfileEditor user={user} onSave={handleUpdateProfile} />
+                  <ProfileEditor 
+                    user={user} 
+                    onSave={handleUpdateProfile} 
+                    onUpgrade={() => setShowUpgradeModal(true)}
+                  />
               </div>
             )}
         </main>
 
         {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
         {currentView !== ViewState.VIDEO_ROOM && (
-          <nav className="bg-black border-t border-white/10 px-6 pb-safe shrink-0 z-50">
+          <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
             <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
                 {navItems.map(item => (
                   <button
                     key={item.id}
                     onClick={() => setCurrentView(item.id)}
-                    className={`flex flex-col items-center justify-center w-20 h-full gap-1.5 transition-all duration-200 ${currentView === item.id ? 'text-gold' : 'text-gray-500 hover:text-gray-300'}`}
+                    className={`flex flex-col items-center justify-center w-20 h-full gap-1.5 transition-all duration-200 ${currentView === item.id ? 'text-gold' : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'}`}
                   >
                     <item.icon size={24} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'} />
                     <span className="text-[10px] font-bold tracking-widest">{item.label}</span>
@@ -529,7 +533,7 @@ function App() {
                 ))}
                 <button 
                   onClick={handleLogout}
-                  className="flex flex-col items-center justify-center w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 transition-all duration-200"
+                  className="flex flex-col items-center justify-center w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
                 >
                   <LogOut size={24} strokeWidth={2} />
                   <span className="text-[10px] font-bold tracking-widest">LOGOUT</span>

@@ -298,7 +298,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
       <div className="flex-1 flex flex-col relative h-full min-h-0">
         
         {/* Mobile Top Bar (Only visible on small screens) */}
-        <div className="md:hidden h-14 bg-surface border-b border-white/5 flex items-center justify-between px-4 shrink-0 z-10 pr-12">
+        <div className="md:hidden h-14 bg-surface border-b border-white/5 flex items-center justify-between px-4 shrink-0 z-10 pr-20">
            <button onClick={handleReturnToDashboard} className="p-2 text-text-muted hover:text-white">
               <ArrowLeft size={20} />
            </button>

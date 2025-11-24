@@ -1,16 +1,16 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { User } from '../types';
-import { Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, Ban, Trash2, Globe, Lock, Info, MapPin } from 'lucide-react';
+import { User, isProUser } from '../types';
+import { Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, Ban, Trash2, Globe, Lock, Info, MapPin, Crown } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface ProfileEditorProps {
   user: User;
   onSave: (updatedUser: User) => void;
+  onUpgrade: () => void;
 }
 
-const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave }) => {
+const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }) => {
   const [formData, setFormData] = useState<User>(user);
   const [isEditing, setIsEditing] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -116,6 +116,40 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave }) => {
           >
             <Edit2 size={16} /> Edit Profile
           </button>
+        )}
+      </div>
+
+      {/* Subscription Status Card */}
+      <div className="bg-surface border border-white/10 rounded-xl p-4 mb-6 shadow-sm relative overflow-hidden">
+        {isProUser(user) ? (
+          <div className="flex items-center gap-3">
+             <div className="w-10 h-10 bg-gradient-to-br from-gold to-amber-600 rounded-full flex items-center justify-center text-white shadow-md">
+                <Crown size={20} fill="currentColor" />
+             </div>
+             <div>
+                <p className="font-bold text-text-main">Kova Pro Active</p>
+                <p className="text-xs text-text-muted">Thank you for being a premium member.</p>
+             </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+             <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-background rounded-full flex items-center justify-center text-text-muted border border-white/10">
+                   <Crown size={20} />
+                </div>
+                <div>
+                   <p className="font-bold text-text-main">Free Plan</p>
+                   <p className="text-xs text-text-muted">Smarter tools. Better results.</p>
+                </div>
+             </div>
+             <button 
+               onClick={onUpgrade}
+               className="px-4 py-2 bg-gradient-to-r from-gold to-amber-600 text-white text-xs font-bold rounded-lg shadow-lg hover:opacity-90 transition-opacity flex items-center gap-2"
+             >
+                <Crown size={14} fill="currentColor" />
+                Upgrade
+             </button>
+          </div>
         )}
       </div>
 

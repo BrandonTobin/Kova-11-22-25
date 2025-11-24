@@ -570,7 +570,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
         {selectedMatch ? (
           <>
             {/* Chat Header */}
-            <div className="h-16 border-b border-white/5 flex items-center justify-between px-3 md:px-6 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20 pr-12 md:pr-6">
+            <div className="h-16 border-b border-white/5 flex items-center justify-between px-3 md:px-6 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20 pr-20">
               <div className="flex items-center gap-3 flex-1 min-w-0 mr-2">
                  <button onClick={() => setSelectedMatchId(null)} className="md:hidden text-text-muted hover:text-white shrink-0 p-1">
                    <ArrowLeft size={22} />

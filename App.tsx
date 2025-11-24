@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -10,7 +9,7 @@ import VideoRoom from './components/VideoRoom';
 import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import { User, Match, ViewState, isProUser } from './types';
-import { LayoutGrid, MessageSquare, Users, User as UserIcon, LogOut, X, Crown, Search } from 'lucide-react';
+import { LayoutGrid, MessageSquare, Users, User as UserIcon, LogOut, X, Crown, Search, Sun, Moon } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from './constants';
 
 function App() {
@@ -29,6 +28,16 @@ function App() {
   // --- State: UI/Navigation ---
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  
+  // --- State: Theme ---
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('kova_theme');
+        if (saved) return saved === 'dark';
+        return document.documentElement.classList.contains('dark');
+    }
+    return true;
+  });
 
   // --- State: Interaction ---
   const [newMatch, setNewMatch] = useState<User | null>(null);
@@ -39,6 +48,20 @@ function App() {
   useEffect(() => {
     checkSession();
   }, []);
+
+  // --- Theme Effect ---
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode) {
+        root.classList.add('dark');
+        localStorage.setItem('kova_theme', 'dark');
+    } else {
+        root.classList.remove('dark');
+        localStorage.setItem('kova_theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleTheme = () => setIsDarkMode(prev => !prev);
 
   // --- 2. Data Fetching on User Change ---
   useEffect(() => {
@@ -380,20 +403,19 @@ function App() {
     { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
 
-  // --- Render Views ---
-
+  // --- Render Views Determination ---
+  let content;
+  
   if (isLoading && !user) {
-    return (
+    content = (
       <div className="h-screen w-full bg-background flex flex-col items-center justify-center text-text-main">
         <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mb-4"></div>
         <p className="animate-pulse">Loading Kova...</p>
       </div>
     );
-  }
-
-  if (!user) {
+  } else if (!user) {
     if (showRegister) {
-      return (
+      content = (
         <RegisterScreen 
           onRegister={handleRegister} 
           onBack={() => setShowRegister(false)}
@@ -401,122 +423,136 @@ function App() {
           error={authError}
         />
       );
+    } else {
+      content = (
+        <LoginScreen 
+          onLogin={handleLogin} 
+          onRegisterClick={() => setShowRegister(true)}
+          error={authError}
+          isLoading={isLoading}
+        />
+      );
     }
-    return (
-      <LoginScreen 
-        onLogin={handleLogin} 
-        onRegisterClick={() => setShowRegister(true)}
-        error={authError}
-        isLoading={isLoading}
-      />
+  } else {
+    content = (
+      <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
+        {/* Global Modals */}
+        {showMatchPopup && newMatch && (
+          <MatchPopup 
+            matchedUser={newMatch} 
+            currentUser={user}
+            onClose={() => { setShowMatchPopup(false); setNewMatch(null); }}
+            onChat={() => { 
+              setShowMatchPopup(false); 
+              setNewMatch(null);
+              setCurrentView(ViewState.MATCHES); 
+            }}
+          />
+        )}
+
+        {showUpgradeModal && (
+          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative">
+                <button onClick={() => setShowUpgradeModal(false)} className="absolute top-4 right-4 text-text-muted hover:text-white"><X /></button>
+                <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
+                  <Crown size={32} fill="currentColor" />
+                </div>
+                <h2 className="text-2xl font-bold text-text-main mb-2">Upgrade to Kova Pro</h2>
+                <p className="text-text-muted mb-6">Unlock unlimited swipes, deep analytics, and AI insights.</p>
+                <button 
+                  onClick={() => setShowUpgradeModal(false)} 
+                  className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors"
+                >
+                  Get Pro for $19/mo
+                </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <main className="flex-1 relative overflow-hidden">
+            {currentView === ViewState.DISCOVER && (
+              <SwipeDeck 
+                  users={usersToSwipe} 
+                  onSwipe={handleSwipe} 
+                  remainingLikes={isProUser(user) ? null : 30 - dailySwipes}
+                  isPro={isProUser(user)}
+                  onUpgrade={() => setShowUpgradeModal(true)}
+              />
+            )}
+
+            {currentView === ViewState.MATCHES && (
+              <ChatInterface 
+                  matches={matches} 
+                  currentUser={user} 
+                  onStartVideoCall={(match) => { setActiveVideoMatch(match); setCurrentView(ViewState.VIDEO_ROOM); }}
+                  onConnectById={handleConnectById}
+                  onUnmatch={handleUnmatch}
+              />
+            )}
+
+            {/* Video Room takes over full screen within main, nav is hidden via conditional rendering below */}
+            {currentView === ViewState.VIDEO_ROOM && activeVideoMatch && (
+              <VideoRoom 
+                match={activeVideoMatch} 
+                allMatches={matches} 
+                currentUser={user} 
+                onEndCall={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }} 
+                onReturnToDashboard={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }} 
+              />
+            )}
+
+            {currentView === ViewState.DASHBOARD && (
+              <Dashboard user={user} matches={matches} onUpgrade={() => setShowUpgradeModal(true)} />
+            )}
+
+            {currentView === ViewState.PROFILE && (
+              <div className="h-full p-4 md:p-6 overflow-y-auto">
+                  <ProfileEditor user={user} onSave={handleUpdateProfile} />
+              </div>
+            )}
+        </main>
+
+        {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
+        {currentView !== ViewState.VIDEO_ROOM && (
+          <nav className="bg-black border-t border-white/10 px-6 pb-safe shrink-0 z-50">
+            <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
+                {navItems.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => setCurrentView(item.id)}
+                    className={`flex flex-col items-center justify-center w-20 h-full gap-1.5 transition-all duration-200 ${currentView === item.id ? 'text-gold' : 'text-gray-500 hover:text-gray-300'}`}
+                  >
+                    <item.icon size={24} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'} />
+                    <span className="text-[10px] font-bold tracking-widest">{item.label}</span>
+                  </button>
+                ))}
+                <button 
+                  onClick={handleLogout}
+                  className="flex flex-col items-center justify-center w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 transition-all duration-200"
+                >
+                  <LogOut size={24} strokeWidth={2} />
+                  <span className="text-[10px] font-bold tracking-widest">LOGOUT</span>
+                </button>
+            </div>
+          </nav>
+        )}
+      </div>
     );
   }
 
   return (
-    <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
-      
-      {/* Global Modals */}
-      {showMatchPopup && newMatch && (
-        <MatchPopup 
-          matchedUser={newMatch} 
-          currentUser={user}
-          onClose={() => { setShowMatchPopup(false); setNewMatch(null); }}
-          onChat={() => { 
-            setShowMatchPopup(false); 
-            setNewMatch(null);
-            setCurrentView(ViewState.MATCHES); 
-          }}
-        />
-      )}
-
-      {showUpgradeModal && (
-        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-           <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative">
-              <button onClick={() => setShowUpgradeModal(false)} className="absolute top-4 right-4 text-text-muted hover:text-white"><X /></button>
-              <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
-                 <Crown size={32} fill="currentColor" />
-              </div>
-              <h2 className="text-2xl font-bold text-text-main mb-2">Upgrade to Kova Pro</h2>
-              <p className="text-text-muted mb-6">Unlock unlimited swipes, deep analytics, and AI insights.</p>
-              <button 
-                onClick={() => setShowUpgradeModal(false)} 
-                className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors"
-              >
-                Get Pro for $19/mo
-              </button>
-           </div>
-        </div>
-      )}
-
-      {/* Main Content Area */}
-      <main className="flex-1 relative overflow-hidden">
-          {currentView === ViewState.DISCOVER && (
-             <SwipeDeck 
-                users={usersToSwipe} 
-                onSwipe={handleSwipe} 
-                remainingLikes={isProUser(user) ? null : 30 - dailySwipes}
-                isPro={isProUser(user)}
-                onUpgrade={() => setShowUpgradeModal(true)}
-             />
-          )}
-
-          {currentView === ViewState.MATCHES && (
-             <ChatInterface 
-                matches={matches} 
-                currentUser={user} 
-                onStartVideoCall={(match) => { setActiveVideoMatch(match); setCurrentView(ViewState.VIDEO_ROOM); }}
-                onConnectById={handleConnectById}
-                onUnmatch={handleUnmatch}
-             />
-          )}
-
-          {/* Video Room takes over full screen within main, nav is hidden via conditional rendering below */}
-          {currentView === ViewState.VIDEO_ROOM && activeVideoMatch && (
-             <VideoRoom 
-               match={activeVideoMatch} 
-               allMatches={matches} 
-               currentUser={user} 
-               onEndCall={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }} 
-               onReturnToDashboard={() => { setActiveVideoMatch(null); setCurrentView(ViewState.DASHBOARD); }} 
-             />
-          )}
-
-          {currentView === ViewState.DASHBOARD && (
-             <Dashboard user={user} matches={matches} onUpgrade={() => setShowUpgradeModal(true)} />
-          )}
-
-          {currentView === ViewState.PROFILE && (
-             <div className="h-full p-4 md:p-6 overflow-y-auto">
-                <ProfileEditor user={user} onSave={handleUpdateProfile} />
-             </div>
-          )}
-      </main>
-
-      {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
-      {currentView !== ViewState.VIDEO_ROOM && (
-        <nav className="bg-black border-t border-white/10 px-6 pb-safe shrink-0 z-50">
-           <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
-              {navItems.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setCurrentView(item.id)}
-                  className={`flex flex-col items-center justify-center w-20 h-full gap-1.5 transition-all duration-200 ${currentView === item.id ? 'text-gold' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                  <item.icon size={24} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'} />
-                  <span className="text-[10px] font-bold tracking-widest">{item.label}</span>
-                </button>
-              ))}
-              <button 
-                onClick={handleLogout}
-                className="flex flex-col items-center justify-center w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 transition-all duration-200"
-              >
-                <LogOut size={24} strokeWidth={2} />
-                <span className="text-[10px] font-bold tracking-widest">LOGOUT</span>
-              </button>
-           </div>
-        </nav>
-      )}
-    </div>
+    <>
+      <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+        aria-label={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+        title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+      >
+        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+      {content}
+    </>
   );
 }
 

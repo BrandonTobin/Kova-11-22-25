@@ -498,9 +498,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
           if (isPro) {
               setHeatmapMode(mode);
           } else {
-              // Show simple alert or trigger upgrade modal
-              if (onUpgrade) onUpgrade();
-              else alert("Upgrade to Kova Pro to unlock consistency and goal heatmaps.");
+              // If not pro, we still set mode to show the locked state, 
+              // instead of blocking the switch. This lets them see what they're missing.
+              setHeatmapMode(mode);
           }
       }
   }
@@ -543,579 +543,598 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
   const GRID_WIDTH = safeVisibleWeeks * GRID_OFFSET - CELL_GAP;
   const GRID_HEIGHT = 7 * CELL_SIZE + 6 * CELL_GAP;
 
+  const isHeatmapLocked = heatmapMode !== 'productivity' && !isPro;
+
   return (
-    <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
-      {/* Badges Modal */}
-      {showBadgesModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
-          onClick={() => setShowBadgesModal(false)}
-        >
+    <div className="h-full w-full overflow-y-auto bg-background text-text-main relative">
+      {/* 1. FULL WIDTH CONTAINER */}
+      <div className="w-full p-6 md:p-8 space-y-6">
+        {/* Badges Modal */}
+        {showBadgesModal && (
           <div
-            className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+            onClick={() => setShowBadgesModal(false)}
           >
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-2xl font-bold text-text-main flex items-center gap-2">
-                  <Award className="text-gold" /> Achievements
-                </h2>
-                <p className="text-text-muted mt-1">
-                  Earn badges by staying consistent and collaborating.
-                </p>
-              </div>
-              <button
-                onClick={() => setShowBadgesModal(false)}
-                className="p-2 rounded-full hover:bg-background text-text-muted hover:text-white transition-colors"
-              >
-                <CloseIcon size={24} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {ALL_BADGES.map((badge) => {
-                const isEarned = user.badges.some((b) => b.id === badge.id);
-                return <BadgeCard key={badge.id} badge={badge} isEarned={isEarned} />;
-              })}
-            </div>
-
-            <div className="mt-8 text-center">
-              <p className="text-xs text-text-muted">
-                Progress:{' '}
-                <span className="text-gold font-bold">{user.badges.length}</span> /{' '}
-                {ALL_BADGES.length}{' '}
-                Unlocked
-              </p>
-              <div className="w-full max-w-md mx-auto h-1.5 bg-background rounded-full mt-2 overflow-hidden border border-white/5">
-                <div
-                  className="h-full bg-gradient-to-r from-primary to-gold"
-                  style={{
-                    width: `${(user.badges.length / ALL_BADGES.length) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-text-main mb-2">
-          Welcome back, {getDisplayName(user.name).split(' ')[0]}
-        </h1>
-        <p className="text-text-muted">Here&apos;s your growth overview.</p>
-      </header>
-
-      {/* Kova AI Insight banner */}
-      <div className="bg-gradient-to-r from-primary/40 via-background to-background border border-gold/30 p-6 rounded-2xl mb-8 relative overflow-hidden shadow-lg">
-        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-gold/10 rounded-full blur-3xl" />
-        <div className="flex items-start gap-4 relative z-10">
-          <div className="p-3 bg-gradient-to-br from-primary to-secondary rounded-xl shadow-lg text-white shrink-0 border border-white/10">
-            <Sparkles size={24} />
-          </div>
-          <div>
-            <h3 className="text-lg font-bold text-text-main mb-1 flex items-center gap-2">
-              Kova AI Insight
-              <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
-                Beta
-              </span>
-            </h3>
-            <p className="text-text-muted text-sm leading-relaxed max-w-3xl">
-              &quot;You&apos;ve been crushing your morning sessions! 🚀 Your focus score peaks between
-              9 AM and 11 AM. Try scheduling a deep-work block this Thursday to maintain your
-              streak.&quot;
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Top metrics row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        {/* Total hours */}
-        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-primary/20 rounded-xl text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-              <TrendingUp size={22} />
-            </div>
-            <span
-              className={`text-sm font-medium flex items-center gap-1 ${
-                metrics.hoursChange >= 0 ? 'text-gold' : 'text-red-400'
-              }`}
+            <div
+              className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
             >
-              <Activity size={12} /> {metrics.hoursChange > 0 ? '+' : ''}
-              {metrics.hoursChange}%
-            </span>
-          </div>
-          <h3 className="text-2xl font-bold text-text-main">{metrics.totalHours} hrs</h3>
-          <p className="text-sm text-text-muted">Total Co-working Time</p>
-        </div>
-
-        {/* Goals completed */}
-        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-secondary/20 rounded-xl text-secondary group-hover:bg-secondary group-hover:text-white transition-colors">
-              <Target size={22} />
-            </div>
-            <span className="text-primary text-sm font-medium">
-              {metrics.totalGoals > 0
-                ? Math.round((metrics.completedGoals / metrics.totalGoals) * 100)
-                : 0}
-              %
-            </span>
-          </div>
-          <h3 className="text-2xl font-bold text-text-main">
-            {metrics.completedGoals} / {metrics.totalGoals}
-          </h3>
-          <p className="text-sm text-text-muted">Goals Completed</p>
-        </div>
-
-        {/* Badges */}
-        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group relative">
-          <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 bg-gold/10 rounded-xl text-gold group-hover:bg-gold group-hover:text-surface transition-colors">
-              <Award size={22} />
-            </div>
-            <span className="text-text-muted text-sm font-medium">
-              Lvl {Math.floor(user.badges.length / 3) + 1}
-            </span>
-          </div>
-          <h3 className="text-2xl font-bold text-text-main">{user.badges.length}</h3>
-          <p className="text-sm text-text-muted">Badges Earned</p>
-
-          <button
-            onClick={() => setShowBadgesModal(true)}
-            className="mt-3 inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-gold border border-dashed border-white/10 rounded-full px-3 py-1 transition-colors"
-          >
-            See all available badges <ArrowRight size={12} />
-          </button>
-        </div>
-      </div>
-
-      {/* This Week Summary row */}
-      <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-text-main mb-2">
-            This Week Summary
-          </h3>
-          <p className="text-[11px] text-text-muted/70">Last 7 days</p>
-        </div>
-
-        <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-              Focus Hours
-            </p>
-            <p className="text-lg font-semibold text-text-main">
-              {metrics.weeklySummary.focusHours.toFixed(1)}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-              Sessions
-            </p>
-            <p className="text-lg font-semibold text-text-main">
-              {metrics.weeklySummary.sessions}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-              Active Days
-            </p>
-            <p className="text-lg font-semibold text-text-main">
-              {metrics.weeklySummary.activeDays}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-              Avg Session
-            </p>
-            <p className="text-lg font-semibold text-text-main">
-              {metrics.weeklySummary.avgSessionMinutes} min
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Middle row: Heatmap + Upcoming Sessions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        {/* Heatmap */}
-        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-              <Zap size={18} className="text-gold" />
-              Consistency Heatmap
-            </h3>
-            
-            <div className="flex items-center gap-3">
-                {/* Segmented Control */}
-                <div className="flex bg-black/30 rounded-lg p-1 border border-white/5">
-                    <button
-                        className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                        heatmapMode === 'productivity'
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'text-text-muted hover:text-white'
-                        }`}
-                        onClick={() => handleModeSwitch('productivity')}
-                    >
-                        Productivity
-                    </button>
-                    <button
-                        className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                        heatmapMode === 'consistency'
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'text-text-muted hover:text-white'
-                        }`}
-                        onClick={() => handleModeSwitch('consistency')}
-                    >
-                        Consistency
-                    </button>
-                    <button
-                        className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                        heatmapMode === 'goals'
-                            ? 'bg-primary text-white shadow-sm'
-                            : 'text-text-muted hover:text-white'
-                        }`}
-                        onClick={() => handleModeSwitch('goals')}
-                    >
-                        Goal Progress
-                    </button>
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h2 className="text-2xl font-bold text-text-main flex items-center gap-2">
+                    <Award className="text-gold" /> Achievements
+                  </h2>
+                  <p className="text-text-muted mt-1">
+                    Earn badges by staying consistent and collaborating.
+                  </p>
                 </div>
-                <span className="text-xs text-text-muted font-medium">{new Date().getFullYear()}</span>
-            </div>
-          </div>
-
-          {/* Grid */}
-          <div className="w-full pb-2 flex-1 flex flex-col relative">
-            {/* Pro Overlay for Locked Modes */}
-            {(heatmapMode !== 'productivity' && !isPro) && (
-                <div className="absolute inset-0 z-20 bg-surface/80 backdrop-blur-sm flex flex-col items-center justify-center text-center border border-white/5 rounded-xl">
-                    <div className="w-12 h-12 bg-gold/10 rounded-full flex items-center justify-center mb-3 border border-gold/20">
-                        <Lock size={20} className="text-gold" />
-                    </div>
-                    <h4 className="text-text-main font-bold mb-1">Pro Feature Locked</h4>
-                    <p className="text-text-muted text-xs max-w-xs mb-4">Upgrade to view streaks and goal consistency.</p>
-                    <button 
-                      onClick={onUpgrade}
-                      className="px-4 py-2 bg-gold text-surface text-xs font-bold rounded-lg hover:bg-gold-hover transition-colors"
-                    >
-                        Upgrade to Pro
-                    </button>
-                </div>
-            )}
-
-            <div className="flex items-start gap-4 w-full justify-center">
-              {/* Y labels */}
-              <div
-                className="relative shrink-0 text-[10px] text-text-muted font-medium w-8 text-right mr-2 pt-[20px]"
-                style={{ height: GRID_HEIGHT + 20 }}
-              >
-                {[
-                  { label: 'Mon', dayIndex: 1 },
-                  { label: 'Wed', dayIndex: 3 },
-                  { label: 'Fri', dayIndex: 5 },
-                ].map(({ label, dayIndex }) => (
-                  <span
-                    key={label}
-                    className="absolute right-0 flex items-center justify-end"
-                    style={{
-                      top: 20 + (dayIndex * GRID_OFFSET),
-                      height: CELL_SIZE,
-                    }}
-                  >
-                    {label}
-                  </span>
-                ))}
+                <button
+                  onClick={() => setShowBadgesModal(false)}
+                  className="p-2 rounded-full hover:bg-background text-text-muted hover:text-white transition-colors"
+                >
+                  <CloseIcon size={24} />
+                </button>
               </div>
 
-              {/* Month labels + cells */}
-              <div className="flex flex-col gap-[3px] flex-1">
-                {/* Months */}
-                <div className="relative h-[16px]" style={{ width: GRID_WIDTH }}>
-                  {monthLabels.map((item) => (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {ALL_BADGES.map((badge) => {
+                  const isEarned = user.badges.some((b) => b.id === badge.id);
+                  return <BadgeCard key={badge.id} badge={badge} isEarned={isEarned} />;
+                })}
+              </div>
+
+              <div className="mt-8 text-center">
+                <p className="text-xs text-text-muted">
+                  Progress:{' '}
+                  <span className="text-gold font-bold">{user.badges.length}</span> /{' '}
+                  {ALL_BADGES.length}{' '}
+                  Unlocked
+                </p>
+                <div className="w-full max-w-md mx-auto h-1.5 bg-background rounded-full mt-2 overflow-hidden border border-white/5">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary to-gold"
+                    style={{
+                      width: `${(user.badges.length / ALL_BADGES.length) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <header>
+          <h1 className="text-3xl font-bold text-text-main mb-2">
+            Welcome back, {getDisplayName(user.name).split(' ')[0]}
+          </h1>
+          <p className="text-text-muted">Here&apos;s your growth overview.</p>
+        </header>
+
+        {/* Kova AI Insight banner */}
+        <div className="bg-gradient-to-r from-primary/40 via-background to-background border border-gold/30 p-6 rounded-2xl relative overflow-hidden shadow-lg">
+          <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-gold/10 rounded-full blur-3xl" />
+          <div className="flex items-start gap-4 relative z-10">
+            <div className="p-3 bg-gradient-to-br from-primary to-secondary rounded-xl shadow-lg text-white shrink-0 border border-white/10">
+              <Sparkles size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-text-main mb-1 flex items-center gap-2">
+                Kova AI Insight
+                <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
+                  Beta
+                </span>
+              </h3>
+              <p className="text-text-muted text-sm leading-relaxed max-w-3xl">
+                &quot;You&apos;ve been crushing your morning sessions! 🚀 Your focus score peaks between
+                9 AM and 11 AM. Try scheduling a deep-work block this Thursday to maintain your
+                streak.&quot;
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Top metrics row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Total hours */}
+          <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-primary/20 rounded-xl text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+                <TrendingUp size={22} />
+              </div>
+              <span
+                className={`text-sm font-medium flex items-center gap-1 ${
+                  metrics.hoursChange >= 0 ? 'text-gold' : 'text-red-400'
+                }`}
+              >
+                <Activity size={12} /> {metrics.hoursChange > 0 ? '+' : ''}
+                {metrics.hoursChange}%
+              </span>
+            </div>
+            <h3 className="text-2xl font-bold text-text-main">{metrics.totalHours} hrs</h3>
+            <p className="text-sm text-text-muted">Total Co-working Time</p>
+          </div>
+
+          {/* Goals completed */}
+          <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-secondary/20 rounded-xl text-secondary group-hover:bg-secondary group-hover:text-white transition-colors">
+                <Target size={22} />
+              </div>
+              <span className="text-primary text-sm font-medium">
+                {metrics.totalGoals > 0
+                  ? Math.round((metrics.completedGoals / metrics.totalGoals) * 100)
+                  : 0}
+                %
+              </span>
+            </div>
+            <h3 className="text-2xl font-bold text-text-main">
+              {metrics.completedGoals} / {metrics.totalGoals}
+            </h3>
+            <p className="text-sm text-text-muted">Goals Completed</p>
+          </div>
+
+          {/* Badges */}
+          <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group relative">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-gold/10 rounded-xl text-gold group-hover:bg-gold group-hover:text-surface transition-colors">
+                <Award size={22} />
+              </div>
+              <span className="text-text-muted text-sm font-medium">
+                Lvl {Math.floor(user.badges.length / 3) + 1}
+              </span>
+            </div>
+            <h3 className="text-2xl font-bold text-text-main">{user.badges.length}</h3>
+            <p className="text-sm text-text-muted">Badges Earned</p>
+
+            <button
+              onClick={() => setShowBadgesModal(true)}
+              className="mt-3 inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-gold border border-dashed border-white/10 rounded-full px-3 py-1 transition-colors"
+            >
+              See all available badges <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* This Week Summary row */}
+        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-text-main mb-2">
+              This week's summary
+            </h3>
+            <p className="text-[11px] text-text-muted/70">Last 7 days</p>
+          </div>
+
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
+                Focus Hours
+              </p>
+              <p className="text-lg font-semibold text-text-main">
+                {metrics.weeklySummary.focusHours.toFixed(1)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
+                Sessions
+              </p>
+              <p className="text-lg font-semibold text-text-main">
+                {metrics.weeklySummary.sessions}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
+                Active Days
+              </p>
+              <p className="text-lg font-semibold text-text-main">
+                {metrics.weeklySummary.activeDays}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
+                Avg Session
+              </p>
+              <p className="text-lg font-semibold text-text-main">
+                {metrics.weeklySummary.avgSessionMinutes} min
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Middle row: Heatmap + Upcoming Sessions */}
+        {/* 2. BALANCED 2-COLUMN LAYOUT */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          {/* Heatmap */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
+                <Zap size={18} className="text-gold" />
+                Consistency Heatmap
+              </h3>
+              
+              <div className="flex items-center gap-3">
+                  {/* Segmented Control */}
+                  <div className="flex bg-black/30 rounded-lg p-1 border border-white/5">
+                      <button
+                          className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                          heatmapMode === 'productivity'
+                              ? 'bg-primary text-white shadow-sm'
+                              : 'text-text-muted hover:text-white'
+                          }`}
+                          onClick={() => handleModeSwitch('productivity')}
+                      >
+                          Productivity
+                      </button>
+                      <button
+                          className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                          heatmapMode === 'consistency'
+                              ? 'bg-primary text-white shadow-sm'
+                              : 'text-text-muted hover:text-white'
+                          }`}
+                          onClick={() => handleModeSwitch('consistency')}
+                      >
+                          Consistency
+                          {!isPro && <Lock size={8} className="inline ml-1 text-gold" />}
+                      </button>
+                      <button
+                          className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
+                          heatmapMode === 'goals'
+                              ? 'bg-primary text-white shadow-sm'
+                              : 'text-text-muted hover:text-white'
+                          }`}
+                          onClick={() => handleModeSwitch('goals')}
+                      >
+                          Goal Progress
+                          {!isPro && <Lock size={8} className="inline ml-1 text-gold" />}
+                      </button>
+                  </div>
+                  <span className="text-xs text-text-muted font-medium">{new Date().getFullYear()}</span>
+              </div>
+            </div>
+
+            {/* Grid Container */}
+            <div className="w-full pb-2 flex-1 flex flex-col relative overflow-hidden">
+              
+              {/* 3. BLUR + LOCK OVERLAY FOR HEATMAP */}
+              {isHeatmapLocked && (
+                  <div 
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center bg-black/20 backdrop-blur-sm rounded-xl cursor-pointer hover:bg-black/30 transition-all"
+                    onClick={onUpgrade}
+                  >
+                      <div className="bg-black/60 p-4 rounded-2xl border border-gold/30 shadow-2xl transform hover:scale-105 transition-transform">
+                        <div className="w-12 h-12 bg-gold/10 rounded-full flex items-center justify-center mb-3 border border-gold/20 mx-auto">
+                            <Lock size={20} className="text-gold" />
+                        </div>
+                        <h4 className="text-text-main font-bold mb-1 text-sm">Pro Feature Locked</h4>
+                        <p className="text-text-muted text-xs max-w-[200px] mb-3">Upgrade to view consistency streaks and goal heatmaps.</p>
+                        <span className="text-gold text-xs font-bold uppercase tracking-wider border-b border-gold/50 pb-0.5">Unlock Now</span>
+                      </div>
+                  </div>
+              )}
+
+              <div className={`flex items-start gap-4 w-full justify-center ${isHeatmapLocked ? 'filter blur-sm' : ''}`}>
+                {/* Y labels */}
+                <div
+                  className="relative shrink-0 text-[10px] text-text-muted font-medium w-8 text-right mr-2 pt-[20px]"
+                  style={{ height: GRID_HEIGHT + 20 }}
+                >
+                  {[
+                    { label: 'Mon', dayIndex: 1 },
+                    { label: 'Wed', dayIndex: 3 },
+                    { label: 'Fri', dayIndex: 5 },
+                  ].map(({ label, dayIndex }) => (
                     <span
-                      key={item.month}
-                      className="absolute text-[10px] text-text-muted -translate-x-1/2"
+                      key={label}
+                      className="absolute right-0 flex items-center justify-end"
                       style={{
-                        left: item.colIndex * GRID_OFFSET + CELL_SIZE / 2,
-                        top: 0,
-                        whiteSpace: 'nowrap',
+                        top: 20 + (dayIndex * GRID_OFFSET),
+                        height: CELL_SIZE,
                       }}
                     >
-                      {MONTH_NAMES[item.month]}
+                      {label}
                     </span>
                   ))}
                 </div>
 
-                {/* Cells */}
-                <div
-                  className="relative"
-                  style={{ width: GRID_WIDTH, height: GRID_HEIGHT }}
-                >
-                  {activeCalendarDays.map((day, index) => {
-                    const weekIndex = Math.floor(index / 7);
-                    const dayOfWeek = day.date.getDay(); // 0–6
-
-                    // Do not render cells beyond safe width
-                    if (weekIndex >= safeVisibleWeeks) return null;
-
-                    const left = weekIndex * GRID_OFFSET;
-                    const top = dayOfWeek * GRID_OFFSET;
-
-                    // decide tooltip direction: last 2 rows -> tooltip above
-                    const tooltipAbove = dayOfWeek >= 5;
-
-                    return (
-                      <div
-                        key={day.dateKey}
-                        className="absolute group"
+                {/* Month labels + cells */}
+                <div className="flex flex-col gap-[3px] flex-1">
+                  {/* Months */}
+                  <div className="relative h-[16px]" style={{ width: GRID_WIDTH }}>
+                    {monthLabels.map((item) => (
+                      <span
+                        key={item.month}
+                        className="absolute text-[10px] text-text-muted -translate-x-1/2"
                         style={{
-                          width: CELL_SIZE,
-                          height: CELL_SIZE,
-                          left,
-                          top,
+                          left: item.colIndex * GRID_OFFSET + CELL_SIZE / 2,
+                          top: 0,
+                          whiteSpace: 'nowrap',
                         }}
                       >
+                        {MONTH_NAMES[item.month]}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Cells */}
+                  <div
+                    className="relative"
+                    style={{ width: GRID_WIDTH, height: GRID_HEIGHT }}
+                  >
+                    {activeCalendarDays.map((day, index) => {
+                      const weekIndex = Math.floor(index / 7);
+                      const dayOfWeek = day.date.getDay(); // 0–6
+
+                      // Do not render cells beyond safe width
+                      if (weekIndex >= safeVisibleWeeks) return null;
+
+                      const left = weekIndex * GRID_OFFSET;
+                      const top = dayOfWeek * GRID_OFFSET;
+
+                      // decide tooltip direction: last 2 rows -> tooltip above
+                      const tooltipAbove = dayOfWeek >= 5;
+
+                      return (
                         <div
-                          className={`w-full h-full rounded-[3px] transition-all duration-300 ${
-                            day.isInCurrentYear
-                              ? getHeatmapColor(day.intensity)
-                              : 'bg-transparent'
-                          }`}
-                        />
-                        {day.isInCurrentYear && (
+                          key={day.dateKey}
+                          className="absolute group"
+                          style={{
+                            width: CELL_SIZE,
+                            height: CELL_SIZE,
+                            left,
+                            top,
+                          }}
+                        >
                           <div
-                            className={`absolute left-1/2 -translate-x-1/2 ${
-                              tooltipAbove ? 'bottom-full mb-1' : 'top-full mt-1'
-                            } hidden group-hover:block z-50 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none`}
-                          >
-                            <p className="font-semibold text-text-muted">
-                              {day.date.toLocaleDateString([], {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })}
-                            </p>
-                            <p className="font-bold mt-0.5">
-                              {day.count === 0
-                                ? 'No activity'
-                                : `${day.count} contribution${day.count !== 1 ? 's' : ''}`}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                            className={`w-full h-full rounded-[3px] transition-all duration-300 ${
+                              day.isInCurrentYear
+                                ? getHeatmapColor(day.intensity)
+                                : 'bg-transparent'
+                            }`}
+                          />
+                          {day.isInCurrentYear && !isHeatmapLocked && (
+                            <div
+                              className={`absolute left-1/2 -translate-x-1/2 ${
+                                tooltipAbove ? 'bottom-full mb-1' : 'top-full mt-1'
+                              } hidden group-hover:block z-50 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none`}
+                            >
+                              <p className="font-semibold text-text-muted">
+                                {day.date.toLocaleDateString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </p>
+                              <p className="font-bold mt-0.5">
+                                {day.count === 0
+                                  ? 'No activity'
+                                  : `${day.count} contribution${day.count !== 1 ? 's' : ''}`}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Legend */}
+            <div className="flex items-center justify-center gap-4 mt-4 text-xs text-text-muted w-full">
+              <span className="mr-1">Less</span>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-surface border border-white/5" />
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-secondary border border-secondary/50" />
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary border border-primary-hover" />
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary/40 border border-primary/20" />
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-[14px] h-[14px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50" />
+              </div>
+              <span className="ml-1">More</span>
+            </div>
           </div>
 
-          {/* Legend */}
-          <div className="flex items-center justify-center gap-4 mt-4 text-xs text-text-muted w-full">
-            <span className="mr-1">Less</span>
-            <div className="flex items-center gap-1">
-              <div className="w-[14px] h-[14px] rounded-[2px] bg-surface border border-white/5" />
+          {/* Upcoming Sessions */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-text-main">Upcoming Sessions</h3>
+              <Calendar size={18} className="text-text-muted" />
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-[14px] h-[14px] rounded-[2px] bg-secondary border border-secondary/50" />
+
+            <div className="space-y-4 flex-1 overflow-y-auto max-h-[260px] pr-1">
+              {metrics.scheduledSessions.length > 0 ? (
+                metrics.scheduledSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className="group p-3 rounded-xl bg-background/50 border border-white/5 hover:bg-background hover:border-gold/30 transition-all cursor-pointer"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
+                          {new Date(session.scheduled_at).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                        <span className="text-sm font-bold text-text-main">
+                          {new Date(session.scheduled_at).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <ArrowRight
+                        size={16}
+                        className="text-text-muted group-hover:text-gold transition-colors transform group-hover:translate-x-1"
+                      />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-text-main group-hover:text-gold transition-colors">
+                        {session.title}
+                      </h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold border border-primary-hover">
+                          P
+                        </div>
+                        <p className="text-xs text-text-muted">
+                          {session.partner_email
+                            ? `with ${session.partner_email}`
+                            : 'Solo Session'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-text-muted text-center py-4">
+                  No upcoming sessions scheduled.
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-[14px] h-[14px] rounded-[2px] bg-primary border border-primary-hover" />
+
+            <div className="mt-4 pt-2">
+              <button className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20">
+                <Calendar size={16} /> Schedule New
+              </button>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-[14px] h-[14px] rounded-[2px] bg-primary/40 border border-primary/20" />
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-[14px] h-[14px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50" />
-            </div>
-            <span className="ml-1">More</span>
           </div>
         </div>
 
-        {/* Upcoming Sessions */}
-        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-text-main">Upcoming Sessions</h3>
-            <Calendar size={18} className="text-text-muted" />
-          </div>
-
-          <div className="space-y-4 flex-1 overflow-y-auto max-h-[260px] pr-1">
-            {metrics.scheduledSessions.length > 0 ? (
-              metrics.scheduledSessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="group p-3 rounded-xl bg-background/50 border border-white/5 hover:bg-background hover:border-gold/30 transition-all cursor-pointer"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
-                        {new Date(session.scheduled_at).toLocaleDateString([], {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                      <span className="text-sm font-bold text-text-main">
-                        {new Date(session.scheduled_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                    <ArrowRight
-                      size={16}
-                      className="text-text-muted group-hover:text-gold transition-colors transform group-hover:translate-x-1"
-                    />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-text-main group-hover:text-gold transition-colors">
-                      {session.title}
-                    </h4>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold border border-primary-hover">
-                        P
-                      </div>
-                      <p className="text-xs text-text-muted">
-                        {session.partner_email
-                          ? `with ${session.partner_email}`
-                          : 'Solo Session'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-sm text-text-muted text-center py-4">
-                No upcoming sessions scheduled.
+        {/* Bottom analytics row (Goal Progress + Pro Insights) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left: Goal Progress (Free) */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <h3 className="text-sm font-semibold text-text-main flex items-center gap-2">
+                  <Target size={16} className="text-secondary" /> Goal Progress
+                </h3>
+                <p className="text-xs text-text-muted mt-1">Track your momentum on active goals.</p>
               </div>
+              <span className="text-[10px] text-text-muted border border-white/10 rounded-full px-2 py-0.5">Last 30 Days</span>
+            </div>
+            
+            {metrics.goalStats30.total === 0 ? (
+               <div className="flex-1 flex flex-col items-center justify-center text-center py-10 border border-dashed border-white/10 rounded-xl bg-background/30 mt-4">
+                  <Target size={24} className="text-text-muted opacity-50 mb-2" />
+                  <p className="text-text-muted text-sm">No goals found in the last 30 days.</p>
+                  <p className="text-xs text-text-muted mt-1 opacity-70">Create a goal in your next session to see stats.</p>
+               </div>
+            ) : (
+               <div className="mt-4 space-y-6">
+                  {/* Progress Bar */}
+                  <div>
+                     <div className="flex justify-between text-xs text-text-muted mb-2">
+                        <span>Completion Rate</span>
+                        <span className="text-text-main font-bold">{metrics.goalStats30.percentage}%</span>
+                     </div>
+                     <div className="h-2 w-full bg-background rounded-full overflow-hidden border border-white/5">
+                        <div 
+                          className="h-full bg-secondary rounded-full transition-all duration-500" 
+                          style={{ width: `${metrics.goalStats30.percentage}%` }}
+                        ></div>
+                     </div>
+                  </div>
+
+                  {/* Stats Grid */}
+                  <div className="grid grid-cols-3 gap-3">
+                     <div className="bg-background p-3 rounded-lg border border-white/5 text-center">
+                        <span className="text-[10px] uppercase tracking-wider text-text-muted block mb-1">Completed</span>
+                        <span className="text-lg font-bold text-secondary">{metrics.goalStats30.completed}</span>
+                     </div>
+                     <div className="bg-background p-3 rounded-lg border border-white/5 text-center">
+                        <span className="text-[10px] uppercase tracking-wider text-text-muted block mb-1">Planned</span>
+                        <span className="text-lg font-bold text-text-main">{metrics.goalStats30.total}</span>
+                     </div>
+                     <div className="bg-background p-3 rounded-lg border border-white/5 text-center">
+                        <span className="text-[10px] uppercase tracking-wider text-text-muted block mb-1">Active</span>
+                        <span className="text-lg font-bold text-text-main">{metrics.goalStats30.active}</span>
+                     </div>
+                  </div>
+               </div>
             )}
           </div>
 
-          <div className="mt-4 pt-2">
-            <button className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20">
-              <Calendar size={16} /> Schedule New
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom analytics row (Goal Progress + Pro Insights) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* Left: Goal Progress (Free) */}
-        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-              <Target size={18} className="text-secondary" /> Goal Progress
-            </h3>
-            <span className="text-xs text-text-muted">Last 30 Days</span>
-          </div>
-          
-          <p className="text-sm text-text-muted mb-6">
-            Track your momentum on active goals.
-          </p>
-
-          {metrics.goalStats30.total === 0 ? (
-             <div className="flex-1 flex flex-col items-center justify-center text-center py-6 border border-dashed border-white/10 rounded-xl bg-background/30">
-                <p className="text-text-muted text-sm">No goals found in the last 30 days.</p>
-                <p className="text-xs text-text-muted mt-1">Create a goal in your next session to see stats.</p>
+          {/* Right: Kova Pro Insights (Gated) */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col relative overflow-hidden">
+             <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-text-main flex items-center gap-2">
+                     <BarChart3 size={16} className="text-gold" /> Kova Pro Insights
+                  </h3>
+                  <p className="text-xs text-text-muted mt-1">Unlock AI-powered weekly breakdowns.</p>
+                </div>
+                {!isPro && (
+                  <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
+                    Kova Pro
+                  </span>
+                )}
              </div>
-          ) : (
-             <div className="grid grid-cols-2 gap-4">
-                <div className="bg-background p-4 rounded-xl border border-white/5">
-                   <p className="text-xs uppercase tracking-wider text-text-muted font-bold mb-1">Total Goals</p>
-                   <p className="text-2xl font-bold text-text-main">{metrics.goalStats30.total}</p>
-                </div>
-                <div className="bg-background p-4 rounded-xl border border-white/5">
-                   <p className="text-xs uppercase tracking-wider text-text-muted font-bold mb-1">Completed</p>
-                   <div className="flex items-end gap-2">
-                      <p className="text-2xl font-bold text-secondary">{metrics.goalStats30.completed}</p>
-                      <span className="text-xs text-text-muted mb-1.5">({metrics.goalStats30.percentage}%)</span>
+
+             {/* 3. BLUR + LOCK OVERLAY FOR INSIGHTS */}
+             {!isPro ? (
+                <div className="flex flex-col h-full relative">
+                   {/* Blurred Content */}
+                   <div className="space-y-3 opacity-50 blur-[4px] select-none pointer-events-none">
+                      <div className="bg-background p-3 rounded-lg border border-white/5">
+                         <div className="h-3 w-3/4 bg-white/10 rounded mb-2"></div>
+                         <div className="h-2 w-1/2 bg-white/10 rounded"></div>
+                      </div>
+                      <div className="bg-background p-3 rounded-lg border border-white/5">
+                         <div className="h-3 w-2/3 bg-white/10 rounded mb-2"></div>
+                         <div className="h-2 w-1/2 bg-white/10 rounded"></div>
+                      </div>
+                      <div className="bg-background p-3 rounded-lg border border-white/5">
+                         <div className="h-3 w-4/5 bg-white/10 rounded mb-2"></div>
+                         <div className="h-2 w-1/3 bg-white/10 rounded"></div>
+                      </div>
                    </div>
+
+                   {/* Lock Overlay - CLICKABLE */}
+                   <button
+                      onClick={onUpgrade}
+                      className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gradient-to-b from-black/10 via-black/30 to-black/70 rounded-xl cursor-pointer hover:bg-black/20 transition-all group"
+                   >
+                      <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-gold/30 px-4 py-2 rounded-full mb-3 shadow-lg transform group-hover:scale-105 transition-transform">
+                         <Lock size={14} className="text-gold" />
+                         <span className="text-xs font-bold text-white">Unlock Insights</span>
+                      </div>
+                      <span className="text-xs text-text-muted group-hover:text-white transition-colors">Upgrade to Pro – $7.99/month</span>
+                   </button>
                 </div>
-                <div className="bg-background p-4 rounded-xl border border-white/5">
-                   <p className="text-xs uppercase tracking-wider text-text-muted font-bold mb-1">Active</p>
-                   <p className="text-2xl font-bold text-text-main">{metrics.goalStats30.active}</p>
-                </div>
-                <div className="bg-background p-4 rounded-xl border border-white/5 flex items-center justify-center">
-                   <div className="text-center">
-                      <CheckCircle size={24} className={`mx-auto mb-1 ${metrics.goalStats30.percentage >= 80 ? 'text-gold' : 'text-text-muted'}`} />
-                      <p className="text-xs font-bold text-text-main">
-                        {metrics.goalStats30.percentage >= 80 ? 'Crushing it!' : 'Keep pushing'}
+             ) : (
+                <div className="flex flex-col h-full space-y-3">
+                   <div className="bg-background/50 p-3 rounded-xl border border-white/5">
+                      <p className="text-xs font-medium text-text-main mb-1">Focus Trend</p>
+                      <p className="text-xs text-text-muted">
+                         You've logged <span className="text-text-main font-bold">{metrics.insights.focusHours7d.toFixed(1)} hrs</span> of focus time this week.
+                      </p>
+                   </div>
+                   <div className="bg-background/50 p-3 rounded-xl border border-white/5">
+                      <p className="text-xs font-medium text-text-main mb-1">Goal Velocity</p>
+                      <p className="text-xs text-text-muted">
+                         You completed <span className="text-text-main font-bold">{metrics.insights.completedGoals7d}</span> goals in the last 7 days.
+                      </p>
+                   </div>
+                   <div className="bg-background/50 p-3 rounded-xl border border-white/5">
+                      <p className="text-xs font-medium text-text-main mb-1">Consistency Score</p>
+                      <p className="text-xs text-text-muted">
+                         Active on <span className="text-text-main font-bold">{metrics.insights.activeDays7d}</span> days this week. Keep it up!
                       </p>
                    </div>
                 </div>
-             </div>
-          )}
-        </div>
-
-        {/* Right: Kova Pro Insights (Gated) */}
-        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col relative overflow-hidden">
-           <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-                 <BarChart3 size={18} className="text-gold" /> Kova Pro Insights
-              </h3>
-              {!isPro && (
-                <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
-                  Pro
-                </span>
-              )}
-           </div>
-
-           {!isPro ? (
-              <div className="flex flex-col h-full justify-between relative z-10">
-                 <div className="space-y-4 text-sm text-text-muted mb-4">
-                    <p>Unlock AI-powered weekly breakdowns of your focus, goals, and networking activity.</p>
-                    <ul className="space-y-2 text-xs list-disc list-inside text-text-muted/80 pl-2">
-                       <li>Smart recap of your focus hours</li>
-                       <li>Highlights of your goal streaks</li>
-                       <li>Suggestions for your next week</li>
-                    </ul>
-                 </div>
-                 <button
-                    onClick={onUpgrade}
-                    className="mt-auto w-full py-3 rounded-xl bg-gradient-to-r from-gold to-amber-600 text-surface font-bold text-sm hover:opacity-90 transition-opacity shadow-lg"
-                 >
-                    Upgrade to Pro – $7.99/month
-                 </button>
-              </div>
-           ) : (
-              <div className="flex flex-col h-full">
-                 <p className="text-sm text-text-main font-medium mb-4">Here's your latest snapshot:</p>
-                 <ul className="space-y-3 text-sm text-text-muted flex-1">
-                    <li className="flex items-start gap-2">
-                       <span className="text-gold mt-1">•</span>
-                       <span>
-                          You've logged <span className="text-text-main font-bold">{metrics.insights.focusHours7d.toFixed(1)} hrs</span> of focus time in the last 7 days.
-                       </span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                       <span className="text-gold mt-1">•</span>
-                       <span>
-                          You completed <span className="text-text-main font-bold">{metrics.insights.completedGoals7d}</span> goals this week.
-                       </span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                       <span className="text-gold mt-1">•</span>
-                       <span>
-                          You had sessions on <span className="text-text-main font-bold">{metrics.insights.activeDays7d}</span> different days.
-                       </span>
-                    </li>
-                 </ul>
-                 <div className="mt-4 pt-4 border-t border-white/5">
-                    <p className="text-xs text-text-muted italic">
-                       "Consistency is key. Try to beat your 7-day focus record next week!"
-                    </p>
-                 </div>
-              </div>
-           )}
-           
-           {/* Background effect for locked card */}
-           {!isPro && (
-              <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-gold/5 rounded-full blur-3xl pointer-events-none"></div>
-           )}
+             )}
+          </div>
         </div>
       </div>
     </div>

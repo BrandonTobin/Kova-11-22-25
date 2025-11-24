@@ -11,7 +11,7 @@ import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface ProfileEditorProps {
   user: User;
-  onSave: (updatedUser: User) => void;
+  onSave: (updatedUser: User, imageFile?: File) => void;
   onUpgrade: () => void;
 }
 
@@ -95,6 +95,9 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  
+  // Track the raw file for upload
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Re-sync if user prop changes externally
@@ -109,6 +112,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }
         goalsList: user.goalsList || [],
         links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' }
       });
+      setImageFile(null);
     }
   }, [user, isEditing]);
 
@@ -135,8 +139,10 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
+        // Show local preview immediately
         setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
       };
       reader.readAsDataURL(file);
@@ -168,8 +174,11 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }
   };
 
   const handleSave = () => {
-    onSave(formData);
+    // Pass the raw file to parent for uploading
+    onSave(formData, imageFile || undefined);
     setIsEditing(false);
+    // Note: We don't clear imageFile here immediately because if upload fails 
+    // we might want to keep state, but for now we rely on App.tsx to handle success.
   };
 
   const handleCancel = () => {
@@ -182,6 +191,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }
         goalsList: user.goalsList || [],
         links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' }
     }); 
+    setImageFile(null);
     setIsEditing(false);
   };
 

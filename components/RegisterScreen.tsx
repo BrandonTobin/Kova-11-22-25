@@ -6,7 +6,7 @@ import { SECURITY_QUESTIONS } from '../constants';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 
 interface RegisterScreenProps {
-  onRegister: (user: User) => void;
+  onRegister: (user: User, imageFile?: File) => void;
   onBack: () => void;
   isLoading?: boolean;
   error?: string;
@@ -99,9 +99,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
 
     if (!isValid) return;
     
-    // Use a stable UI Avatars URL based on the name.
-    // We ignore the uploaded blob file because we don't have Supabase Storage buckets configured.
-    // This prevents "blob:..." URLs from breaking on refresh.
+    // Generate a default UI Avatar. App.tsx will overwrite this if formData.image is present.
     const safeImageUrl = `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(formData.fullName)}`;
 
     const newUser: User = {
@@ -128,7 +126,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       proExpiresAt: null
     };
 
-    onRegister(newUser);
+    // Pass the file (formData.image) to the parent handler
+    onRegister(newUser, formData.image || undefined);
   };
 
   return (

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -102,6 +103,7 @@ function App() {
       if (data) {
         const mappedUser: User = {
           ...data,
+          // Map image_url from DB to imageUrl in app. Fallback only if null.
           imageUrl: data.image_url || DEFAULT_PROFILE_IMAGE,
           kovaId: data.kova_id,
           mainGoal: data.main_goal,
@@ -281,8 +283,8 @@ function App() {
     }
   };
 
-  // REGISTER: creates Supabase auth user, then profile row (no password column)
-  const handleRegister = async (newUser: User) => {
+  // REGISTER: creates Supabase auth user, uploads image to Storage, then profile row
+  const handleRegister = async (newUser: User, profileImage?: File) => {
     setIsLoading(true);
     setAuthError('');
 
@@ -321,7 +323,41 @@ function App() {
         return;
       }
 
-      // 3) Insert profile row into public.users (no password field)
+      // 3) Handle Profile Picture Upload
+      // newUser.imageUrl currently has the ui-avatars fallback from RegisterScreen.
+      // We overwrite it if a file is provided and successfully uploaded.
+      let finalImageUrl = newUser.imageUrl; 
+      
+      if (profileImage && authData.user) {
+        try {
+          const fileExt = profileImage.name.split('.').pop() || 'jpg';
+          const fileName = `profiles/${authData.user.id}-${Date.now()}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, profileImage, {
+              cacheControl: '3600',
+              upsert: true
+            });
+
+          if (uploadError) {
+             console.error("Failed to upload profile image:", uploadError);
+             // If upload fails, finalImageUrl remains the fallback
+          } else {
+             const { data: publicUrlData } = supabase.storage
+               .from('avatars')
+               .getPublicUrl(fileName);
+             
+             if (publicUrlData) {
+               finalImageUrl = publicUrlData.publicUrl;
+             }
+          }
+        } catch (uploadErr) {
+           console.error("Exception during image upload:", uploadErr);
+        }
+      }
+
+      // 4) Insert profile row into public.users
       const { data: createdUser, error: createError } = await supabase
         .from('users')
         .insert([{
@@ -332,7 +368,7 @@ function App() {
            role: newUser.role,
            industry: newUser.industry,
            bio: newUser.bio,
-           image_url: newUser.imageUrl,
+           image_url: finalImageUrl, // Use the real uploaded URL (or fallback)
            tags: newUser.tags,
            badges: newUser.badges,
            dob: newUser.dob,
@@ -414,9 +450,48 @@ function App() {
     }
   };
 
-  const handleUpdateProfile = async (updatedUser: User) => {
+  // UPDATE PROFILE: Uploads new image if present, then updates DB
+  const handleUpdateProfile = async (updatedUser: User, profileImage?: File) => {
     if (!user) return;
     setIsLoading(true);
+
+    let finalImageUrl = user.imageUrl; // Default to current URL
+
+    // If user selected a new file, upload it
+    if (profileImage) {
+        try {
+            const fileExt = profileImage.name.split('.').pop() || 'jpg';
+            // Use same naming convention as registration
+            const fileName = `profiles/${user.id}-${Date.now()}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(fileName, profileImage, {
+                cacheControl: '3600',
+                upsert: true
+            });
+
+            if (uploadError) {
+                console.error("Failed to upload profile image:", uploadError);
+            } else {
+                const { data: publicUrlData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(fileName);
+                
+                if (publicUrlData) {
+                    finalImageUrl = publicUrlData.publicUrl;
+                }
+            }
+        } catch (uploadErr) {
+            console.error("Exception during image upload:", uploadErr);
+        }
+    } else {
+        // No new file. Ensure we don't accidentally save a blob/base64 preview URL if passed.
+        // We only want to keep the existing URL if it's not a local preview.
+        if (updatedUser.imageUrl && !updatedUser.imageUrl.startsWith('blob:') && !updatedUser.imageUrl.startsWith('data:')) {
+            finalImageUrl = updatedUser.imageUrl;
+        }
+    }
 
     const { error } = await supabase
       .from('users')
@@ -425,7 +500,7 @@ function App() {
         role: updatedUser.role,
         industry: updatedUser.industry,
         bio: updatedUser.bio,
-        image_url: updatedUser.imageUrl,
+        image_url: finalImageUrl, // Persist the real URL
         tags: updatedUser.tags,
         stage: updatedUser.stage,
         main_goal: updatedUser.mainGoal,
@@ -443,7 +518,10 @@ function App() {
       .eq('id', user.id);
 
     if (!error) {
-      setUser(updatedUser);
+      // Optimistically update local state with the new final URL
+      setUser({ ...updatedUser, imageUrl: finalImageUrl });
+    } else {
+      console.error("Profile update failed:", error);
     }
     setIsLoading(false);
   };

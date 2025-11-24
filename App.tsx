@@ -437,21 +437,12 @@ function App() {
                  <Crown size={32} fill="currentColor" />
               </div>
               <h2 className="text-2xl font-bold text-text-main mb-2">Upgrade to Kova Pro</h2>
-              
-              <div className="space-y-1 mb-6">
-                <p className="text-text-muted">Unlock unlimited swipes, deep analytics, and AI insights.</p>
-                <p className="text-xs text-gold/80 italic">More premium features coming soon...</p>
-              </div>
-
-              <div className="mb-6 bg-gold/5 border border-gold/20 rounded-xl p-3 inline-block px-6">
-                 <p className="text-2xl font-bold text-gold">$7.99 <span className="text-sm font-normal text-text-muted">/ month</span></p>
-              </div>
-
+              <p className="text-text-muted mb-6">Unlock unlimited swipes, deep analytics, and AI insights.</p>
               <button 
                 onClick={() => setShowUpgradeModal(false)} 
                 className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors"
               >
-                Get Pro
+                Get Pro for $19/mo
               </button>
            </div>
         </div>
@@ -496,11 +487,7 @@ function App() {
 
           {currentView === ViewState.PROFILE && (
              <div className="h-full p-4 md:p-6 overflow-y-auto">
-                <ProfileEditor 
-                  user={user} 
-                  onSave={handleUpdateProfile} 
-                  onUpgrade={() => setShowUpgradeModal(true)}
-                />
+                <ProfileEditor user={user} onSave={handleUpdateProfile} />
              </div>
           )}
       </main>

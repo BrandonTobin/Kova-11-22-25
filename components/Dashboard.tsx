@@ -1,5 +1,7 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { User, Badge, Goal, isProUser, Match } from '../types';
+import { supabase } from '../supabaseClient';
 import {
   TrendingUp,
   Target,
@@ -9,54 +11,35 @@ import {
   ArrowRight,
   Activity,
   Zap,
-  X as CloseIcon,
+  X,
   Lock,
   HelpCircle,
   RotateCcw,
   Loader2,
-  CheckCircle,
-  BarChart3
+  BarChart2,
+  Users,
+  Shield,
+  Clock,
+  Crown,
+  Search,
+  Check,
+  ChevronDown
 } from 'lucide-react';
-
-import { supabase } from '../supabaseClient';
-import { User, Badge } from '../types';
 import { ALL_BADGES } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 
-// ---------- Types ----------
-
 interface DashboardProps {
   user: User;
-  matches?: any[];
-  onUpgrade?: () => void;
+  matches: Match[]; // Added matches prop
+  onUpgrade: () => void;
 }
 
 interface CalendarDay {
   date: Date;
   dateKey: string; // 'YYYY-MM-DD'
   count: number; // raw activity count
-  intensity: number; // 0–4
+  intensity: number; // 0-4
   isInCurrentYear: boolean;
-}
-
-interface WeeklySummary {
-  focusHours: number;
-  sessions: number;
-  activeDays: number;
-  avgSessionMinutes: number;
-}
-
-interface GoalStats30 {
-  total: number;
-  completed: number;
-  active: number;
-  percentage: number;
-}
-
-interface ProInsightsData {
-  focusHours7d: number;
-  completedGoals7d: number;
-  activeDays7d: number;
 }
 
 interface DashboardMetrics {
@@ -64,15 +47,16 @@ interface DashboardMetrics {
   hoursChange: number;
   completedGoals: number;
   totalGoals: number;
+  goals: Goal[];
   weeklyMessages: { name: string; value: number }[];
-  calendarDays: CalendarDay[]; // Active one based on mode
   calendarDaysProductivity: CalendarDay[];
   calendarDaysConsistency: CalendarDay[];
   calendarDaysGoals: CalendarDay[];
   scheduledSessions: ScheduledSession[];
-  weeklySummary: WeeklySummary;
-  goalStats30: GoalStats30;
-  insights: ProInsightsData;
+  weeklyFocusHours: number;
+  weeklySessionsCount: number;
+  weeklyActiveDays: number;
+  weeklyAvgSessionMinutes: number;
 }
 
 interface ScheduledSession {
@@ -82,31 +66,7 @@ interface ScheduledSession {
   partner_email?: string;
 }
 
-interface BadgeCardProps {
-  badge: Badge;
-  isEarned: boolean;
-}
-
-// ---------- Heatmap helpers ----------
-
-const CELL_SIZE = 15;
-const CELL_GAP = 3;
-const GRID_OFFSET = CELL_SIZE + CELL_GAP;
-const MONTH_NAMES = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
+// Kova Color Palette
 const getHeatmapColor = (intensity: number) => {
   switch (intensity) {
     case 4:
@@ -130,7 +90,10 @@ const mapCountToIntensity = (count: number): number => {
   return 4;
 };
 
-// ---------- Internal components ----------
+interface BadgeCardProps {
+  badge: Badge;
+  isEarned: boolean;
+}
 
 const BadgeCard: React.FC<BadgeCardProps> = ({ badge, isEarned }) => {
   const [showInfo, setShowInfo] = useState(false);
@@ -139,7 +102,7 @@ const BadgeCard: React.FC<BadgeCardProps> = ({ badge, isEarned }) => {
     <div
       className={`relative p-4 rounded-2xl border flex flex-col items-center text-center gap-3 transition-all duration-300 group h-40 justify-center ${
         isEarned
-          ? 'bg-surface border-gold/30 shadow-lg shadow-gold/5'
+          ? 'bg-surface border-gold/30 shadow-lg shadow-gold/5 scale-100'
           : 'bg-background border-surface opacity-70'
       }`}
     >
@@ -192,92 +155,260 @@ const BadgeCard: React.FC<BadgeCardProps> = ({ badge, isEarned }) => {
   );
 };
 
-// ---------- Main Dashboard ----------
+// --- Schedule Modal ---
+const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedule: () => void; userId: string }> = ({ matches, onClose, onSchedule, userId }) => {
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
+  const [date, setDate] = useState('');
+  const [time, setTime] = useState('');
+  const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
+  const filteredMatches = matches.filter(m => 
+    getDisplayName(m.user.name).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleSchedule = async () => {
+    if (!date || !time) return;
+    setIsSubmitting(true);
+
+    try {
+      const startDateTime = new Date(`${date}T${time}`);
+      const sessionsToCreate = [];
+      
+      const title = selectedMatch 
+        ? `Co-working with ${getDisplayName(selectedMatch.user.name)}`
+        : 'Solo Focus Session';
+        
+      const partnerEmail = selectedMatch?.user.email || null;
+
+      // Generate occurrences based on recurrence
+      let count = 1;
+      if (recurrence === 'daily') count = 5; // Schedule next 5 days
+      if (recurrence === 'weekly') count = 4; // Schedule next 4 weeks
+      if (recurrence === 'monthly') count = 3; // Schedule next 3 months
+
+      for (let i = 0; i < count; i++) {
+        const sessionDate = new Date(startDateTime);
+        
+        if (recurrence === 'daily') sessionDate.setDate(sessionDate.getDate() + i);
+        if (recurrence === 'weekly') sessionDate.setDate(sessionDate.getDate() + (i * 7));
+        if (recurrence === 'monthly') sessionDate.setMonth(sessionDate.getMonth() + i);
+
+        sessionsToCreate.push({
+          user_id: userId,
+          partner_email: partnerEmail,
+          title: title,
+          scheduled_at: sessionDate.toISOString(),
+        });
+      }
+
+      const { error } = await supabase.from('scheduled_sessions').insert(sessionsToCreate);
+      
+      if (error) throw error;
+      
+      onSchedule();
+      onClose();
+    } catch (err) {
+      console.error("Scheduling failed:", err);
+      alert("Failed to schedule session.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-surface w-full max-w-md rounded-3xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-text-main">Schedule Session</h3>
+          <button onClick={onClose} className="text-text-muted hover:text-white"><X size={24}/></button>
+        </div>
+
+        <div className="space-y-5">
+          {/* 1. Partner Selection */}
+          <div>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Select Partner</label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
+                <Search size={16} />
+              </div>
+              <input 
+                type="text" 
+                placeholder="Search matches..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+              />
+            </div>
+            
+            <div className="mt-2 max-h-32 overflow-y-auto border border-white/5 rounded-xl bg-background/50 no-scrollbar">
+              <div 
+                onClick={() => setSelectedMatch(null)}
+                className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 ${!selectedMatch ? 'bg-primary/10' : ''}`}
+              >
+                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary"><Users size={14} /></div>
+                 <span className="text-sm font-medium">Solo Session</span>
+                 {!selectedMatch && <Check size={16} className="ml-auto text-primary" />}
+              </div>
+              {filteredMatches.map(match => (
+                <div 
+                  key={match.id} 
+                  onClick={() => setSelectedMatch(match)}
+                  className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 last:border-0 ${selectedMatch?.id === match.id ? 'bg-primary/10' : ''}`}
+                >
+                   <img src={match.user.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                   <span className="text-sm font-medium">{getDisplayName(match.user.name)}</span>
+                   {selectedMatch?.id === match.id && <Check size={16} className="ml-auto text-primary" />}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. Date & Time */}
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Date</label>
+                <input 
+                  type="date" 
+                  value={date}
+                  onChange={e => setDate(e.target.value)}
+                  className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+                />
+             </div>
+             <div>
+                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Time</label>
+                <input 
+                  type="time" 
+                  value={time}
+                  onChange={e => setTime(e.target.value)}
+                  className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+                />
+             </div>
+          </div>
+
+          {/* 3. Recurrence */}
+          <div>
+             <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Repeat</label>
+             <div className="relative">
+                <select 
+                  value={recurrence} 
+                  onChange={(e) => setRecurrence(e.target.value as any)}
+                  className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none appearance-none"
+                >
+                   <option value="none">Just Once</option>
+                   <option value="daily">Daily (Next 5 Days)</option>
+                   <option value="weekly">Weekly (Next 4 Weeks)</option>
+                   <option value="monthly">Monthly (Next 3 Months)</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
+                   <ChevronDown size={16} />
+                </div>
+             </div>
+          </div>
+
+          <button 
+            onClick={handleSchedule}
+            disabled={!date || !time || isSubmitting}
+            className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "Confirm Schedule"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) => {
   const [showBadgesModal, setShowBadgesModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [heatmapMode, setHeatmapMode] = useState<'productivity' | 'consistency' | 'goals'>('productivity');
+  const [refreshKey, setRefreshKey] = useState(0); // Trigger data reload
+  const isPro = isProUser(user);
 
-  // which heatmap tab is active
-  const [heatmapMode, setHeatmapMode] = useState<'productivity' | 'consistency' | 'goals'>(
-    'productivity'
-  );
+  // Heatmap constants
+  const CELL_SIZE = 15;
+  const CELL_GAP = 3;
+  const GRID_OFFSET = CELL_SIZE + CELL_GAP;
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  // Helper for Pro status
-  const isPro =
-    (user as any)?.subscriptionTier === 'pro' ||
-    (user as any)?.subscription_tier === 'pro';
-
-  // Helper to build calendar array for any counts map
-  const buildCalendarDays = (
-    startOfYear: Date,
-    endOfYear: Date,
-    now: Date,
-    countsMap: Map<string, number>
-  ): CalendarDay[] => {
-    const days: CalendarDay[] = [];
-    const startDayOfWeek = startOfYear.getDay();
-    const gridStart = new Date(startOfYear);
-    gridStart.setDate(startOfYear.getDate() - startDayOfWeek);
-
-    const endDayOfWeek = endOfYear.getDay();
-    const gridEnd = new Date(endOfYear);
-    gridEnd.setDate(endOfYear.getDate() + (6 - endDayOfWeek));
-
-    const d = new Date(gridStart);
-    while (d <= gridEnd) {
-      const dateKey = d.toLocaleDateString('en-CA');
-      const count = countsMap.get(dateKey) || 0;
-      const intensity = mapCountToIntensity(count);
-
-      const isInYear = d >= startOfYear && d <= endOfYear;
-      const isFuture = d > now;
-
-      days.push({
-        date: new Date(d),
-        dateKey,
-        count,
-        intensity: isInYear && !isFuture ? intensity : 0,
-        isInCurrentYear: isInYear,
-      });
-      d.setDate(d.getDate() + 1);
+  const handleHeatmapModeChange = (mode: 'productivity' | 'consistency' | 'goals') => {
+    if (mode === 'productivity') {
+      setHeatmapMode(mode);
+      return;
     }
-    return days;
+    
+    // Gating for Consistency and Goals
+    if (!isPro) {
+      onUpgrade(); // Trigger upgrade modal
+    } else {
+      setHeatmapMode(mode);
+    }
+  };
+
+  const handleScheduleComplete = () => {
+    setRefreshKey(prev => prev + 1); // Refresh upcoming sessions list
   };
 
   useEffect(() => {
-    // Skip data fetch for mock users (onboarding demo)
-    if (user.id === 'mock-user-id' || user.id === '123e4567-e89b-12d3-a456-426614174000') {
-        setIsLoading(false);
-        // Set mock metrics for demo
-        setMetrics({
-            totalHours: 24.5,
-            hoursChange: 12,
-            completedGoals: 5,
-            totalGoals: 8,
-            weeklyMessages: [],
-            calendarDays: [],
-            calendarDaysProductivity: [],
-            calendarDaysConsistency: [],
-            calendarDaysGoals: [],
-            scheduledSessions: [],
-            weeklySummary: {
-                focusHours: 12.5,
-                sessions: 4,
-                activeDays: 3,
-                avgSessionMinutes: 45
-            },
-            goalStats30: { total: 0, completed: 0, active: 0, percentage: 0 },
-            insights: { focusHours7d: 0, completedGoals7d: 0, activeDays7d: 0 }
-        });
-        return;
-    }
-
     const loadDashboardData = async () => {
       setIsLoading(true);
       setError('');
+
+      // Skip data loading for the mock user used in onboarding
+      if (user.id === '00000000-0000-0000-0000-000000000000') {
+        // Create fake data for the demo dashboard
+        const fakeCalendarDays: CalendarDay[] = [];
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const startOfYear = new Date(currentYear, 0, 1);
+        const endOfYear = new Date(currentYear, 11, 31);
+        const startDayOfWeek = startOfYear.getDay();
+        const gridStart = new Date(startOfYear);
+        gridStart.setDate(startOfYear.getDate() - startDayOfWeek);
+        const endDayOfWeek = endOfYear.getDay();
+        const gridEnd = new Date(endOfYear);
+        gridEnd.setDate(endOfYear.getDate() + (6 - endDayOfWeek));
+
+        const d = new Date(gridStart);
+        while (d <= gridEnd) {
+            const isInYear = d >= startOfYear && d <= endOfYear;
+            fakeCalendarDays.push({
+                date: new Date(d),
+                dateKey: d.toLocaleDateString('en-CA'),
+                count: Math.random() > 0.7 ? Math.floor(Math.random() * 5) : 0,
+                intensity: isInYear && d <= now ? (Math.random() > 0.7 ? Math.floor(Math.random() * 4) + 1 : 0) : 0,
+                isInCurrentYear: isInYear
+            });
+            d.setDate(d.getDate() + 1);
+        }
+
+        setMetrics({
+            totalHours: 42.5,
+            hoursChange: 12,
+            totalGoals: 15,
+            completedGoals: 8,
+            goals: [{ id: '1', text: 'Launch Beta', completed: true }, { id: '2', text: 'Find Co-founder', completed: false }],
+            weeklyMessages: [
+                { name: 'Sun', value: 2 }, { name: 'Mon', value: 5 }, { name: 'Tue', value: 3 }, 
+                { name: 'Wed', value: 6 }, { name: 'Thu', value: 4 }, { name: 'Fri', value: 8 }, { name: 'Sat', value: 3 }
+            ],
+            calendarDaysProductivity: fakeCalendarDays,
+            calendarDaysConsistency: fakeCalendarDays,
+            calendarDaysGoals: fakeCalendarDays,
+            scheduledSessions: [],
+            weeklyFocusHours: 14.2,
+            weeklySessionsCount: 5,
+            weeklyActiveDays: 4,
+            weeklyAvgSessionMinutes: 45
+        });
+        setIsLoading(false);
+        return;
+      }
 
       try {
         const now = new Date();
@@ -290,11 +421,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
 
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(now.getDate() - 14);
-        
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(now.getDate() - 30);
 
-        // ---- sessions ----
+        // --- 1. Fetch Sessions (Co-working Time) ---
         const { data: sessions } = await supabase
           .from('sessions')
           .select('started_at, ended_at')
@@ -304,14 +432,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
         let totalMinutes = 0;
         let thisWeekMinutes = 0;
         let lastWeekMinutes = 0;
-
-        let last7TotalMinutes = 0;
-        let last7SessionCount = 0;
-        const last7ActiveDaysSet = new Set<string>();
-
-        // Maps for different modes
-        const productivityCounts = new Map<string, number>();
-        const consistencyCounts = new Map<string, number>(); // Will add sessions here too
+        let thisWeekSessionsCount = 0;
 
         sessions?.forEach((s: any) => {
           const startTime = new Date(s.started_at);
@@ -323,18 +444,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
 
           totalMinutes += minutes;
 
-          // Heatmap Data: Productivity (minutes)
-          const dateKey = startTime.toLocaleDateString('en-CA');
-          productivityCounts.set(dateKey, (productivityCounts.get(dateKey) || 0) + minutes);
-          
-          // Heatmap Data: Consistency (count sessions)
-          consistencyCounts.set(dateKey, (consistencyCounts.get(dateKey) || 0) + 1);
-
           if (startTime >= sevenDaysAgo) {
             thisWeekMinutes += minutes;
-            last7TotalMinutes += minutes;
-            last7SessionCount += 1;
-            last7ActiveDaysSet.add(dateKey);
+            thisWeekSessionsCount++;
           } else if (startTime >= fourteenDaysAgo && startTime < sevenDaysAgo) {
             lastWeekMinutes += minutes;
           }
@@ -348,49 +460,56 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
             ? 100
             : 0;
 
-        const weeklySummary: WeeklySummary = {
-          focusHours: parseFloat((last7TotalMinutes / 60).toFixed(1)),
-          sessions: last7SessionCount,
-          activeDays: last7ActiveDaysSet.size,
-          avgSessionMinutes:
-            last7SessionCount > 0 ? Math.round(last7TotalMinutes / last7SessionCount) : 0,
-        };
-
-        // ---- goals ----
-        const { data: goalsData } = await supabase
-          .from('goals')
-          .select('*')
-          .eq('user_id', user.id);
+        // --- 2. Fetch Goals ---
+        const { data: goalsData } = await supabase.from('goals').select('*').eq('user_id', user.id);
 
         const totalGoals = goalsData?.length || 0;
         const completedGoals = goalsData?.filter((g: any) => g.completed).length || 0;
-        
-        const goalCounts = new Map<string, number>();
-        goalsData?.forEach((g: any) => {
-            if (g.completed) {
-                // Fallback to created_at if completed_at missing
-                const d = g.completed_at ? new Date(g.completed_at) : new Date(g.created_at);
-                const dk = d.toLocaleDateString('en-CA');
-                goalCounts.set(dk, (goalCounts.get(dk) || 0) + 1);
-            }
+
+        // --- 3. Weekly Focus (Hours per day from sessions) ---
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const weeklyMinutesMap = new Map<string, number>();
+
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(now);
+          d.setDate(now.getDate() - i);
+          const dateKey = d.toLocaleDateString('en-CA'); // YYYY-MM-DD
+          weeklyMinutesMap.set(dateKey, 0);
+        }
+
+        sessions?.forEach((s: any) => {
+          const startTime = new Date(s.started_at);
+          const endTime = s.ended_at ? new Date(s.ended_at) : null;
+
+          const minutes = endTime
+            ? Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000))
+            : 0;
+
+          const dateKey = startTime.toLocaleDateString('en-CA');
+
+          if (weeklyMinutesMap.has(dateKey)) {
+            weeklyMinutesMap.set(dateKey, (weeklyMinutesMap.get(dateKey) || 0) + minutes);
+          }
         });
 
-        // Calculate 30 Day Goal Stats
-        const recentGoals = goalsData?.filter((g: any) => new Date(g.created_at) >= thirtyDaysAgo) || [];
-        const totalGoals30 = recentGoals.length;
-        const completedGoals30 = recentGoals.filter((g: any) => g.completed).length;
-        const activeGoals30 = totalGoals30 - completedGoals30;
-        const pctGoals30 = totalGoals30 > 0 ? Math.round((completedGoals30 / totalGoals30) * 100) : 0;
+        const weeklyMessages = Array.from(weeklyMinutesMap.entries()).map(([dateKey, minutes]) => {
+          const d = new Date(dateKey);
+          const dayName = dayNames[d.getDay()];
+          const hours = parseFloat((minutes / 60).toFixed(1));
+          return { name: dayName, value: hours };
+        });
 
-        // Calculate 7 Day Completed Goals for Insights
-        const completedGoals7d = goalsData?.filter((g: any) => 
-            g.completed && new Date(g.completed_at || g.created_at) >= sevenDaysAgo
-        ).length || 0;
+        // --- Compute Weekly Stats ---
+        const weeklyFocusHours = parseFloat((thisWeekMinutes / 60).toFixed(1));
+        const weeklyActiveDays = weeklyMessages.filter(d => d.value > 0).length;
+        const weeklyAvgSessionMinutes =
+          thisWeekSessionsCount > 0 ? thisWeekMinutes / thisWeekSessionsCount : 0;
 
-        // ---- heatmap activity (Consistency Mode continued) ----
+        // --- 4. Consistency Heatmap (Data Preparation for 3 Modes) ---
         const startIso = startOfYear.toISOString();
         const endIso = endOfYear.toISOString();
 
+        // Fetch activity for Consistency mode
         const { data: recentSwipes } = await supabase
           .from('swipes')
           .select('created_at')
@@ -405,54 +524,115 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
           .gte('created_at', startIso)
           .lte('created_at', endIso);
 
+        const { data: recentSessions } = await supabase
+          .from('sessions')
+          .select('started_at')
+          .or(`host_id.eq.${user.id},partner_id.eq.${user.id}`)
+          .gte('started_at', startIso)
+          .lte('started_at', endIso);
+
+        // Initialize Maps
+        const productivityCounts = new Map<string, number>();
+        const consistencyCounts = new Map<string, number>();
+        const goalCounts = new Map<string, number>();
+
+        // 4.1 Productivity Mode (Minutes per day from sessions)
+        sessions?.forEach((s: any) => {
+          const startTime = new Date(s.started_at);
+          const endTime = s.ended_at ? new Date(s.ended_at) : null;
+          if (!endTime) return;
+
+          const minutes = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000));
+          const dateKey = startTime.toLocaleDateString('en-CA');
+
+          productivityCounts.set(dateKey, (productivityCounts.get(dateKey) || 0) + minutes);
+        });
+
+        // 4.2 Consistency Mode (Contributions per day)
         const recordConsistency = (isoDate: string) => {
           const dateKey = new Date(isoDate).toLocaleDateString('en-CA');
           consistencyCounts.set(dateKey, (consistencyCounts.get(dateKey) || 0) + 1);
         };
-
         recentSwipes?.forEach((s: any) => recordConsistency(s.created_at));
         recentMsgs?.forEach((m: any) => recordConsistency(m.created_at));
-        
-        // Build the 3 calendar arrays
-        const calendarDaysProductivity = buildCalendarDays(startOfYear, endOfYear, now, productivityCounts);
-        const calendarDaysConsistency = buildCalendarDays(startOfYear, endOfYear, now, consistencyCounts);
-        const calendarDaysGoals = buildCalendarDays(startOfYear, endOfYear, now, goalCounts);
+        recentSessions?.forEach((s: any) => recordConsistency(s.started_at));
 
-        // Default current calendarDays to productivity
-        const calendarDays = calendarDaysProductivity;
+        // 4.3 Goal Progress Mode (Completed goals per day)
+        goalsData?.forEach((g: any) => {
+          if (!g.completed) return;
+          // Use completed_at if available, otherwise fallback to created_at as proxy
+          const dateStr = g.completed_at || g.created_at;
+          if (!dateStr) return;
 
-        // ---- upcoming sessions ----
+          const dateKey = new Date(dateStr).toLocaleDateString('en-CA');
+          goalCounts.set(dateKey, (goalCounts.get(dateKey) || 0) + 1);
+        });
+
+        // --- Helper to Build Calendar Grid ---
+        const buildCalendarDays = (countsMap: Map<string, number>): CalendarDay[] => {
+          const calendarDays: CalendarDay[] = [];
+          
+          // Find Sunday before Jan 1
+          const startDayOfWeek = startOfYear.getDay(); // 0=Sun..6=Sat
+          const gridStart = new Date(startOfYear);
+          gridStart.setDate(startOfYear.getDate() - startDayOfWeek);
+
+          // Find Saturday after Dec 31
+          const endDayOfWeek = endOfYear.getDay();
+          const gridEnd = new Date(endOfYear);
+          gridEnd.setDate(endOfYear.getDate() + (6 - endDayOfWeek));
+
+          const d = new Date(gridStart);
+          while (d <= gridEnd) {
+            const dateKey = d.toLocaleDateString('en-CA');
+            const count = countsMap.get(dateKey) || 0;
+            const intensity = mapCountToIntensity(count);
+
+            const isInYear = d >= startOfYear && d <= endOfYear;
+            const isFuture = d > now;
+
+            calendarDays.push({
+              date: new Date(d),
+              dateKey,
+              count,
+              intensity: isInYear && !isFuture ? intensity : 0,
+              isInCurrentYear: isInYear,
+            });
+
+            d.setDate(d.getDate() + 1);
+          }
+          return calendarDays;
+        };
+
+        // Build the three calendar arrays
+        const calendarDaysProductivity = buildCalendarDays(productivityCounts);
+        const calendarDaysConsistency = buildCalendarDays(consistencyCounts);
+        const calendarDaysGoals = buildCalendarDays(goalCounts);
+
+        // --- 5. Upcoming Sessions ---
         const { data: scheduled } = await supabase
           .from('scheduled_sessions')
           .select('*')
           .eq('user_id', user.id)
           .gte('scheduled_at', now.toISOString())
           .order('scheduled_at', { ascending: true })
-          .limit(20);
+          .limit(5);
 
         setMetrics({
           totalHours,
           hoursChange,
           totalGoals,
           completedGoals,
-          weeklyMessages: [],
-          calendarDays,
+          goals: goalsData || [],
+          weeklyMessages,
           calendarDaysProductivity,
           calendarDaysConsistency,
           calendarDaysGoals,
           scheduledSessions: scheduled || [],
-          weeklySummary,
-          goalStats30: {
-              total: totalGoals30,
-              completed: completedGoals30,
-              active: activeGoals30,
-              percentage: pctGoals30
-          },
-          insights: {
-              focusHours7d: weeklySummary.focusHours,
-              completedGoals7d: completedGoals7d,
-              activeDays7d: weeklySummary.activeDays
-          }
+          weeklyFocusHours,
+          weeklySessionsCount: thisWeekSessionsCount,
+          weeklyActiveDays,
+          weeklyAvgSessionMinutes,
         });
       } catch (err) {
         console.error('Dashboard data load error:', err);
@@ -465,44 +645,30 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
     if (user?.id) {
       loadDashboardData();
     }
-  }, [user.id]);
+  }, [user.id, refreshKey]); // Added refreshKey
 
-  // ---- Select active calendar data ----
-  let activeCalendarDays: CalendarDay[] = [];
-  if (metrics) {
-      if (heatmapMode === 'productivity') activeCalendarDays = metrics.calendarDaysProductivity;
-      else if (heatmapMode === 'consistency') activeCalendarDays = metrics.calendarDaysConsistency;
-      else activeCalendarDays = metrics.calendarDaysGoals;
-  }
+  // --- Select the Active Calendar Data based on Mode ---
+  const calendarDays = metrics
+    ? heatmapMode === 'productivity'
+      ? metrics.calendarDaysProductivity
+      : heatmapMode === 'consistency'
+      ? metrics.calendarDaysConsistency
+      : metrics.calendarDaysGoals
+    : [];
 
-  // ---- month label positions ----
+  // --- Month label positions (in columns) ---
   const monthLabels: { month: number; colIndex: number }[] = [];
-  if (activeCalendarDays.length > 0) {
-    activeCalendarDays.forEach((day, index) => {
+  if (calendarDays.length > 0) {
+    calendarDays.forEach((day, index) => {
       if (day.isInCurrentYear && day.date.getDate() === 1) {
         const month = day.date.getMonth();
         const exists = monthLabels.some((m) => m.month === month);
         if (!exists) {
-          const colIndex = Math.floor(index / 7);
+          const colIndex = Math.floor(index / 7); // week column for this day
           monthLabels.push({ month, colIndex });
         }
       }
     });
-  }
-
-  // Heatmap interaction handler
-  const handleModeSwitch = (mode: 'productivity' | 'consistency' | 'goals') => {
-      if (mode === 'productivity') {
-          setHeatmapMode(mode);
-      } else {
-          if (isPro) {
-              setHeatmapMode(mode);
-          } else {
-              // If not pro, we still set mode to show the locked state, 
-              // instead of blocking the switch. This lets them see what they're missing.
-              setHeatmapMode(mode);
-          }
-      }
   }
 
   if (isLoading) {
@@ -524,9 +690,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
     );
   }
 
-  // heatmap grid dims
   // Find index of last in-year day
-  const lastInYearIndex = activeCalendarDays.reduceRight(
+  const lastInYearIndex = calendarDays.reduceRight(
     (acc, day, index) => (acc === -1 && day.isInCurrentYear ? index : acc),
     -1
   );
@@ -534,7 +699,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
   // Fallback: if somehow not found, keep current behavior
   const visibleWeeks =
     lastInYearIndex === -1
-      ? Math.ceil(activeCalendarDays.length / 7)
+      ? Math.ceil(calendarDays.length / 7)
       : Math.floor(lastInYearIndex / 7) + 1;
 
   // FIX: Ensure visibleWeeks is at least 1 to prevent negative width calculation
@@ -543,283 +708,239 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
   const GRID_WIDTH = safeVisibleWeeks * GRID_OFFSET - CELL_GAP;
   const GRID_HEIGHT = 7 * CELL_SIZE + 6 * CELL_GAP;
 
-  const isHeatmapLocked = heatmapMode !== 'productivity' && !isPro;
-
   return (
-    <div className="h-full w-full overflow-y-auto bg-background text-text-main relative">
-      {/* 1. FULL WIDTH CONTAINER */}
-      <div className="w-full p-6 md:p-8 space-y-6">
-        {/* Badges Modal */}
-        {showBadgesModal && (
+    <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
+      {/* Schedule Modal */}
+      {showScheduleModal && (
+        <ScheduleModal 
+          matches={matches} 
+          onClose={() => setShowScheduleModal(false)} 
+          onSchedule={handleScheduleComplete}
+          userId={user.id}
+        />
+      )}
+
+      {/* Badges Modal */}
+      {showBadgesModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+          onClick={() => setShowBadgesModal(false)}
+        >
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
-            onClick={() => setShowBadgesModal(false)}
+            className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex justify-between items-center mb-8">
-                <div>
-                  <h2 className="text-2xl font-bold text-text-main flex items-center gap-2">
-                    <Award className="text-gold" /> Achievements
-                  </h2>
-                  <p className="text-text-muted mt-1">
-                    Earn badges by staying consistent and collaborating.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowBadgesModal(false)}
-                  className="p-2 rounded-full hover:bg-background text-text-muted hover:text-white transition-colors"
-                >
-                  <CloseIcon size={24} />
-                </button>
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h2 className="text-2xl font-bold text-text-main flex items-center gap-2">
+                  <Award className="text-gold" /> Achievements
+                </h2>
+                <p className="text-text-muted mt-1">Earn badges by staying consistent and collaborating.</p>
               </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {ALL_BADGES.map((badge) => {
-                  const isEarned = user.badges.some((b) => b.id === badge.id);
-                  return <BadgeCard key={badge.id} badge={badge} isEarned={isEarned} />;
-                })}
-              </div>
-
-              <div className="mt-8 text-center">
-                <p className="text-xs text-text-muted">
-                  Progress:{' '}
-                  <span className="text-gold font-bold">{user.badges.length}</span> /{' '}
-                  {ALL_BADGES.length}{' '}
-                  Unlocked
-                </p>
-                <div className="w-full max-w-md mx-auto h-1.5 bg-background rounded-full mt-2 overflow-hidden border border-white/5">
-                  <div
-                    className="h-full bg-gradient-to-r from-primary to-gold"
-                    style={{
-                      width: `${(user.badges.length / ALL_BADGES.length) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Header */}
-        <header>
-          <h1 className="text-3xl font-bold text-text-main mb-2">
-            Welcome back, {getDisplayName(user.name).split(' ')[0]}
-          </h1>
-          <p className="text-text-muted">Here&apos;s your growth overview.</p>
-        </header>
-
-        {/* Kova AI Insight banner */}
-        <div className="bg-gradient-to-r from-primary/40 via-background to-background border border-gold/30 p-6 rounded-2xl relative overflow-hidden shadow-lg">
-          <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-gold/10 rounded-full blur-3xl" />
-          <div className="flex items-start gap-4 relative z-10">
-            <div className="p-3 bg-gradient-to-br from-primary to-secondary rounded-xl shadow-lg text-white shrink-0 border border-white/10">
-              <Sparkles size={24} />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-text-main mb-1 flex items-center gap-2">
-                Kova AI Insight
-                <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
-                  Beta
-                </span>
-              </h3>
-              <p className="text-text-muted text-sm leading-relaxed max-w-3xl">
-                &quot;You&apos;ve been crushing your morning sessions! 🚀 Your focus score peaks between
-                9 AM and 11 AM. Try scheduling a deep-work block this Thursday to maintain your
-                streak.&quot;
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Top metrics row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Total hours */}
-          <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2.5 bg-primary/20 rounded-xl text-primary group-hover:bg-primary group-hover:text-white transition-colors">
-                <TrendingUp size={22} />
-              </div>
-              <span
-                className={`text-sm font-medium flex items-center gap-1 ${
-                  metrics.hoursChange >= 0 ? 'text-gold' : 'text-red-400'
-                }`}
+              <button
+                onClick={() => setShowBadgesModal(false)}
+                className="p-2 rounded-full hover:bg-background text-text-muted hover:text-white transition-colors"
               >
-                <Activity size={12} /> {metrics.hoursChange > 0 ? '+' : ''}
-                {metrics.hoursChange}%
-              </span>
+                <X size={24} />
+              </button>
             </div>
-            <h3 className="text-2xl font-bold text-text-main">{metrics.totalHours} hrs</h3>
-            <p className="text-sm text-text-muted">Total Co-working Time</p>
-          </div>
 
-          {/* Goals completed */}
-          <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2.5 bg-secondary/20 rounded-xl text-secondary group-hover:bg-secondary group-hover:text-white transition-colors">
-                <Target size={22} />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {ALL_BADGES.map((badge) => {
+                const isEarned = user.badges.some((b) => b.id === badge.id);
+                return <BadgeCard key={badge.id} badge={badge} isEarned={isEarned} />;
+              })}
+            </div>
+
+            <div className="mt-8 text-center">
+              <p className="text-xs text-text-muted">
+                Progress: <span className="text-gold font-bold">{user.badges.length}</span> / {ALL_BADGES.length} Unlocked
+              </p>
+              <div className="w-full max-w-md mx-auto h-1.5 bg-background rounded-full mt-2 overflow-hidden border border-white/5">
+                <div
+                  className="h-full bg-gradient-to-r from-primary to-gold"
+                  style={{ width: `${(user.badges.length / ALL_BADGES.length) * 100}%` }}
+                ></div>
               </div>
-              <span className="text-primary text-sm font-medium">
-                {metrics.totalGoals > 0
-                  ? Math.round((metrics.completedGoals / metrics.totalGoals) * 100)
-                  : 0}
-                %
-              </span>
             </div>
-            <h3 className="text-2xl font-bold text-text-main">
-              {metrics.completedGoals} / {metrics.totalGoals}
-            </h3>
-            <p className="text-sm text-text-muted">Goals Completed</p>
-          </div>
-
-          {/* Badges */}
-          <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group relative">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-2.5 bg-gold/10 rounded-xl text-gold group-hover:bg-gold group-hover:text-surface transition-colors">
-                <Award size={22} />
-              </div>
-              <span className="text-text-muted text-sm font-medium">
-                Lvl {Math.floor(user.badges.length / 3) + 1}
-              </span>
-            </div>
-            <h3 className="text-2xl font-bold text-text-main">{user.badges.length}</h3>
-            <p className="text-sm text-text-muted">Badges Earned</p>
-
-            <button
-              onClick={() => setShowBadgesModal(true)}
-              className="mt-3 inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-gold border border-dashed border-white/10 rounded-full px-3 py-1 transition-colors"
-            >
-              See all available badges <ArrowRight size={12} />
-            </button>
           </div>
         </div>
+      )}
 
-        {/* This Week Summary row */}
-        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold text-text-main mb-2">
+          Welcome back, {getDisplayName(user.name).split(' ')[0]}
+        </h1>
+        <p className="text-text-muted">Here's your growth overview.</p>
+      </header>
+
+      {/* 1. AI Insights Box */}
+      <div className="bg-gradient-to-r from-primary/40 via-background to-background border border-gold/30 p-6 rounded-2xl mb-8 relative overflow-hidden shadow-lg">
+        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-gold/10 rounded-full blur-3xl"></div>
+        <div className="flex items-start gap-4 relative z-10">
+          <div className="p-3 bg-gradient-to-br from-primary to-secondary rounded-xl shadow-lg text-white shrink-0 border border-white/10">
+            <Sparkles size={24} />
+          </div>
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-text-main mb-2">
-              This week's summary
+            <h3 className="text-lg font-bold text-text-main mb-1 flex items-center gap-2">
+              Kova AI Insight
+              <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
+                Beta
+              </span>
             </h3>
-            <p className="text-[11px] text-text-muted/70">Last 7 days</p>
+            <p className="text-text-muted text-sm leading-relaxed max-w-3xl">
+              "You've been crushing your morning sessions! 🚀 Your focus score peaks between 9 AM and 11 AM. Try
+              scheduling a deep-work block this Thursday to maintain your streak."
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Key Stats Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 bg-primary/20 rounded-xl text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+              <TrendingUp size={22} />
+            </div>
+            <span
+              className={`text-sm font-medium flex items-center gap-1 ${
+                metrics.hoursChange >= 0 ? 'text-gold' : 'text-red-400'
+              }`}
+            >
+              <Activity size={12} /> {metrics.hoursChange > 0 ? '+' : ''}
+              {metrics.hoursChange}%
+            </span>
+          </div>
+          <h3 className="text-2xl font-bold text-text-main">{metrics.totalHours} hrs</h3>
+          <p className="text-sm text-text-muted">Total Co-working Time</p>
+        </div>
+
+        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 bg-secondary/20 rounded-xl text-secondary group-hover:bg-secondary group-hover:text-white transition-colors">
+              <Target size={22} />
+            </div>
+            <span className="text-primary text-sm font-medium">
+              {metrics.totalGoals > 0 ? Math.round((metrics.completedGoals / metrics.totalGoals) * 100) : 0}%
+            </span>
+          </div>
+          <h3 className="text-2xl font-bold text-text-main">
+            {metrics.completedGoals} / {metrics.totalGoals}
+          </h3>
+          <p className="text-sm text-text-muted">Goals Completed</p>
+        </div>
+
+        <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group relative">
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 bg-gold/10 rounded-xl text-gold group-hover:bg-gold group-hover:text-surface transition-colors">
+              <Award size={22} />
+            </div>
+            <span className="text-text-muted text-sm font-medium">
+              Lvl {Math.floor(user.badges.length / 3) + 1}
+            </span>
+          </div>
+          <h3 className="text-2xl font-bold text-text-main">{user.badges.length}</h3>
+          <p className="text-sm text-text-muted">Badges Earned</p>
+
+          <button
+            onClick={() => setShowBadgesModal(true)}
+            className="mt-3 inline-flex items-center gap-1 text-[11px] text-text-muted hover:text-gold border border-dashed border-white/10 rounded-full px-3 py-1 transition-colors"
+          >
+            See all available badges <ArrowRight size={12} />
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Charts & Sessions Grid */}
+      <div className="flex flex-col gap-6">
+        
+        {/* This Week Summary Card */}
+        <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-text-main">This Week Summary</h3>
+            <span className="text-xs text-text-muted">Last 7 days</span>
           </div>
 
-          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-6 text-sm">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-                Focus Hours
-              </p>
-              <p className="text-lg font-semibold text-text-main">
-                {metrics.weeklySummary.focusHours.toFixed(1)}
-              </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Stat 1 */}
+            <div className="flex flex-col">
+              <span className="text-xs uppercase tracking-wide text-text-muted">Focus Hours</span>
+              <span className="text-xl font-semibold text-text-main">
+                {metrics.weeklyFocusHours.toFixed(1)}
+              </span>
             </div>
 
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-                Sessions
-              </p>
-              <p className="text-lg font-semibold text-text-main">
-                {metrics.weeklySummary.sessions}
-              </p>
+            {/* Stat 2 */}
+            <div className="flex flex-col">
+              <span className="text-xs uppercase tracking-wide text-text-muted">Sessions</span>
+              <span className="text-xl font-semibold text-text-main">
+                {metrics.weeklySessionsCount}
+              </span>
             </div>
 
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-                Active Days
-              </p>
-              <p className="text-lg font-semibold text-text-main">
-                {metrics.weeklySummary.activeDays}
-              </p>
+            {/* Stat 3 */}
+            <div className="flex flex-col">
+              <span className="text-xs uppercase tracking-wide text-text-muted">Active Days</span>
+              <span className="text-xl font-semibold text-text-main">
+                {metrics.weeklyActiveDays}
+              </span>
             </div>
 
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.15em] text-text-muted mb-1">
-                Avg Session
-              </p>
-              <p className="text-lg font-semibold text-text-main">
-                {metrics.weeklySummary.avgSessionMinutes} min
-              </p>
+            {/* Stat 4 */}
+            <div className="flex flex-col">
+              <span className="text-xs uppercase tracking-wide text-text-muted">Avg Session</span>
+              <span className="text-xl font-semibold text-text-main">
+                {Math.round(metrics.weeklyAvgSessionMinutes)} min
+              </span>
             </div>
           </div>
         </div>
 
-        {/* Middle row: Heatmap + Upcoming Sessions */}
-        {/* 2. BALANCED 2-COLUMN LAYOUT */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-          {/* Heatmap */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
-            <div className="flex items-center justify-between mb-6">
+        {/* Bottom Row: Heatmap & Upcoming Sessions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* 3. Consistency Heatmap */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-                <Zap size={18} className="text-gold" />
-                Consistency Heatmap
+                <Zap size={18} className="text-gold" /> Consistency Heatmap
               </h3>
               
+              {/* Mode Selector */}
               <div className="flex items-center gap-3">
-                  {/* Segmented Control */}
-                  <div className="flex bg-black/30 rounded-lg p-1 border border-white/5">
-                      <button
-                          className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                          heatmapMode === 'productivity'
-                              ? 'bg-primary text-white shadow-sm'
-                              : 'text-text-muted hover:text-white'
-                          }`}
-                          onClick={() => handleModeSwitch('productivity')}
-                      >
-                          Productivity
-                      </button>
-                      <button
-                          className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                          heatmapMode === 'consistency'
-                              ? 'bg-primary text-white shadow-sm'
-                              : 'text-text-muted hover:text-white'
-                          }`}
-                          onClick={() => handleModeSwitch('consistency')}
-                      >
-                          Consistency
-                          {!isPro && <Lock size={8} className="inline ml-1 text-gold" />}
-                      </button>
-                      <button
-                          className={`px-3 py-1 rounded-md text-[10px] font-medium transition-colors ${
-                          heatmapMode === 'goals'
-                              ? 'bg-primary text-white shadow-sm'
-                              : 'text-text-muted hover:text-white'
-                          }`}
-                          onClick={() => handleModeSwitch('goals')}
-                      >
-                          Goal Progress
-                          {!isPro && <Lock size={8} className="inline ml-1 text-gold" />}
-                      </button>
-                  </div>
-                  <span className="text-xs text-text-muted font-medium">{new Date().getFullYear()}</span>
+                <div className="inline-flex items-center rounded-full bg-background/60 border border-white/5 text-[11px] overflow-hidden">
+                  {[
+                    { key: 'productivity', label: 'Productivity', locked: false },
+                    { key: 'consistency', label: 'Consistency', locked: !isPro },
+                    { key: 'goals', label: 'Goal Progress', locked: !isPro },
+                  ].map((mode) => (
+                    <button
+                      key={mode.key}
+                      type="button"
+                      onClick={() => handleHeatmapModeChange(mode.key as any)}
+                      className={
+                        'px-3 py-1.5 transition-colors flex items-center gap-1 ' +
+                        (heatmapMode === mode.key
+                          ? 'bg-primary text-white'
+                          : 'text-text-muted hover:bg-background')
+                      }
+                    >
+                      {mode.locked && <Lock size={10} className="text-text-muted/70" />}
+                      {mode.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-text-muted">{new Date().getFullYear()}</span>
               </div>
             </div>
 
-            {/* Grid Container */}
-            <div className="w-full pb-2 flex-1 flex flex-col relative overflow-hidden">
-              
-              {/* 3. BLUR + LOCK OVERLAY FOR HEATMAP */}
-              {isHeatmapLocked && (
-                  <div 
-                    className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center bg-black/20 backdrop-blur-sm rounded-xl cursor-pointer hover:bg-black/30 transition-all"
-                    onClick={onUpgrade}
-                  >
-                      <div className="bg-black/60 p-4 rounded-2xl border border-gold/30 shadow-2xl transform hover:scale-105 transition-transform">
-                        <div className="w-12 h-12 bg-gold/10 rounded-full flex items-center justify-center mb-3 border border-gold/20 mx-auto">
-                            <Lock size={20} className="text-gold" />
-                        </div>
-                        <h4 className="text-text-main font-bold mb-1 text-sm">Pro Feature Locked</h4>
-                        <p className="text-text-muted text-xs max-w-[200px] mb-3">Upgrade to view consistency streaks and goal heatmaps.</p>
-                        <span className="text-gold text-xs font-bold uppercase tracking-wider border-b border-gold/50 pb-0.5">Unlock Now</span>
-                      </div>
-                  </div>
-              )}
-
-              <div className={`flex items-start gap-4 w-full justify-center ${isHeatmapLocked ? 'filter blur-sm' : ''}`}>
-                {/* Y labels */}
+            {/* Heatmap Container - Scrollable if too narrow */}
+            <div className="w-full pb-2 overflow-x-auto no-scrollbar">
+              <div className="flex items-start gap-4 w-full justify-center min-w-max">
+                {/* Y-axis labels (Mon / Wed / Fri) */}
                 <div
                   className="relative shrink-0 text-[10px] text-text-muted font-medium w-8 text-right mr-2 pt-[20px]"
-                  style={{ height: GRID_HEIGHT + 20 }}
+                  style={{ height: GRID_HEIGHT + 20 }} // +20 for padding matching months row offset approx
                 >
                   {[
                     { label: 'Mon', dayIndex: 1 },
@@ -830,7 +951,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
                       key={label}
                       className="absolute right-0 flex items-center justify-end"
                       style={{
-                        top: 20 + (dayIndex * GRID_OFFSET),
+                        // Align to top of the row
+                        top: 20 + (dayIndex * GRID_OFFSET), 
                         height: CELL_SIZE,
                       }}
                     >
@@ -839,9 +961,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
                   ))}
                 </div>
 
-                {/* Month labels + cells */}
-                <div className="flex flex-col gap-[3px] flex-1">
-                  {/* Months */}
+                {/* Right side: months + grid */}
+                <div className="flex flex-col gap-[3px]">
+                  {/* Month labels */}
                   <div className="relative h-[16px]" style={{ width: GRID_WIDTH }}>
                     {monthLabels.map((item) => (
                       <span
@@ -858,23 +980,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
                     ))}
                   </div>
 
-                  {/* Cells */}
-                  <div
-                    className="relative"
-                    style={{ width: GRID_WIDTH, height: GRID_HEIGHT }}
-                  >
-                    {activeCalendarDays.map((day, index) => {
+                  {/* Heatmap grid */}
+                  <div className="relative" style={{ width: GRID_WIDTH, height: GRID_HEIGHT }}>
+                    {calendarDays.map((day, index) => {
                       const weekIndex = Math.floor(index / 7);
-                      const dayOfWeek = day.date.getDay(); // 0–6
+                      const dayOfWeek = day.date.getDay(); // 0=Sun..6=Sat
 
-                      // Do not render cells beyond safe width
-                      if (weekIndex >= safeVisibleWeeks) return null;
+                      // Do not render cells that would sit beyond the visible width
+                      if (weekIndex >= visibleWeeks) return null;
 
                       const left = weekIndex * GRID_OFFSET;
                       const top = dayOfWeek * GRID_OFFSET;
-
-                      // decide tooltip direction: last 2 rows -> tooltip above
-                      const tooltipAbove = dayOfWeek >= 5;
+                      
+                      // Flip tooltip for bottom rows (Thu-Sat) to prevent clipping
+                      const isBottomRow = dayOfWeek >= 4; 
 
                       return (
                         <div
@@ -889,17 +1008,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
                         >
                           <div
                             className={`w-full h-full rounded-[3px] transition-all duration-300 ${
-                              day.isInCurrentYear
-                                ? getHeatmapColor(day.intensity)
-                                : 'bg-transparent'
+                              day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent'
                             }`}
                           />
-                          {day.isInCurrentYear && !isHeatmapLocked && (
-                            <div
-                              className={`absolute left-1/2 -translate-x-1/2 ${
-                                tooltipAbove ? 'bottom-full mb-1' : 'top-full mt-1'
-                              } hidden group-hover:block z-50 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none`}
-                            >
+                          {day.isInCurrentYear && (
+                            <div className={`absolute ${isBottomRow ? 'bottom-full mb-1' : 'top-full mt-1'} left-1/2 -translate-x-1/2 hidden group-hover:block z-50 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none`}>
                               <p className="font-semibold text-text-muted">
                                 {day.date.toLocaleDateString([], {
                                   month: 'short',
@@ -926,32 +1039,31 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
             <div className="flex items-center justify-center gap-4 mt-4 text-xs text-text-muted w-full">
               <span className="mr-1">Less</span>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-surface border border-white/5" />
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-surface border border-white/5"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-secondary border border-secondary/50" />
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-secondary border border-secondary/50"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary border border-primary-hover" />
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-primary border border-primary-hover"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-primary/40 border border-primary/20" />
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-primary/40 border border-primary/20"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[14px] h-[14px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50" />
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50"></div>
               </div>
               <span className="ml-1">More</span>
             </div>
           </div>
 
-          {/* Upcoming Sessions */}
+          {/* 4. Upcoming Sessions */}
           <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main">Upcoming Sessions</h3>
               <Calendar size={18} className="text-text-muted" />
             </div>
-
-            <div className="space-y-4 flex-1 overflow-y-auto max-h-[260px] pr-1">
+            <div className="space-y-4 flex-1">
               {metrics.scheduledSessions.length > 0 ? (
                 metrics.scheduledSessions.map((session) => (
                   <div
@@ -987,155 +1099,144 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onUpgrade }) => {
                           P
                         </div>
                         <p className="text-xs text-text-muted">
-                          {session.partner_email
-                            ? `with ${session.partner_email}`
-                            : 'Solo Session'}
+                          {session.partner_email ? `with ${session.partner_email}` : 'Solo Session'}
                         </p>
                       </div>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-text-muted text-center py-4">
-                  No upcoming sessions scheduled.
-                </div>
+                <div className="text-sm text-text-muted text-center py-4">No upcoming sessions scheduled.</div>
               )}
             </div>
 
             <div className="mt-4 pt-2">
-              <button className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20">
+              <button 
+                onClick={() => setShowScheduleModal(true)}
+                className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20"
+              >
                 <Calendar size={16} /> Schedule New
               </button>
             </div>
           </div>
         </div>
 
-        {/* Bottom analytics row (Goal Progress + Pro Insights) */}
+        {/* 5. NEW ROW: Goal Progress & Pro Insights */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Goal Progress (Free) */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h3 className="text-sm font-semibold text-text-main flex items-center gap-2">
-                  <Target size={16} className="text-secondary" /> Goal Progress
-                </h3>
-                <p className="text-xs text-text-muted mt-1">Track your momentum on active goals.</p>
-              </div>
-              <span className="text-[10px] text-text-muted border border-white/10 rounded-full px-2 py-0.5">Last 30 Days</span>
-            </div>
-            
-            {metrics.goalStats30.total === 0 ? (
-               <div className="flex-1 flex flex-col items-center justify-center text-center py-10 border border-dashed border-white/10 rounded-xl bg-background/30 mt-4">
-                  <Target size={24} className="text-text-muted opacity-50 mb-2" />
-                  <p className="text-text-muted text-sm">No goals found in the last 30 days.</p>
-                  <p className="text-xs text-text-muted mt-1 opacity-70">Create a goal in your next session to see stats.</p>
-               </div>
-            ) : (
-               <div className="mt-4 space-y-6">
-                  {/* Progress Bar */}
-                  <div>
-                     <div className="flex justify-between text-xs text-text-muted mb-2">
-                        <span>Completion Rate</span>
-                        <span className="text-text-main font-bold">{metrics.goalStats30.percentage}%</span>
-                     </div>
-                     <div className="h-2 w-full bg-background rounded-full overflow-hidden border border-white/5">
-                        <div 
-                          className="h-full bg-secondary rounded-full transition-all duration-500" 
-                          style={{ width: `${metrics.goalStats30.percentage}%` }}
-                        ></div>
-                     </div>
-                  </div>
-
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-3 gap-3">
-                     <div className="bg-background p-3 rounded-lg border border-white/5 text-center">
-                        <span className="text-[10px] uppercase tracking-wider text-text-muted block mb-1">Completed</span>
-                        <span className="text-lg font-bold text-secondary">{metrics.goalStats30.completed}</span>
-                     </div>
-                     <div className="bg-background p-3 rounded-lg border border-white/5 text-center">
-                        <span className="text-[10px] uppercase tracking-wider text-text-muted block mb-1">Planned</span>
-                        <span className="text-lg font-bold text-text-main">{metrics.goalStats30.total}</span>
-                     </div>
-                     <div className="bg-background p-3 rounded-lg border border-white/5 text-center">
-                        <span className="text-[10px] uppercase tracking-wider text-text-muted block mb-1">Active</span>
-                        <span className="text-lg font-bold text-text-main">{metrics.goalStats30.active}</span>
-                     </div>
-                  </div>
-               </div>
-            )}
-          </div>
-
-          {/* Right: Kova Pro Insights (Gated) */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg flex flex-col relative overflow-hidden">
+          
+          {/* Goal Progress (Free) */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-text-main flex items-center gap-2">
-                     <BarChart3 size={16} className="text-gold" /> Kova Pro Insights
-                  </h3>
-                  <p className="text-xs text-text-muted mt-1">Unlock AI-powered weekly breakdowns.</p>
+                  <h3 className="text-lg font-semibold text-text-main">Goal Progress</h3>
+                  <p className="text-xs text-text-muted mt-0.5">Track your progress on active goals</p>
                 </div>
-                {!isPro && (
-                  <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
-                    Kova Pro
-                  </span>
+                <Target size={18} className="text-text-muted" />
+             </div>
+
+             <div className="space-y-4 flex-1">
+                {metrics.goals.length > 0 ? (
+                   metrics.goals.slice(0, 5).map(goal => (
+                      <div key={goal.id} className="group">
+                         <div className="flex justify-between items-center text-sm mb-1.5">
+                            <span className="font-medium text-text-main truncate pr-4">{goal.text}</span>
+                            <span className={`text-xs font-bold ${goal.completed ? 'text-primary' : 'text-text-muted'}`}>
+                               {goal.completed ? '100%' : '0%'}
+                            </span>
+                         </div>
+                         <div className="w-full h-1.5 bg-background rounded-full overflow-hidden border border-white/5">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${goal.completed ? 'bg-primary' : 'bg-transparent'}`} 
+                              style={{ width: goal.completed ? '100%' : '0%' }}
+                            ></div>
+                         </div>
+                      </div>
+                   ))
+                ) : (
+                   <div className="flex flex-col items-center justify-center h-full py-6 text-center">
+                      <div className="w-12 h-12 bg-background rounded-full flex items-center justify-center mb-3 border border-white/5">
+                         <Target size={20} className="text-text-muted opacity-50" />
+                      </div>
+                      <p className="text-sm text-text-muted">You haven't created any goals yet.</p>
+                   </div>
                 )}
              </div>
 
-             {/* 3. BLUR + LOCK OVERLAY FOR INSIGHTS */}
-             {!isPro ? (
-                <div className="flex flex-col h-full relative">
-                   {/* Blurred Content */}
-                   <div className="space-y-3 opacity-50 blur-[4px] select-none pointer-events-none">
-                      <div className="bg-background p-3 rounded-lg border border-white/5">
-                         <div className="h-3 w-3/4 bg-white/10 rounded mb-2"></div>
-                         <div className="h-2 w-1/2 bg-white/10 rounded"></div>
-                      </div>
-                      <div className="bg-background p-3 rounded-lg border border-white/5">
-                         <div className="h-3 w-2/3 bg-white/10 rounded mb-2"></div>
-                         <div className="h-2 w-1/2 bg-white/10 rounded"></div>
-                      </div>
-                      <div className="bg-background p-3 rounded-lg border border-white/5">
-                         <div className="h-3 w-4/5 bg-white/10 rounded mb-2"></div>
-                         <div className="h-2 w-1/3 bg-white/10 rounded"></div>
-                      </div>
-                   </div>
+             <div className="mt-6 pt-2 border-t border-white/5 text-center">
+                <button className="text-xs text-gold hover:text-gold-hover font-medium flex items-center justify-center gap-1 transition-colors">
+                   View all goals <ArrowRight size={12} />
+                </button>
+             </div>
+          </div>
 
-                   {/* Lock Overlay - CLICKABLE */}
-                   <button
-                      onClick={onUpgrade}
-                      className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gradient-to-b from-black/10 via-black/30 to-black/70 rounded-xl cursor-pointer hover:bg-black/20 transition-all group"
-                   >
-                      <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-gold/30 px-4 py-2 rounded-full mb-3 shadow-lg transform group-hover:scale-105 transition-transform">
-                         <Lock size={14} className="text-gold" />
-                         <span className="text-xs font-bold text-white">Unlock Insights</span>
+          {/* Kova Pro Insights (Locked/Unlocked) */}
+          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden">
+             
+             {isPro && (
+               <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                 <Crown size={12} fill="currentColor" /> Pro Enabled
+               </div>
+             )}
+
+             {/* Content (Muted if free) */}
+             <div className={`${isPro ? '' : 'opacity-40 pointer-events-none filter grayscale-[50%]'} flex-1 flex flex-col`}>
+                <div className="flex items-center justify-between mb-6">
+                   <div>
+                      <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
+                         Kova Pro Insights {!isPro && <Lock size={14} className="text-text-muted"/>}
+                      </h3>
+                      <p className="text-xs text-text-muted mt-0.5">Unlock deeper analytics and personalized insights</p>
+                   </div>
+                   <Sparkles size={18} className="text-gold" />
+                </div>
+
+                <div className="space-y-4">
+                   <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                         <div className="p-2 bg-surface rounded-lg"><BarChart2 size={16} /></div>
+                         <span className="text-sm font-medium">30-day focus trendline</span>
                       </div>
-                      <span className="text-xs text-text-muted group-hover:text-white transition-colors">Upgrade to Pro – $7.99/month</span>
-                   </button>
+                      {!isPro && <Lock size={12} />}
+                   </div>
+                   <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                         <div className="p-2 bg-surface rounded-lg"><Clock size={16} /></div>
+                         <span className="text-sm font-medium">Best days & times for deep work</span>
+                      </div>
+                      {!isPro && <Lock size={12} />}
+                   </div>
+                   <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                         <div className="p-2 bg-surface rounded-lg"><Users size={16} /></div>
+                         <span className="text-sm font-medium">Top accountability partners</span>
+                      </div>
+                      {!isPro && <Lock size={12} />}
+                   </div>
+                   <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                         <div className="p-2 bg-surface rounded-lg"><Shield size={16} /></div>
+                         <span className="text-sm font-medium">Streak protection predictions</span>
+                      </div>
+                      {!isPro && <Lock size={12} />}
+                   </div>
                 </div>
-             ) : (
-                <div className="flex flex-col h-full space-y-3">
-                   <div className="bg-background/50 p-3 rounded-xl border border-white/5">
-                      <p className="text-xs font-medium text-text-main mb-1">Focus Trend</p>
-                      <p className="text-xs text-text-muted">
-                         You've logged <span className="text-text-main font-bold">{metrics.insights.focusHours7d.toFixed(1)} hrs</span> of focus time this week.
-                      </p>
-                   </div>
-                   <div className="bg-background/50 p-3 rounded-xl border border-white/5">
-                      <p className="text-xs font-medium text-text-main mb-1">Goal Velocity</p>
-                      <p className="text-xs text-text-muted">
-                         You completed <span className="text-text-main font-bold">{metrics.insights.completedGoals7d}</span> goals in the last 7 days.
-                      </p>
-                   </div>
-                   <div className="bg-background/50 p-3 rounded-xl border border-white/5">
-                      <p className="text-xs font-medium text-text-main mb-1">Consistency Score</p>
-                      <p className="text-xs text-text-muted">
-                         Active on <span className="text-text-main font-bold">{metrics.insights.activeDays7d}</span> days this week. Keep it up!
-                      </p>
-                   </div>
-                </div>
+             </div>
+
+             {/* Lock Overlay Action */}
+             {!isPro && (
+               <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 bg-gradient-to-t from-surface via-surface/20 to-transparent z-10">
+                  <button 
+                    onClick={onUpgrade}
+                    className="px-6 py-3 bg-background border border-white/10 text-text-muted hover:text-gold font-bold rounded-xl text-sm flex items-center gap-2 opacity-100 hover:border-gold/30 transition-all shadow-xl"
+                  >
+                     <Lock size={14} /> Coming Soon — Kova Pro
+                  </button>
+               </div>
              )}
           </div>
+
         </div>
+
       </div>
     </div>
   );

@@ -77,7 +77,7 @@ const getHeatmapColor = (intensity: number) => {
     case 1:
       return 'bg-secondary border border-secondary/50';
     default:
-      return 'bg-surface border border-white/5';
+      return 'bg-surface/70 border border-black/15 dark:border-white/5';
   }
 };
 
@@ -163,7 +163,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filteredMatches = matches.filter(m => 
+  const filteredMatches = matches.filter(m =>
     getDisplayName(m.user.name).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -174,11 +174,11 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
     try {
       const startDateTime = new Date(`${date}T${time}`);
       const sessionsToCreate = [];
-      
-      const title = selectedMatch 
+
+      const title = selectedMatch
         ? `Co-working with ${getDisplayName(selectedMatch.user.name)}`
         : 'Solo Focus Session';
-        
+
       const partnerEmail = selectedMatch?.user.email || null;
 
       // Generate occurrences based on recurrence
@@ -189,28 +189,28 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
 
       for (let i = 0; i < count; i++) {
         const sessionDate = new Date(startDateTime);
-        
+
         if (recurrence === 'daily') sessionDate.setDate(sessionDate.getDate() + i);
-        if (recurrence === 'weekly') sessionDate.setDate(sessionDate.getDate() + (i * 7));
+        if (recurrence === 'weekly') sessionDate.setDate(sessionDate.getDate() + i * 7);
         if (recurrence === 'monthly') sessionDate.setMonth(sessionDate.getMonth() + i);
 
         sessionsToCreate.push({
           user_id: userId,
           partner_email: partnerEmail,
           title: title,
-          scheduled_at: sessionDate.toISOString(),
+          scheduled_at: sessionDate.toISOString()
         });
       }
 
       const { error } = await supabase.from('scheduled_sessions').insert(sessionsToCreate);
-      
+
       if (error) throw error;
-      
+
       onSchedule();
       onClose();
     } catch (err) {
-      console.error("Scheduling failed:", err);
-      alert("Failed to schedule session.");
+      console.error('Scheduling failed:', err);
+      alert('Failed to schedule session.');
     } finally {
       setIsSubmitting(false);
     }
@@ -221,44 +221,54 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
       <div className="bg-surface w-full max-w-md rounded-3xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-text-main">Schedule Session</h3>
-          <button onClick={onClose} className="text-text-muted hover:text-white"><X size={24}/></button>
+          <button onClick={onClose} className="text-text-muted hover:text-white">
+            <X size={24} />
+          </button>
         </div>
 
         <div className="space-y-5">
           {/* 1. Partner Selection */}
           <div>
-            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Select Partner</label>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+              Select Partner
+            </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
                 <Search size={16} />
               </div>
-              <input 
-                type="text" 
-                placeholder="Search matches..." 
+              <input
+                type="text"
+                placeholder="Search matches..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={e => setSearchTerm(e.target.value)}
                 className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
               />
             </div>
-            
+
             <div className="mt-2 max-h-32 overflow-y-auto border border-white/5 rounded-xl bg-background/50 no-scrollbar">
-              <div 
+              <div
                 onClick={() => setSelectedMatch(null)}
-                className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 ${!selectedMatch ? 'bg-primary/10' : ''}`}
+                className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 ${
+                  !selectedMatch ? 'bg-primary/10' : ''
+                }`}
               >
-                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary"><Users size={14} /></div>
-                 <span className="text-sm font-medium">Solo Session</span>
-                 {!selectedMatch && <Check size={16} className="ml-auto text-primary" />}
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+                  <Users size={14} />
+                </div>
+                <span className="text-sm font-medium">Solo Session</span>
+                {!selectedMatch && <Check size={16} className="ml-auto text-primary" />}
               </div>
               {filteredMatches.map(match => (
-                <div 
-                  key={match.id} 
+                <div
+                  key={match.id}
                   onClick={() => setSelectedMatch(match)}
-                  className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 last:border-0 ${selectedMatch?.id === match.id ? 'bg-primary/10' : ''}`}
+                  className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 last:border-0 ${
+                    selectedMatch?.id === match.id ? 'bg-primary/10' : ''
+                  }`}
                 >
-                   <img src={match.user.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
-                   <span className="text-sm font-medium">{getDisplayName(match.user.name)}</span>
-                   {selectedMatch?.id === match.id && <Check size={16} className="ml-auto text-primary" />}
+                  <img src={match.user.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  <span className="text-sm font-medium">{getDisplayName(match.user.name)}</span>
+                  {selectedMatch?.id === match.id && <Check size={16} className="ml-auto text-primary" />}
                 </div>
               ))}
             </div>
@@ -266,52 +276,58 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
 
           {/* 2. Date & Time */}
           <div className="grid grid-cols-2 gap-4">
-             <div>
-                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Date</label>
-                <input 
-                  type="date" 
-                  value={date}
-                  onChange={e => setDate(e.target.value)}
-                  className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
-                />
-             </div>
-             <div>
-                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Time</label>
-                <input 
-                  type="time" 
-                  value={time}
-                  onChange={e => setTime(e.target.value)}
-                  className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
-                />
-             </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                Date
+              </label>
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+                Time
+              </label>
+              <input
+                type="time"
+                value={time}
+                onChange={e => setTime(e.target.value)}
+                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+              />
+            </div>
           </div>
 
           {/* 3. Recurrence */}
           <div>
-             <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Repeat</label>
-             <div className="relative">
-                <select 
-                  value={recurrence} 
-                  onChange={(e) => setRecurrence(e.target.value as any)}
-                  className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none appearance-none"
-                >
-                   <option value="none">Just Once</option>
-                   <option value="daily">Daily (Next 5 Days)</option>
-                   <option value="weekly">Weekly (Next 4 Weeks)</option>
-                   <option value="monthly">Monthly (Next 3 Months)</option>
-                </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
-                   <ChevronDown size={16} />
-                </div>
-             </div>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">
+              Repeat
+            </label>
+            <div className="relative">
+              <select
+                value={recurrence}
+                onChange={e => setRecurrence(e.target.value as any)}
+                className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none appearance-none"
+              >
+                <option value="none">Just Once</option>
+                <option value="daily">Daily (Next 5 Days)</option>
+                <option value="weekly">Weekly (Next 4 Weeks)</option>
+                <option value="monthly">Monthly (Next 3 Months)</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
+                <ChevronDown size={16} />
+              </div>
+            </div>
           </div>
 
-          <button 
+          <button
             onClick={handleSchedule}
             disabled={!date || !time || isSubmitting}
             className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "Confirm Schedule"}
+            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : 'Confirm Schedule'}
           </button>
         </div>
       </div>
@@ -340,7 +356,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
       setHeatmapMode(mode);
       return;
     }
-    
+
     // Gating for Consistency and Goals
     if (!isPro) {
       onUpgrade();
@@ -395,8 +411,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             { id: '2', text: 'Find Co-founder', completed: false }
           ],
           weeklyMessages: [
-            { name: 'Sun', value: 2 }, { name: 'Mon', value: 5 }, { name: 'Tue', value: 3 }, 
-            { name: 'Wed', value: 6 }, { name: 'Thu', value: 4 }, { name: 'Fri', value: 8 }, { name: 'Sat', value: 3 }
+            { name: 'Sun', value: 2 },
+            { name: 'Mon', value: 5 },
+            { name: 'Tue', value: 3 },
+            { name: 'Wed', value: 6 },
+            { name: 'Thu', value: 4 },
+            { name: 'Fri', value: 8 },
+            { name: 'Sat', value: 3 }
           ],
           calendarDaysProductivity: fakeCalendarDays,
           calendarDaysConsistency: fakeCalendarDays,
@@ -576,7 +597,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
         const buildCalendarDays = (countsMap: Map<string, number>): CalendarDay[] => {
           const calendarDays: CalendarDay[] = [];
-          
+
           const startDayOfWeek = startOfYear.getDay();
           const gridStart = new Date(startOfYear);
           gridStart.setDate(startOfYear.getDate() - startDayOfWeek);
@@ -599,7 +620,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               dateKey,
               count,
               intensity: isInYear && !isFuture ? intensity : 0,
-              isInCurrentYear: isInYear,
+              isInCurrentYear: isInYear
             });
 
             d.setDate(d.getDate() + 1);
@@ -634,7 +655,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           weeklyFocusHours,
           weeklySessionsCount: thisWeekSessionsCount,
           weeklyActiveDays,
-          weeklyAvgSessionMinutes,
+          weeklyAvgSessionMinutes
         });
       } catch (err) {
         console.error('Dashboard data load error:', err);
@@ -662,7 +683,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
     calendarDays.forEach((day, index) => {
       if (day.isInCurrentYear && day.date.getDate() === 1) {
         const month = day.date.getMonth();
-        const exists = monthLabels.some((m) => m.month === month);
+        const exists = monthLabels.some(m => m.month === month);
         if (!exists) {
           const colIndex = Math.floor(index / 7);
           monthLabels.push({ month, colIndex });
@@ -697,9 +718,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   );
 
   const visibleWeeks =
-    lastInYearIndex === -1
-      ? Math.ceil(calendarDays.length / 7)
-      : Math.floor(lastInYearIndex / 7) + 1;
+    lastInYearIndex === -1 ? Math.ceil(calendarDays.length / 7) : Math.floor(lastInYearIndex / 7) + 1;
 
   const safeVisibleWeeks = Math.max(1, visibleWeeks);
 
@@ -714,9 +733,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
   const nowForEta = new Date();
   const estimatedDaysToCompletion =
-    activeGoalsForRoadmap.length > 0
-      ? 7 + activeGoalsForRoadmap.length * 3
-      : 7;
+    activeGoalsForRoadmap.length > 0 ? 7 + activeGoalsForRoadmap.length * 3 : 7;
 
   const eta = new Date(nowForEta);
   eta.setDate(nowForEta.getDate() + estimatedDaysToCompletion);
@@ -724,8 +741,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
   const totalGoalsCount = metrics.goals.length || 0;
   const completedGoalsCount = metrics.goals.filter(g => g.completed).length || 0;
-  const completionRatio =
-    totalGoalsCount > 0 ? completedGoalsCount / totalGoalsCount : 0;
+  const completionRatio = totalGoalsCount > 0 ? completedGoalsCount / totalGoalsCount : 0;
   const confidence = Math.round(60 + completionRatio * 35);
   // -------------------------------------------------------------------------
 
@@ -733,9 +749,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
     <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
       {/* Schedule Modal */}
       {showScheduleModal && (
-        <ScheduleModal 
-          matches={matches} 
-          onClose={() => setShowScheduleModal(false)} 
+        <ScheduleModal
+          matches={matches}
+          onClose={() => setShowScheduleModal(false)}
           onSchedule={handleScheduleComplete}
           userId={user.id}
         />
@@ -749,7 +765,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         >
           <div
             className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-8">
               <div>
@@ -767,8 +783,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {ALL_BADGES.map((badge) => {
-                const isEarned = user.badges.some((b) => b.id === badge.id);
+              {ALL_BADGES.map(badge => {
+                const isEarned = user.badges.some(b => b.id === badge.id);
                 return <BadgeCard key={badge.id} badge={badge} isEarned={isEarned} />;
               })}
             </div>
@@ -795,25 +811,45 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         <p className="text-text-muted">Here's your growth overview.</p>
       </header>
 
-      {/* 1. AI Insights Box */}
-      <div className="bg-gradient-to-r from-primary/40 via-background to-background border border-gold/30 p-6 rounded-2xl mb-8 relative overflow-hidden shadow-lg">
-        <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-gold/10 rounded-full blur-3xl"></div>
-        <div className="flex items-start gap-4 relative z-10">
-          <div className="p-3 bg-gradient-to-br from-primary to-secondary rounded-xl shadow-lg text-white shrink-0 border border-white/10">
-            <Sparkles size={24} />
+      {/* AI Insight Banner – toned down, Pro-gated */}
+      <div className="mb-8">
+        <div className="relative flex items-start gap-3 rounded-2xl border border-white/10 bg-background/30 backdrop-blur-xl px-4 py-3 md:px-5 md:py-4 shadow-sm">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
+            <Sparkles size={18} />
           </div>
-          <div>
-            <h3 className="text-lg font-bold text-text-main mb-1 flex items-center gap-2">
-              Kova AI Insight
-              <span className="text-[10px] bg-gold/10 text-gold px-2 py-0.5 rounded-full border border-gold/20 uppercase tracking-wider">
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-semibold text-text-main">Kova AI Insight</span>
+              <span className="text-[10px] uppercase tracking-wide text-text-muted border border-white/10 rounded-full px-2 py-0.5">
                 Beta
               </span>
-            </h3>
-            <p className="text-text-muted text-sm leading-relaxed max-w-3xl">
-              "You've been crushing your morning sessions! 🚀 Your focus score peaks between 9 AM and 11 AM. Try
-              scheduling a deep-work block this Thursday to maintain your streak."
+              {!isPro && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-text-muted ml-1">
+                  <Lock size={10} /> Pro
+                </span>
+              )}
+            </div>
+
+            <p
+              className={`text-xs md:text-sm text-text-muted transition-all ${
+                !isPro ? 'md:line-clamp-2 line-clamp-1 blur-[1px]' : ''
+              }`}
+            >
+              You’ve been crushing your morning sessions. Your focus score peaks between 9 AM and 11 AM—try blocking a
+              deep-work session mid-week to keep the streak alive.
             </p>
           </div>
+
+          {!isPro && (
+            <button
+              onClick={onUpgrade}
+              className="ml-3 inline-flex items-center whitespace-nowrap rounded-xl border border-gold/40 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-gold hover:bg-gold/10 transition-colors"
+            >
+              <Crown size={12} className="mr-1" />
+              Upgrade
+            </button>
+          )}
         </div>
       </div>
 
@@ -875,7 +911,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
       {/* 2. Charts & Sessions Grid */}
       <div className="flex flex-col gap-6">
-        
         {/* This Week Summary Card */}
         <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg">
           <div className="flex items-center justify-between mb-4">
@@ -886,23 +921,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="flex flex-col">
               <span className="text-xs uppercase tracking-wide text-text-muted">Focus Hours</span>
-              <span className="text-xl font-semibold text-text-main">
-                {metrics.weeklyFocusHours.toFixed(1)}
-              </span>
+              <span className="text-xl font-semibold text-text-main">{metrics.weeklyFocusHours.toFixed(1)}</span>
             </div>
 
             <div className="flex flex-col">
               <span className="text-xs uppercase tracking-wide text-text-muted">Sessions</span>
-              <span className="text-xl font-semibold text-text-main">
-                {metrics.weeklySessionsCount}
-              </span>
+              <span className="text-xl font-semibold text-text-main">{metrics.weeklySessionsCount}</span>
             </div>
 
             <div className="flex flex-col">
               <span className="text-xs uppercase tracking-wide text-text-muted">Active Days</span>
-              <span className="text-xl font-semibold text-text-main">
-                {metrics.weeklyActiveDays}
-              </span>
+              <span className="text-xl font-semibold text-text-main">{metrics.weeklyActiveDays}</span>
             </div>
 
             <div className="flex flex-col">
@@ -922,14 +951,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
                 <Zap size={18} className="text-gold" /> Consistency Heatmap
               </h3>
-              
+
               <div className="flex items-center gap-3">
                 <div className="inline-flex items-center rounded-full bg-background/60 border border-white/5 text-[11px] overflow-hidden">
                   {[
                     { key: 'productivity', label: 'Productivity', locked: false },
                     { key: 'consistency', label: 'Consistency', locked: !isPro },
-                    { key: 'goals', label: 'Deep-Work Quality', locked: !isPro },
-                  ].map((mode) => (
+                    { key: 'goals', label: 'Deep-Work Quality', locked: !isPro }
+                  ].map(mode => (
                     <button
                       key={mode.key}
                       type="button"
@@ -962,14 +991,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                     {[
                       { label: 'Mon', dayIndex: 1 },
                       { label: 'Wed', dayIndex: 3 },
-                      { label: 'Fri', dayIndex: 5 },
+                      { label: 'Fri', dayIndex: 5 }
                     ].map(({ label, dayIndex }) => (
                       <span
                         key={label}
                         className="absolute right-0 flex items-center justify-end"
                         style={{
                           top: 20 + dayIndex * GRID_OFFSET,
-                          height: CELL_SIZE,
+                          height: CELL_SIZE
                         }}
                       >
                         {label}
@@ -981,14 +1010,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                   <div className="flex flex-col gap-[3px]">
                     {/* Month labels */}
                     <div className="relative h-[16px]" style={{ width: GRID_WIDTH }}>
-                      {monthLabels.map((item) => (
+                      {monthLabels.map(item => (
                         <span
                           key={item.month}
                           className="absolute text-[10px] text-text-muted -translate-x-1/2"
                           style={{
                             left: item.colIndex * GRID_OFFSET + CELL_SIZE / 2,
                             top: 0,
-                            whiteSpace: 'nowrap',
+                            whiteSpace: 'nowrap'
                           }}
                         >
                           {MONTH_NAMES[item.month]}
@@ -1007,7 +1036,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                         const left = weekIndex * GRID_OFFSET;
                         const top = dayOfWeek * GRID_OFFSET;
                         const isBottomRow = dayOfWeek >= 4;
-                        const isFilled = day.isInCurrentYear && day.count > 0;
 
                         return (
                           <div
@@ -1017,11 +1045,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                               width: CELL_SIZE,
                               height: CELL_SIZE,
                               left,
-                              top,
+                              top
                             }}
                           >
                             <div
-                                className={`
+                              className={`
                               w-full h-full rounded-[3px]
                               transition-transform transition-shadow duration-150 ease-out
                               ${day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent border border-transparent'}
@@ -1041,7 +1069,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                                   {day.date.toLocaleDateString([], {
                                     month: 'short',
                                     day: 'numeric',
-                                    year: 'numeric',
+                                    year: 'numeric'
                                   })}
                                 </p>
                                 <p className="font-bold mt-0.5">
@@ -1092,7 +1120,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
             <div className="space-y-4 flex-1">
               {metrics.scheduledSessions.length > 0 ? (
-                metrics.scheduledSessions.map((session) => (
+                metrics.scheduledSessions.map(session => (
                   <div
                     key={session.id}
                     className="group p-3 rounded-xl bg-background/50 border border-white/5 hover:bg-background hover:border-gold/30 transition-all cursor-pointer"
@@ -1102,13 +1130,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                         <span className="text-xs font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
                           {new Date(session.scheduled_at).toLocaleDateString([], {
                             month: 'short',
-                            day: 'numeric',
+                            day: 'numeric'
                           })}
                         </span>
                         <span className="text-sm font-bold text-text-main">
                           {new Date(session.scheduled_at).toLocaleTimeString([], {
                             hour: '2-digit',
-                            minute: '2-digit',
+                            minute: '2-digit'
                           })}
                         </span>
                       </div>
@@ -1138,7 +1166,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
 
             <div className="mt-4 pt-2">
-              <button 
+              <button
                 onClick={() => setShowScheduleModal(true)}
                 className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20"
               >
@@ -1150,9 +1178,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
         {/* 5. NEW ROW: AI Roadmap + Pro Insights */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
           {/* Kova Pro Goal Intelligence (Roadmap + Predictions) */}
-          <div className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${!isPro ? 'cursor-not-allowed' : ''}`}>
+          <div
+            className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${
+              !isPro ? 'cursor-not-allowed' : ''
+            }`}
+          >
             {isPro && (
               <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
                 <Sparkles size={12} /> AI Roadmap
@@ -1176,9 +1207,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               <div className="space-y-3 mb-5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] uppercase tracking-wide text-text-muted">AI Weekly Roadmap</span>
-                  <span className="text-[10px] text-text-muted/80">
-                    Preview
-                  </span>
+                  <span className="text-[10px] text-text-muted/80">Preview</span>
                 </div>
 
                 {roadmapPreview.length > 0 ? (
@@ -1192,9 +1221,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                           {idx + 1}
                         </div>
                         <div className="flex-1">
-                          <p className="text-xs font-medium text-text-main line-clamp-1">
-                            {goal.text}
-                          </p>
+                          <p className="text-xs font-medium text-text-main line-clamp-1">{goal.text}</p>
                           <p className="text-[10px] text-text-muted mt-0.5">
                             {goal.completed ? 'Marked complete — reinforcing habit' : 'High leverage for this week'}
                           </p>
@@ -1212,9 +1239,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               {/* Prediction section */}
               <div className="mt-auto pt-4 border-t border-white/5">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                    Predicted completion
-                  </span>
+                  <span className="text-[11px] uppercase tracking-wide text-text-muted">Predicted completion</span>
                   <span className="text-[11px] text-text-muted">
                     Confidence: <span className="text-gold font-semibold">{confidence}%</span>
                   </span>
@@ -1235,17 +1260,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               <>
                 <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
-                    <Lock size={28} className="text-background" />
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-2xl bg-gold/40 blur-xl opacity-80 animate-pulse" />
+                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
+                      <Lock size={28} className="text-background" />
+                    </div>
                   </div>
 
                   <div className="space-y-1 max-w-xs">
                     <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
                       Kova Pro Feature
                     </p>
-                    <p className="text-sm text-text-muted">
-                      AI-crafted roadmap for faster, smarter progress.
-                    </p>
+                    <p className="text-sm text-text-muted">AI-crafted roadmap for faster, smarter progress.</p>
                   </div>
 
                   <button
@@ -1258,11 +1284,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                 </div>
               </>
             )}
-
           </div>
 
           {/* Kova Pro Insights (Locked/Unlocked) */}
-          <div className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${!isPro ? 'cursor-not-allowed' : ''}`}>
+          <div
+            className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${
+              !isPro ? 'cursor-not-allowed' : ''
+            }`}
+          >
             {isPro && (
               <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
                 <Crown size={12} fill="currentColor" /> Pro Enabled
@@ -1283,28 +1312,36 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg"><BarChart2 size={16} /></div>
+                    <div className="p-2 bg-surface rounded-lg">
+                      <BarChart2 size={16} />
+                    </div>
                     <span className="text-sm font-medium">30-day focus trendline</span>
                   </div>
                   {!isPro && <Lock size={12} />}
                 </div>
                 <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg"><Clock size={16} /></div>
+                    <div className="p-2 bg-surface rounded-lg">
+                      <Clock size={16} />
+                    </div>
                     <span className="text-sm font-medium">Best days & times for deep work</span>
                   </div>
                   {!isPro && <Lock size={12} />}
                 </div>
                 <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg"><Users size={16} /></div>
+                    <div className="p-2 bg-surface rounded-lg">
+                      <Users size={16} />
+                    </div>
                     <span className="text-sm font-medium">Top accountability partners</span>
                   </div>
                   {!isPro && <Lock size={12} />}
                 </div>
                 <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg"><Shield size={16} /></div>
+                    <div className="p-2 bg-surface rounded-lg">
+                      <Shield size={16} />
+                    </div>
                     <span className="text-sm font-medium">Streak protection predictions</span>
                   </div>
                   {!isPro && <Lock size={12} />}
@@ -1317,20 +1354,21 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                 <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
 
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
-                    <Lock size={28} className="text-background" />
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-2xl bg-gold/40 blur-xl opacity-80 animate-pulse" />
+                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
+                      <Lock size={28} className="text-background" />
+                    </div>
                   </div>
 
                   <div className="space-y-1 max-w-xs">
                     <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
                       Kova Pro Feature
                     </p>
-                    <p className="text-sm text-text-muted">
-                      Deep performance insights that refine your focus.
-                    </p>
+                    <p className="text-sm text-text-muted">Deep performance insights that refine your focus.</p>
                   </div>
 
-                  <button 
+                  <button
                     onClick={onUpgrade}
                     className="mt-2 px-6 py-3 bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold rounded-xl shadow-xl border border-gold/70 hover:shadow-[0_0_35px_rgba(234,179,8,0.7)] transition-all flex items-center gap-2"
                   >
@@ -1340,11 +1378,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                 </div>
               </>
             )}
-
           </div>
-
         </div>
-
       </div>
     </div>
   );

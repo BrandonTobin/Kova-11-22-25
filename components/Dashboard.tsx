@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Badge, Goal, isProUser, Match } from '../types';
 import { supabase } from '../supabaseClient';
 import {
@@ -35,9 +35,9 @@ interface DashboardProps {
 
 interface CalendarDay {
   date: Date;
-  dateKey: string; // 'YYYY-MM-DD'
-  count: number; // raw activity count
-  intensity: number; // 0-4
+  dateKey: string;
+  count: number;
+  intensity: number;
   isInCurrentYear: boolean;
 }
 
@@ -65,7 +65,7 @@ interface ScheduledSession {
   partner_email?: string;
 }
 
-// Kova Color Palette
+// Heatmap colors
 const getHeatmapColor = (intensity: number) => {
   switch (intensity) {
     case 4:
@@ -163,7 +163,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const filteredMatches = matches.filter(m => 
+  const filteredMatches = matches.filter(m =>
     getDisplayName(m.user.name).toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -174,43 +174,42 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
     try {
       const startDateTime = new Date(`${date}T${time}`);
       const sessionsToCreate = [];
-      
-      const title = selectedMatch 
+
+      const title = selectedMatch
         ? `Co-working with ${getDisplayName(selectedMatch.user.name)}`
         : 'Solo Focus Session';
-        
+
       const partnerEmail = selectedMatch?.user.email || null;
 
-      // Generate occurrences based on recurrence
       let count = 1;
-      if (recurrence === 'daily') count = 5; // Schedule next 5 days
-      if (recurrence === 'weekly') count = 4; // Schedule next 4 weeks
-      if (recurrence === 'monthly') count = 3; // Schedule next 3 months
+      if (recurrence === 'daily') count = 5;
+      if (recurrence === 'weekly') count = 4;
+      if (recurrence === 'monthly') count = 3;
 
       for (let i = 0; i < count; i++) {
         const sessionDate = new Date(startDateTime);
-        
+
         if (recurrence === 'daily') sessionDate.setDate(sessionDate.getDate() + i);
-        if (recurrence === 'weekly') sessionDate.setDate(sessionDate.getDate() + (i * 7));
+        if (recurrence === 'weekly') sessionDate.setDate(sessionDate.getDate() + i * 7);
         if (recurrence === 'monthly') sessionDate.setMonth(sessionDate.getMonth() + i);
 
         sessionsToCreate.push({
           user_id: userId,
           partner_email: partnerEmail,
-          title: title,
-          scheduled_at: sessionDate.toISOString(),
+          title,
+          scheduled_at: sessionDate.toISOString()
         });
       }
 
       const { error } = await supabase.from('scheduled_sessions').insert(sessionsToCreate);
-      
+
       if (error) throw error;
-      
+
       onSchedule();
       onClose();
     } catch (err) {
-      console.error("Scheduling failed:", err);
-      alert("Failed to schedule session.");
+      console.error('Scheduling failed:', err);
+      alert('Failed to schedule session.');
     } finally {
       setIsSubmitting(false);
     }
@@ -221,7 +220,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
       <div className="bg-surface w-full max-w-md rounded-3xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-text-main">Schedule Session</h3>
-          <button onClick={onClose} className="text-text-muted hover:text-white"><X size={24}/></button>
+          <button onClick={onClose} className="text-text-muted hover:text-white"><X size={24} /></button>
         </div>
 
         <div className="space-y-5">
@@ -232,33 +231,33 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
                 <Search size={16} />
               </div>
-              <input 
-                type="text" 
-                placeholder="Search matches..." 
+              <input
+                type="text"
+                placeholder="Search matches..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
               />
             </div>
-            
+
             <div className="mt-2 max-h-32 overflow-y-auto border border-white/5 rounded-xl bg-background/50 no-scrollbar">
-              <div 
+              <div
                 onClick={() => setSelectedMatch(null)}
                 className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 ${!selectedMatch ? 'bg-primary/10' : ''}`}
               >
-                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary"><Users size={14} /></div>
-                 <span className="text-sm font-medium">Solo Session</span>
-                 {!selectedMatch && <Check size={16} className="ml-auto text-primary" />}
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary"><Users size={14} /></div>
+                <span className="text-sm font-medium">Solo Session</span>
+                {!selectedMatch && <Check size={16} className="ml-auto text-primary" />}
               </div>
               {filteredMatches.map(match => (
-                <div 
-                  key={match.id} 
+                <div
+                  key={match.id}
                   onClick={() => setSelectedMatch(match)}
                   className={`p-3 flex items-center gap-3 cursor-pointer hover:bg-white/5 border-b border-white/5 last:border-0 ${selectedMatch?.id === match.id ? 'bg-primary/10' : ''}`}
                 >
-                   <img src={match.user.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
-                   <span className="text-sm font-medium">{getDisplayName(match.user.name)}</span>
-                   {selectedMatch?.id === match.id && <Check size={16} className="ml-auto text-primary" />}
+                  <img src={match.user.imageUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                  <span className="text-sm font-medium">{getDisplayName(match.user.name)}</span>
+                  {selectedMatch?.id === match.id && <Check size={16} className="ml-auto text-primary" />}
                 </div>
               ))}
             </div>
@@ -266,52 +265,52 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
 
           {/* 2. Date & Time */}
           <div className="grid grid-cols-2 gap-4">
-             <div>
-                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Date</label>
-                <input 
-                  type="date" 
-                  value={date}
-                  onChange={e => setDate(e.target.value)}
-                  className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
-                />
-             </div>
-             <div>
-                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Time</label>
-                <input 
-                  type="time" 
-                  value={time}
-                  onChange={e => setTime(e.target.value)}
-                  className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
-                />
-             </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Date</label>
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Time</label>
+              <input
+                type="time"
+                value={time}
+                onChange={e => setTime(e.target.value)}
+                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+              />
+            </div>
           </div>
 
           {/* 3. Recurrence */}
           <div>
-             <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Repeat</label>
-             <div className="relative">
-                <select 
-                  value={recurrence} 
-                  onChange={(e) => setRecurrence(e.target.value as any)}
-                  className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none appearance-none"
-                >
-                   <option value="none">Just Once</option>
-                   <option value="daily">Daily (Next 5 Days)</option>
-                   <option value="weekly">Weekly (Next 4 Weeks)</option>
-                   <option value="monthly">Monthly (Next 3 Months)</option>
-                </select>
-                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
-                   <ChevronDown size={16} />
-                </div>
-             </div>
+            <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Repeat</label>
+            <div className="relative">
+              <select
+                value={recurrence}
+                onChange={(e) => setRecurrence(e.target.value as any)}
+                className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none appearance-none"
+              >
+                <option value="none">Just Once</option>
+                <option value="daily">Daily (Next 5 Days)</option>
+                <option value="weekly">Weekly (Next 4 Weeks)</option>
+                <option value="monthly">Monthly (Next 3 Months)</option>
+              </select>
+              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
+                <ChevronDown size={16} />
+              </div>
+            </div>
           </div>
 
-          <button 
+          <button
             onClick={handleSchedule}
             disabled={!date || !time || isSubmitting}
             className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary-hover transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "Confirm Schedule"}
+            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : 'Confirm Schedule'}
           </button>
         </div>
       </div>
@@ -340,8 +339,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
       setHeatmapMode(mode);
       return;
     }
-    
-    // Gating for Consistency and Goals
+
     if (!isPro) {
       onUpgrade();
     } else {
@@ -358,7 +356,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
       setIsLoading(true);
       setError('');
 
-      // Skip data loading for the mock user used in onboarding
+      // demo user shortcut
       if (user.id === '00000000-0000-0000-0000-000000000000') {
         const fakeCalendarDays: CalendarDay[] = [];
         const now = new Date();
@@ -395,7 +393,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             { id: '2', text: 'Find Co-founder', completed: false }
           ],
           weeklyMessages: [
-            { name: 'Sun', value: 2 }, { name: 'Mon', value: 5 }, { name: 'Tue', value: 3 }, 
+            { name: 'Sun', value: 2 }, { name: 'Mon', value: 5 }, { name: 'Tue', value: 3 },
             { name: 'Wed', value: 6 }, { name: 'Thu', value: 4 }, { name: 'Fri', value: 8 }, { name: 'Sat', value: 3 }
           ],
           calendarDaysProductivity: fakeCalendarDays,
@@ -423,7 +421,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(now.getDate() - 14);
 
-        // --- 1. Fetch Sessions ---
+        // 1. Sessions
         const { data: sessions } = await supabase
           .from('sessions')
           .select('started_at, ended_at')
@@ -458,16 +456,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           lastWeekMinutes > 0
             ? Math.round(((thisWeekMinutes - lastWeekMinutes) / lastWeekMinutes) * 100)
             : thisWeekMinutes > 0
-            ? 100
-            : 0;
+              ? 100
+              : 0;
 
-        // --- 2. Fetch Goals ---
+        // 2. Goals
         const { data: goalsData } = await supabase.from('goals').select('*').eq('user_id', user.id);
 
         const totalGoals = goalsData?.length || 0;
         const completedGoals = goalsData?.filter((g: any) => g.completed).length || 0;
 
-        // --- 3. Weekly Focus (Hours per day from sessions) ---
+        // 3. Weekly Focus chart
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const weeklyMinutesMap = new Map<string, number>();
 
@@ -505,7 +503,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         const weeklyAvgSessionMinutes =
           thisWeekSessionsCount > 0 ? thisWeekMinutes / thisWeekSessionsCount : 0;
 
-        // --- 4. Consistency Heatmap ---
+        // 4. Consistency heatmap
         const startIso = startOfYear.toISOString();
         const endIso = endOfYear.toISOString();
 
@@ -534,7 +532,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         const consistencyCounts = new Map<string, number>();
         const goalCounts = new Map<string, number>();
 
-        // 4.1 Productivity Mode
+        // Productivity: minutes per day
         sessions?.forEach((s: any) => {
           const startTime = new Date(s.started_at);
           const endTime = s.ended_at ? new Date(s.ended_at) : null;
@@ -546,7 +544,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           productivityCounts.set(dateKey, (productivityCounts.get(dateKey) || 0) + minutes);
         });
 
-        // 4.2 Consistency Mode
+        // Consistency: interactions per day
         const recordConsistency = (isoDate: string) => {
           const dateKey = new Date(isoDate).toLocaleDateString('en-CA');
           consistencyCounts.set(dateKey, (consistencyCounts.get(dateKey) || 0) + 1);
@@ -555,7 +553,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         recentMsgs?.forEach((m: any) => recordConsistency(m.created_at));
         recentSessions?.forEach((s: any) => recordConsistency(s.started_at));
 
-        // 4.3 Goal Progress Mode
+        // Goals: completed per day
         goalsData?.forEach((g: any) => {
           if (!g.completed) return;
           const dateStr = g.completed_at || g.created_at;
@@ -567,7 +565,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
         const buildCalendarDays = (countsMap: Map<string, number>): CalendarDay[] => {
           const calendarDays: CalendarDay[] = [];
-          
+
           const startDayOfWeek = startOfYear.getDay();
           const gridStart = new Date(startOfYear);
           gridStart.setDate(startOfYear.getDate() - startDayOfWeek);
@@ -590,7 +588,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               dateKey,
               count,
               intensity: isInYear && !isFuture ? intensity : 0,
-              isInCurrentYear: isInYear,
+              isInCurrentYear: isInYear
             });
 
             d.setDate(d.getDate() + 1);
@@ -602,7 +600,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         const calendarDaysConsistency = buildCalendarDays(consistencyCounts);
         const calendarDaysGoals = buildCalendarDays(goalCounts);
 
-        // --- 5. Upcoming Sessions ---
+        // 5. Upcoming sessions
         const { data: scheduled } = await supabase
           .from('scheduled_sessions')
           .select('*')
@@ -625,7 +623,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           weeklyFocusHours,
           weeklySessionsCount: thisWeekSessionsCount,
           weeklyActiveDays,
-          weeklyAvgSessionMinutes,
+          weeklyAvgSessionMinutes
         });
       } catch (err) {
         console.error('Dashboard data load error:', err);
@@ -644,8 +642,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
     ? heatmapMode === 'productivity'
       ? metrics.calendarDaysProductivity
       : heatmapMode === 'consistency'
-      ? metrics.calendarDaysConsistency
-      : metrics.calendarDaysGoals
+        ? metrics.calendarDaysConsistency
+        : metrics.calendarDaysGoals
     : [];
 
   const monthLabels: { month: number; colIndex: number }[] = [];
@@ -681,7 +679,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
     );
   }
 
-  // Find index of last in-year day
+  // visible weeks calc
   const lastInYearIndex = calendarDays.reduceRight(
     (acc, day, index) => (acc === -1 && day.isInCurrentYear ? index : acc),
     -1
@@ -697,7 +695,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   const GRID_WIDTH = safeVisibleWeeks * GRID_OFFSET - CELL_GAP;
   const GRID_HEIGHT = 7 * CELL_SIZE + 6 * CELL_GAP;
 
-  // --------- NEW: derived data for Kova Pro Goal Intelligence card ----------
+  // --- Derived data for AI roadmap card preview ---
   const activeGoalsForRoadmap = metrics.goals.filter(g => !g.completed);
   const fallbackRoadmapSource =
     activeGoalsForRoadmap.length > 0 ? activeGoalsForRoadmap : metrics.goals;
@@ -718,15 +716,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   const completionRatio =
     totalGoalsCount > 0 ? completedGoalsCount / totalGoalsCount : 0;
   const confidence = Math.round(60 + completionRatio * 35);
-  // -------------------------------------------------------------------------
 
   return (
     <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
       {/* Schedule Modal */}
       {showScheduleModal && (
-        <ScheduleModal 
-          matches={matches} 
-          onClose={() => setShowScheduleModal(false)} 
+        <ScheduleModal
+          matches={matches}
+          onClose={() => setShowScheduleModal(false)}
           onSchedule={handleScheduleComplete}
           userId={user.id}
         />
@@ -786,7 +783,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         <p className="text-text-muted">Here's your growth overview.</p>
       </header>
 
-      {/* 1. AI Insights Box */}
+      {/* AI Insight banner */}
       <div className="bg-gradient-to-r from-primary/40 via-background to-background border border-gold/30 p-6 rounded-2xl mb-8 relative overflow-hidden shadow-lg">
         <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-gold/10 rounded-full blur-3xl"></div>
         <div className="flex items-start gap-4 relative z-10">
@@ -808,7 +805,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         </div>
       </div>
 
-      {/* Key Stats Row */}
+      {/* Top stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="bg-surface p-5 rounded-2xl border border-white/5 shadow-lg hover:border-gold/20 transition-colors group">
           <div className="flex items-center justify-between mb-4">
@@ -864,10 +861,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         </div>
       </div>
 
-      {/* 2. Charts & Sessions Grid */}
+      {/* Main content */}
       <div className="flex flex-col gap-6">
-        
-        {/* This Week Summary Card */}
+        {/* Weekly summary */}
         <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-text-main">This Week Summary</h3>
@@ -905,15 +901,15 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           </div>
         </div>
 
-        {/* Bottom Row: Heatmap & Upcoming Sessions */}
+        {/* Heatmap + upcoming sessions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 3. Consistency Heatmap */}
+          {/* Heatmap */}
           <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
                 <Zap size={18} className="text-gold" /> Consistency Heatmap
               </h3>
-              
+
               <div className="flex items-center gap-3">
                 <div className="inline-flex items-center rounded-full bg-background/60 border border-white/5 text-[11px] overflow-hidden">
                   {[
@@ -941,7 +937,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               </div>
             </div>
 
-            {/* Heatmap Container */}
+            {/* Heatmap container with scale + glow */}
             <div className="w-full pb-2 overflow-hidden relative">
               <div className="origin-top-left scale-[0.45] lg:scale-[0.5] xl:scale-[0.65] 2xl:scale-[0.8] min-[1900px]:scale-100">
                 <div className="flex items-start gap-4 w-full justify-center min-w-max">
@@ -968,7 +964,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                     ))}
                   </div>
 
-                  {/* Right side: months + grid */}
+                  {/* Months + grid */}
                   <div className="flex flex-col gap-[3px]">
                     {/* Month labels */}
                     <div className="relative h-[16px]" style={{ width: GRID_WIDTH }}>
@@ -987,7 +983,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       ))}
                     </div>
 
-                    {/* Heatmap grid */}
+                    {/* Grid */}
                     <div className="relative" style={{ width: GRID_WIDTH, height: GRID_HEIGHT }}>
                       {calendarDays.map((day, index) => {
                         const weekIndex = Math.floor(index / 7);
@@ -1071,7 +1067,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
           </div>
 
-          {/* 4. Upcoming Sessions */}
+          {/* Upcoming sessions */}
           <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main">Upcoming Sessions</h3>
@@ -1125,7 +1121,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
 
             <div className="mt-4 pt-2">
-              <button 
+              <button
                 onClick={() => setShowScheduleModal(true)}
                 className="w-full py-3 rounded-xl bg-primary/10 text-primary font-medium text-sm hover:bg-primary/20 transition-colors flex items-center justify-center gap-2 border border-primary/20"
               >
@@ -1135,10 +1131,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           </div>
         </div>
 
-        {/* 5. NEW ROW: AI Roadmap + Pro Insights */}
+        {/* Bottom row: AI Roadmap + Pro Insights */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
-          {/* Kova Pro Goal Intelligence (Roadmap + Predictions) */}
+          {/* AI Roadmap / Goal Intelligence */}
           <div className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${!isPro ? 'cursor-not-allowed' : ''}`}>
             {isPro && (
               <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
@@ -1217,41 +1212,37 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               </div>
             </div>
 
-            {/* Lock overlay for free users */}
+            {/* LOCKED OVERLAY - LEFT CARD */}
             {!isPro && (
-  <>
-    {/* Softer blur + see-through */}
-    <div className="absolute inset-0 bg-background/55 backdrop-blur-md z-10" />
+              <>
+                <div className="absolute inset-0 bg-background/55 backdrop-blur-md z-10" />
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
+                    <Lock size={28} className="text-background" />
+                  </div>
 
-    {/* Centered premium lock + CTA */}
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
-        <Lock size={28} className="text-background" />
-      </div>
+                  <div className="space-y-1 max-w-xs">
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
+                      KOVA PRO FEATURE
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      Unlock your AI-generated roadmap, predicted completion dates, and confidence scores.
+                    </p>
+                  </div>
 
-      <div className="space-y-1 max-w-xs">
-        <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
-          Kova Pro Feature
-        </p>
-        <p className="text-sm text-text-muted">
-          Unlock your AI-generated roadmap, predicted completion dates, and confidence scores.
-        </p>
-      </div>
-
-      <button
-        onClick={onUpgrade}
-        className="mt-2 px-6 py-3 rounded-xl bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold shadow-xl border border-gold/70 hover:shadow-[0_0_35px_rgba(234,179,8,0.7)] transition-all flex items-center gap-2"
-      >
-        <Lock size={16} className="text-surface" />
-        Unlock AI Roadmap — Kova Pro
-      </button>
-    </div>
-  </>
-)}
-
+                  <button
+                    onClick={onUpgrade}
+                    className="mt-2 px-6 py-3 rounded-xl bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold shadow-xl border border-gold/70 hover:shadow-[0_0_35px_rgba(234,179,8,0.7)] transition-all flex items-center gap-2"
+                  >
+                    <Crown size={16} className="text-surface" />
+                    Upgrade to Kova Pro
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Kova Pro Insights (Locked/Unlocked) */}
+          {/* Pro Insights */}
           <div className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${!isPro ? 'cursor-not-allowed' : ''}`}>
             {isPro && (
               <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
@@ -1302,41 +1293,36 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               </div>
             </div>
 
-            {/* Lock Overlay with Frosted Glass Effect */}
-           {!isPro && (
-  <>
-    {/* Softer, premium blur */}
-    <div className="absolute inset-0 bg-background/55 backdrop-blur-md z-10" />
+            {/* LOCKED OVERLAY - RIGHT CARD */}
+            {!isPro && (
+              <>
+                <div className="absolute inset-0 bg-background/55 backdrop-blur-md z-10" />
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
+                    <Lock size={28} className="text-background" />
+                  </div>
 
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
-      <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
-        <Lock size={28} className="text-background" />
-      </div>
+                  <div className="space-y-1 max-w-xs">
+                    <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
+                      KOVA PRO FEATURE
+                    </p>
+                    <p className="text-sm text-text-muted">
+                      See 30-day trends, best deep-work windows, top partners, and streak-risk predictions.
+                    </p>
+                  </div>
 
-      <div className="space-y-1 max-w-xs">
-        <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
-          Kova Pro Insights
-        </p>
-        <p className="text-sm text-text-muted">
-          See 30-day trends, best deep-work windows, top partners, and streak-risk predictions.
-        </p>
-      </div>
-
-      <button 
-        onClick={onUpgrade}
-        className="mt-2 px-6 py-3 bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold rounded-xl shadow-xl border border-gold/70 hover:shadow-[0_0_35px_rgba(234,179,8,0.7)] transition-all flex items-center gap-2"
-      >
-        <Crown size={16} className="text-surface" />
-        Upgrade to Kova Pro
-      </button>
-    </div>
-  </>
-)}
-
+                  <button
+                    onClick={onUpgrade}
+                    className="mt-2 px-6 py-3 bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold rounded-xl shadow-xl border border-gold/70 hover:shadow-[0_0_35px_rgba(234,179,8,0.7)] transition-all flex items-center gap-2"
+                  >
+                    <Crown size={16} className="text-surface" />
+                    Upgrade to Kova Pro
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-
         </div>
-
       </div>
     </div>
   );

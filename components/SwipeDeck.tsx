@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from 'framer-motion';
 import { User } from '../types';
@@ -17,6 +16,10 @@ interface SwipeDeckProps {
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, isPro = false, onUpgrade }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [exitX, setExitX] = useState<number | null>(null);
+
+  // NEW: state for match popup
+  const [showMatchPopup, setShowMatchPopup] = useState(false);
+  const [matchedUser, setMatchedUser] = useState<User | null>(null);
 
   const activeUser = users[currentIndex];
   const nextUser = users[currentIndex + 1];
@@ -47,7 +50,29 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, i
 
   const handleSwipe = (direction: 'left' | 'right') => {
     const userSwiped = activeUser;
-    onSwipe(direction, userSwiped);
+    if (!userSwiped) return;
+
+    // call the provided onSwipe, but allow it to optionally return match info
+    const result = (onSwipe as any)(direction, userSwiped);
+
+    // Only care about potential matches on right swipes
+    const handlePossibleMatch = (res: any) => {
+      if (direction !== 'right' || !res) return;
+      if (res.isMatch) {
+        const targetUser: User = res.matchedUser || userSwiped;
+        setMatchedUser(targetUser);
+        setShowMatchPopup(true);
+      }
+    };
+
+    // support both sync and async onSwipe implementations
+    if (result && typeof result.then === 'function') {
+      (result as Promise<any>).then(handlePossibleMatch).catch(() => {
+        /* ignore errors for popup purposes */
+      });
+    } else {
+      handlePossibleMatch(result);
+    }
 
     setCurrentIndex((prev) => prev + 1);
     setExitX(null);
@@ -240,6 +265,52 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, i
             {isLikesExhausted ? <Lock size={28} /> : <Check size={32} className="group-hover:scale-110 transition-transform" />}
           </button>
       </div>
+
+      {/* MATCH POPUP OVERLAY */}
+      {showMatchPopup && matchedUser && (
+        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-surface border border-gold/30 rounded-3xl shadow-2xl max-w-sm w-full p-6 relative text-center">
+            <button
+              type="button"
+              className="absolute top-3 right-3 text-text-muted hover:text-white transition-colors"
+              onClick={() => setShowMatchPopup(false)}
+            >
+              <X size={18} />
+            </button>
+
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-gold tracking-[0.2em] uppercase mb-1">
+                It&apos;s a Match
+              </h3>
+              <h2 className="text-2xl font-bold text-text-main">
+                You connected with {getDisplayName(matchedUser.name)}
+              </h2>
+            </div>
+
+            <div className="flex flex-col items-center mb-6">
+              <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-gold/60 shadow-lg mb-3">
+                <img
+                  src={matchedUser.imageUrl || DEFAULT_PROFILE_IMAGE}
+                  alt={matchedUser.name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                />
+              </div>
+              <p className="text-text-muted text-sm">
+                Start building something big together.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowMatchPopup(false)}
+              className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover transition-colors shadow-md"
+            >
+              Continue Swiping
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -410,42 +409,88 @@ function App() {
     setCurrentView(ViewState.LOGIN);
   };
 
+  // MUTUAL-ONLY MATCHES: popup only when *both* users have swiped right
   const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
     if (!user) return;
 
-    setUsersToSwipe(prev => prev.filter(u => u.id !== swipedUser.id));
+    // Don't touch usersToSwipe here – SwipeDeck controls the visible card
+
+    // Increment daily swipes on right-swipe
     if (direction === 'right') {
-        setDailySwipes(prev => prev + 1);
+      setDailySwipes(prev => prev + 1);
     }
 
-    await supabase.from('swipes').insert([{
+    // Record swipe
+    const { error: swipeError } = await supabase.from('swipes').insert([{
       swiper_id: user.id,
       swiped_id: swipedUser.id,
       direction: direction
     }]);
 
-    if (direction === 'right') {
-      const { data: reciprocal } = await supabase
-        .from('swipes')
-        .select('*')
-        .eq('swiper_id', swipedUser.id)
-        .eq('swiped_id', user.id)
-        .eq('direction', 'right')
-        .single();
+    if (swipeError) {
+      console.error('Error inserting swipe:', swipeError);
+      return;
+    }
 
-      if (reciprocal) {
-        const { data: matchData, error } = await supabase
-          .from('matches')
-          .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
-          .select()
-          .single();
+    // Only proceed to match logic on right swipes
+    if (direction !== 'right') return;
 
-        if (!error && matchData) {
-          setNewMatch(swipedUser);
-          setShowMatchPopup(true);
-          fetchMatches();
-        }
-      }
+    // 1) Check if the other user has already swiped right on you
+    const { data: reciprocal, error: reciprocalError } = await supabase
+      .from('swipes')
+      .select('id')
+      .eq('swiper_id', swipedUser.id)
+      .eq('swiped_id', user.id)
+      .eq('direction', 'right')
+      .maybeSingle();
+
+    if (reciprocalError) {
+      console.error('Error checking reciprocal swipe:', reciprocalError);
+      return;
+    }
+
+    // No reciprocal right swipe yet → no match
+    if (!reciprocal) return;
+
+    // 2) Check if a match already exists in either direction
+    const { data: existingMatch, error: existingError } = await supabase
+      .from('matches')
+      .select('id')
+      .or(
+        `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`
+      )
+      .maybeSingle();
+
+    if (existingError) {
+      console.error('Error checking existing match:', existingError);
+      return;
+    }
+
+    // If match already exists, just show popup so it feels responsive
+    if (existingMatch) {
+      setNewMatch(swipedUser);
+      setShowMatchPopup(true);
+      fetchMatches();
+      return;
+    }
+
+    // 3) Create a new match row
+    const { data: matchData, error: matchError } = await supabase
+      .from('matches')
+      .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
+      .select()
+      .single();
+
+    if (matchError) {
+      console.error('Error creating match:', matchError);
+      return;
+    }
+
+    if (matchData) {
+      // Show popup + refresh list
+      setNewMatch(swipedUser);
+      setShowMatchPopup(true);
+      fetchMatches();
     }
   };
 
@@ -667,8 +712,9 @@ function App() {
             {currentView === ViewState.PROFILE && (
               <div className="h-full p-4 md:p-6 overflow-y-auto">
                   <ProfileEditor 
-                    user={user} 
-                    onSave={handleUpdateProfile} 
+                    user={user}
+                    matches={matches}
+                    onSave={handleUpdateProfile}
                     onUpgrade={() => setShowUpgradeModal(true)}
                   />
               </div>

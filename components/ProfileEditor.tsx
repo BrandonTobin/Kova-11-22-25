@@ -662,18 +662,18 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                     {c.imageUrl ? (
                       <img
                         src={c.imageUrl}
-                        alt={getDisplayName(c.name, c.email)}
+                        alt={getDisplayName(c.name || c.email)}
                         className="w-9 h-9 rounded-full object-cover"
                       />
                     ) : (
                       <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
-                        {getDisplayName(c.name, c.email).charAt(0).toUpperCase()}
+                        {getDisplayName(c.name || c.email).charAt(0).toUpperCase()}
                       </div>
                     )}
 
                     <div className="flex-1">
                       <p className="text-sm font-medium text-text-main">
-                        {getDisplayName(c.name, c.email)}
+                        {getDisplayName(c.name || c.email)}
                       </p>
                       {/* Only name shown – no “connect” buttons or anything */}
                     </div>

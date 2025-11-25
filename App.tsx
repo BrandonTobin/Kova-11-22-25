@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
 import RegisterScreen from './components/RegisterScreen';
+import OnboardingScreen from './components/OnboardingScreen';
 import SwipeDeck from './components/SwipeDeck';
 import MatchPopup from './components/MatchPopup';
 import ChatInterface from './components/ChatInterface';
@@ -18,6 +19,14 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [showRegister, setShowRegister] = useState(false);
+
+  // --- State: Onboarding ---
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('kova_seen_onboarding') === 'true';
+    }
+    return false;
+  });
 
   // --- State: App Data ---
   const [usersToSwipe, setUsersToSwipe] = useState<User[]>([]);
@@ -616,7 +625,16 @@ function App() {
       </div>
     );
   } else if (!user) {
-    if (showRegister) {
+    if (!hasSeenOnboarding) {
+      content = (
+        <OnboardingScreen
+          onFinish={() => {
+            setHasSeenOnboarding(true);
+            localStorage.setItem('kova_seen_onboarding', 'true');
+          }}
+        />
+      );
+    } else if (showRegister) {
       content = (
         <RegisterScreen 
           onRegister={handleRegister} 
@@ -713,9 +731,9 @@ function App() {
               <div className="h-full p-4 md:p-6 overflow-y-auto">
                   <ProfileEditor 
                     user={user}
-                    matches={matches}
                     onSave={handleUpdateProfile}
                     onUpgrade={() => setShowUpgradeModal(true)}
+                    matches={matches}
                   />
               </div>
             )}

@@ -1244,7 +1244,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       Kova Pro Feature
                     </p>
                     <p className="text-sm text-text-muted">
-                      Unlock your AI-generated roadmap, predicted completion dates, and confidence scores.
+                      AI-crafted roadmap for faster, smarter progress.
                     </p>
                   </div>
 
@@ -1326,7 +1326,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       Kova Pro Feature
                     </p>
                     <p className="text-sm text-text-muted">
-                      See 30-day trends, best deep-work windows, top partners, and streak-risk predictions.
+                      Deep performance insights that refine your focus.
                     </p>
                   </div>
 

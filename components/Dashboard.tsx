@@ -69,7 +69,7 @@ interface ScheduledSession {
 const getHeatmapColor = (intensity: number) => {
   switch (intensity) {
     case 4:
-      return 'bg-gold shadow-[0_0_8px_rgba(214,167,86,0.5)] border border-gold/50';
+      return 'bg-gold border border-gold/50';
     case 3:
       return 'bg-primary/40 border border-primary/20';
     case 2:
@@ -934,7 +934,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
 
             {/* Heatmap Container - Scrollable if too narrow */}
-            <div className="w-full pb-2 overflow-x-auto no-scrollbar">
+            <div className="w-full pb-2 overflow-hidden relative">
+              <div className='origin-top-left scale-[0.45] lg:scale-[0.5] xl:scale-[0.65] 2xl:scale-[0.8] min-[1900px]:scale-100'>
               <div className="flex items-start gap-4 w-full justify-center min-w-max">
                 {/* Y-axis labels (Mon / Wed / Fri) */}
                 <div
@@ -993,7 +994,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       
                       // Flip tooltip for bottom rows (Thu-Sat) to prevent clipping
                       const isBottomRow = dayOfWeek >= 4; 
-
+                      
                       return (
                         <div
                           key={day.dateKey}
@@ -1006,9 +1007,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                           }}
                         >
                           <div
-                            className={`w-full h-full rounded-[3px] transition-all duration-300 ${
-                              day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent'
-                            }`}
+                            className={`
+                              w-full h-full rounded-[3px]
+                              transition-transform transition-shadow duration-150 ease-out
+                              ${day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent border border-transparent'}
+                              ${day.count > 0 ? 'shadow-[0_0_4px_rgba(214,167,86,0.35)]' : ''}
+                              group-hover:scale-110 group-hover:shadow-[0_0_14px_rgba(214,167,86,0.7)] group-hover:z-10
+                              animate-in fade-in
+                            `}
                           />
                           {day.isInCurrentYear && (
                             <div className={`absolute ${isBottomRow ? 'bottom-full mb-1' : 'top-full mt-1'} left-1/2 -translate-x-1/2 hidden group-hover:block z-50 w-max px-2.5 py-1.5 bg-background text-text-main text-xs rounded-lg shadow-xl border border-white/10 pointer-events-none`}>
@@ -1032,6 +1038,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                   </div>
                 </div>
               </div>
+              </div>
             </div>
 
             {/* Legend */}
@@ -1050,7 +1057,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                 <div className="w-[15px] h-[15px] rounded-[2px] bg-primary/40 border border-primary/20"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[15px] h-[15px] rounded-[2px] bg-gold shadow-[0_0_4px_rgba(214,167,86,0.5)] border border-gold/50"></div>
+                <div className="w-[15px] h-[15px] rounded-[2px] bg-gold border border-gold/50 shadow-[0_0_8px_rgba(214,167,86,0.25)]"></div>
               </div>
               <span className="ml-1">More</span>
             </div>
@@ -1169,7 +1176,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           </div>
 
           {/* Kova Pro Insights (Locked/Unlocked) */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden">
+          <div className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${!isPro ? 'cursor-not-allowed' : ''}`}>
              
              {isPro && (
                <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
@@ -1177,8 +1184,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                </div>
              )}
 
-             {/* Content (Muted if free) */}
-             <div className={`${isPro ? '' : 'opacity-40 pointer-events-none filter grayscale-[50%]'} flex-1 flex flex-col`}>
+             {/* Content */}
+             <div className={`flex-1 flex flex-col transition-all duration-300`}>
                 <div className="flex items-center justify-between mb-6">
                    <div>
                       <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
@@ -1221,16 +1228,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                 </div>
              </div>
 
-             {/* Lock Overlay Action */}
+             {/* Lock Overlay with Frosted Glass Effect */}
              {!isPro && (
-               <div className="absolute inset-0 flex flex-col items-center justify-end pb-6 bg-gradient-to-t from-surface via-surface/20 to-transparent z-10">
-                  <button 
-                    onClick={onUpgrade}
-                    className="px-6 py-3 bg-background border border-white/10 text-text-muted hover:text-gold font-bold rounded-xl text-sm flex items-center gap-2 opacity-100 hover:border-gold/30 transition-all shadow-xl"
-                  >
-                     <Lock size={14} /> Coming Soon — Kova Pro
-                  </button>
-               </div>
+               <>
+                 <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-300" />
+                 
+                 <div className="absolute inset-0 flex flex-col items-center justify-end pb-8 z-20">
+                    <button 
+                      onClick={onUpgrade}
+                      className="px-6 py-3 bg-surface/80 backdrop-blur-md border border-white/10 text-text-muted hover:text-gold font-bold rounded-xl text-sm flex items-center gap-2 opacity-100 hover:border-gold/30 transition-all shadow-xl"
+                    >
+                       <Lock size={14} /> Coming Soon — Kova Pro
+                    </button>
+                 </div>
+               </>
              )}
           </div>
 

@@ -289,7 +289,7 @@ function App() {
     setAuthError('');
 
     try {
-      // 1) See if a profile with this email already exists
+      // 1) See if a profile with this email already exists (safety check)
       const { data: existing } = await supabase
         .from('users')
         .select('id')
@@ -302,7 +302,6 @@ function App() {
         return;
       }
 
-      // Ensure we actually have a password passed in from RegisterScreen
       const password = newUser.password ?? '';
       if (!password) {
         setAuthError('Password is missing. Please try registering again.');
@@ -324,8 +323,8 @@ function App() {
       }
 
       // 3) Handle Profile Picture Upload
-      // newUser.imageUrl currently has the ui-avatars fallback from RegisterScreen.
-      // We overwrite it if a file is provided and successfully uploaded.
+      // newUser.imageUrl comes from RegisterScreen with the ui-avatars fallback.
+      // We overwrite it ONLY if a file is successfully uploaded.
       let finalImageUrl = newUser.imageUrl; 
       
       if (profileImage && authData.user) {
@@ -342,7 +341,7 @@ function App() {
 
           if (uploadError) {
              console.error("Failed to upload profile image:", uploadError);
-             // If upload fails, finalImageUrl remains the fallback
+             // On fail, finalImageUrl remains the fallback
           } else {
              const { data: publicUrlData } = supabase.storage
                .from('avatars')
@@ -454,6 +453,7 @@ function App() {
   const handleUpdateProfile = async (updatedUser: User, profileImage?: File) => {
     if (!user) return;
     setIsLoading(true);
+
 
     let finalImageUrl = user.imageUrl; // Default to current URL
 
@@ -578,6 +578,7 @@ function App() {
           onBack={() => setShowRegister(false)}
           isLoading={isLoading}
           error={authError}
+          onClearError={() => setAuthError('')}
         />
       );
     } else {

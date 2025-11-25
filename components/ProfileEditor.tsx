@@ -102,19 +102,18 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade }
 
   // Re-sync if user prop changes externally
   useEffect(() => {
-    if (!isEditing) {
-      setFormData({
-        ...user,
-        location: user.location || { city: '', state: '' },
-        skills: user.skills || [],
-        lookingFor: user.lookingFor || [],
-        availability: user.availability || [],
-        goalsList: user.goalsList || [],
-        links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' }
-      });
-      setImageFile(null);
-    }
-  }, [user, isEditing]);
+  setFormData({
+    ...user,
+    location: user.location || { city: '', state: '' },
+    skills: user.skills || [],
+    lookingFor: user.lookingFor || [],
+    availability: user.availability || [],
+    goalsList: user.goalsList || [],
+    links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' }
+  });
+  setImageFile(null);
+}, [user]);
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

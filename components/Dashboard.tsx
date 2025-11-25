@@ -555,14 +555,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         recentMsgs?.forEach((m: any) => recordConsistency(m.created_at));
         recentSessions?.forEach((s: any) => recordConsistency(s.started_at));
 
-        // 4.3 Goal Progress Mode
-        goalsData?.forEach((g: any) => {
-          if (!g.completed) return;
-          const dateStr = g.completed_at || g.created_at;
-          if (!dateStr) return;
+        // 4.3 Deep-Work Quality Mode (replaces Goal Progress logic)
+        sessions?.forEach((s: any) => {
+          const startTime = new Date(s.started_at);
+          const endTime = s.ended_at ? new Date(s.ended_at) : null;
+          if (!endTime) return;
 
-          const dateKey = new Date(dateStr).toLocaleDateString('en-CA');
-          goalCounts.set(dateKey, (goalCounts.get(dateKey) || 0) + 1);
+          const minutes = Math.max(0, Math.round((endTime.getTime() - startTime.getTime()) / 60000));
+          const dateKey = startTime.toLocaleDateString('en-CA');
+
+          // Heuristic:
+          // 1 point roughly every 15 mins
+          // Bonus +2 points for long deep work sessions (> 50 mins)
+          let sessionScore = Math.floor(minutes / 15);
+          if (minutes > 50) sessionScore += 2;
+          if (sessionScore === 0 && minutes > 5) sessionScore = 1; // Minimum score for short sessions
+
+          goalCounts.set(dateKey, (goalCounts.get(dateKey) || 0) + sessionScore);
         });
 
         const buildCalendarDays = (countsMap: Map<string, number>): CalendarDay[] => {
@@ -919,7 +928,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                   {[
                     { key: 'productivity', label: 'Productivity', locked: false },
                     { key: 'consistency', label: 'Consistency', locked: !isPro },
-                    { key: 'goals', label: 'Goal Progress', locked: !isPro },
+                    { key: 'goals', label: 'Deep-Work Quality', locked: !isPro },
                   ].map((mode) => (
                     <button
                       key={mode.key}
@@ -1012,7 +1021,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                             }}
                           >
                             <div
-                              className={`
+                                className={`
                               w-full h-full rounded-[3px]
                               transition-transform transition-shadow duration-150 ease-out
                               ${day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent border border-transparent'}
@@ -1038,6 +1047,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                                 <p className="font-bold mt-0.5">
                                   {day.count === 0
                                     ? 'No activity'
+                                    : heatmapMode === 'goals'
+                                    ? `Deep-Work Score: ${day.count}`
                                     : `${day.count} contribution${day.count !== 1 ? 's' : ''}`}
                                 </p>
                               </div>
@@ -1222,7 +1233,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             {/* Lock overlay for free users */}
             {!isPro && (
               <>
-                <div className="absolute inset-0 bg-background/55 backdrop-blur-md z-10" />
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
                     <Lock size={28} className="text-background" />
@@ -1303,7 +1314,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
             {!isPro && (
               <>
-                <div className="absolute inset-0 bg-background/55 backdrop-blur-md z-10" />
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
 
                 <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
                   <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">

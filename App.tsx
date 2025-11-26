@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -208,8 +209,8 @@ function App() {
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
 
     if (data) {
-      const formattedMatches: Match[] = data
-        .map((m: any) => {
+      // Use Promise.all to fetch last messages asynchronously for each match
+      const formattedMatchesResults = await Promise.all(data.map(async (m: any) => {
           if (!m.user1 || !m.user2) return null;
 
           const otherUserRaw = m.user1.id === user.id ? m.user2 : m.user1;
@@ -231,16 +232,36 @@ function App() {
               links: otherUserRaw.links
           };
 
+          // Fetch the most recent message for this match
+          let lastMessageText = null;
+          let lastMessageAt = null;
+
+          const { data: lastMsgData } = await supabase
+            .from('messages')
+            .select('text, created_at')
+            .eq('match_id', m.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          if (lastMsgData) {
+            lastMessageText = lastMsgData.text;
+            lastMessageAt = lastMsgData.created_at;
+          }
+
           return {
               id: m.id,
               user: otherUser,
               timestamp: new Date(m.created_at),
-              unread: 0
-          };
+              unread: 0,
+              lastMessageText,
+              lastMessageAt
+          } as Match;
         })
-        .filter((m): m is Match => m !== null);
+      );
 
-      setMatches(formattedMatches);
+      const validMatches = formattedMatchesResults.filter((m): m is Match => m !== null);
+      setMatches(validMatches);
     }
   };
 

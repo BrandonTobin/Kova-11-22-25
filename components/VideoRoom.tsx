@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Webcam from 'react-webcam';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft, MessageSquare, Send } from 'lucide-react';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft, MessageSquare, Send } from 'lucide-react';
 import { Match, Goal, User } from '../types';
 import { generateSharedGoals, generateMeetingSummary } from '../services/geminiService';
-import { startSession, endSession } from '../services/sessionService'; // Import Session Service
+import { startSession, endSession } from '../services/sessionService';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
+import { supabase } from '../supabaseClient';
 
 interface VideoRoomProps {
-  match: Match; // The initial person called
-  allMatches: Match[]; // All available matches to invite
+  match: Match;
+  allMatches: Match[];
   currentUser: User;
   onEndCall: () => void;
   onReturnToDashboard: () => void;
@@ -23,19 +23,28 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+// WebRTC Config
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+};
+
 const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, onEndCall, onReturnToDashboard }) => {
   // Call State
   const [participants, setParticipants] = useState<Match[]>([match]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
-  // Local Media State
+  // Media State
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+
   // Tools State
-  // Changed from activeTab to activeTool, removed 'chat' as a tab since it's now permanent
   const [activeTool, setActiveTool] = useState<'goals' | 'notes'>('goals');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoal, setNewGoal] = useState('');
@@ -47,61 +56,192 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   
-  // Screen share ref
+  // Refs for WebRTC & Media
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const peerConnection = useRef<RTCPeerConnection | null>(null);
+  const channelRef = useRef<any>(null);
+  const isInitiator = useRef<boolean>(false);
 
   // Summary State
   const [showSummary, setShowSummary] = useState(false);
   const [summaryText, setSummaryText] = useState('');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
-  // --- Session Tracking ---
+  // --- 1. Initialize Session & Media ---
   useEffect(() => {
-    // Only start if we don't have a session ID yet
     if (!sessionId && currentUser && match?.user) {
       startSession(currentUser.id, match.user.id).then((id) => {
         if (id) setSessionId(id);
       });
     }
-    
-    // Note: We rely on explicit "End Call" actions to close the session, 
-    // matching the user's instruction to handle it via buttons.
-  }, []); // Run once on mount
 
-  // Mock goals init (You can replace this with Supabase goals later if needed)
-  useEffect(() => {
+    const initMedia = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setLocalStream(stream);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+        initializePeerConnection(stream);
+      } catch (err) {
+        console.error("Error accessing media devices:", err);
+      }
+    };
+
+    initMedia();
+
+    // Mock goals init
     setGoals([
         { id: '1', text: 'Intro & Catch up (5 min)', completed: true },
         { id: '2', text: 'Silent Focus Block (25 min)', completed: false },
         { id: '3', text: 'Review & Feedback (10 min)', completed: false },
     ]);
     
-    // Initial system message
-    setChatMessages([
-      {
+    setChatMessages([{
         id: 'system-1',
         senderId: 'system',
         senderName: 'System',
-        text: 'Welcome to the video room! Use this chat to share links or text.',
+        text: 'Welcome to the video room! Connecting to secure channel...',
         timestamp: new Date()
-      }
-    ]);
+    }]);
+
+    return () => {
+      cleanupCall();
+    };
   }, []);
 
-  // Auto-scroll chat - scroll whenever messages change
+  // --- 2. WebRTC & Signaling Logic ---
+  const initializePeerConnection = (stream: MediaStream) => {
+    // Determine if we are the initiator based on ID sort order to avoid glare
+    // Lower ID = Caller (Initiator)
+    isInitiator.current = currentUser.id < match.user.id;
+
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    peerConnection.current = pc;
+
+    // Add local tracks
+    stream.getTracks().forEach(track => {
+      pc.addTrack(track, stream);
+    });
+
+    // Handle ICE candidates
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        channelRef.current?.send({
+          type: 'broadcast',
+          event: 'ice-candidate',
+          payload: { candidate: event.candidate }
+        });
+      }
+    };
+
+    // Handle Remote Stream
+    pc.ontrack = (event) => {
+      setRemoteStream(event.streams[0]);
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = event.streams[0];
+      }
+    };
+
+    // Set up Signaling Channel
+    const channel = supabase.channel(`video-signaling:${match.id}`);
+    channelRef.current = channel;
+
+    channel
+      .on('broadcast', { event: 'ice-candidate' }, ({ payload }: any) => {
+        if (peerConnection.current && payload.candidate) {
+          peerConnection.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        }
+      })
+      .on('broadcast', { event: 'offer' }, async ({ payload }: any) => {
+        if (!peerConnection.current) return;
+        
+        if (isInitiator.current) {
+           // Glare resolution: If we are the initiator but received an offer, 
+           // normally this shouldn't happen with ID sorting, but safe to ignore or handle.
+           // With strict ID sorting, the higher ID (callee) should always accept the offer.
+        }
+
+        await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        const answer = await peerConnection.current.createAnswer();
+        await peerConnection.current.setLocalDescription(answer);
+        
+        channel.send({
+          type: 'broadcast',
+          event: 'answer',
+          payload: { sdp: answer }
+        });
+      })
+      .on('broadcast', { event: 'answer' }, async ({ payload }: any) => {
+        if (peerConnection.current) {
+          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        }
+      })
+      .on('broadcast', { event: 'hello' }, () => {
+        // Received Hello from a peer. If I am initiator, start call.
+        // Also reply Welcome so they know I'm here.
+        channel.send({ type: 'broadcast', event: 'welcome', payload: {} });
+        if (isInitiator.current) startCall();
+      })
+      .on('broadcast', { event: 'welcome' }, () => {
+        // Received Welcome. If I am initiator, start call.
+        if (isInitiator.current) startCall();
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          // Announce presence
+          channel.send({ type: 'broadcast', event: 'hello', payload: {} });
+        }
+      });
+  };
+
+  const startCall = async () => {
+    if (!peerConnection.current) return;
+    // If already connected/connecting, don't restart
+    if (peerConnection.current.signalingState !== 'stable') return;
+
+    const offer = await peerConnection.current.createOffer();
+    await peerConnection.current.setLocalDescription(offer);
+
+    channelRef.current?.send({
+      type: 'broadcast',
+      event: 'offer',
+      payload: { sdp: offer }
+    });
+  };
+
+  const cleanupCall = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    if (peerConnection.current) {
+      peerConnection.current.close();
+    }
+    if (channelRef.current) {
+      channelRef.current.unsubscribe();
+    }
+  };
+
+  // --- UI & Logic Handlers (Existing) ---
+
+  // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  // Cleanup screen share on unmount
+  // React to cam/mic toggles
   useEffect(() => {
-    return () => {
-      if (screenStreamRef.current) {
-        screenStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
+    if (localStream) {
+      localStream.getVideoTracks().forEach(track => track.enabled = camOn);
+      localStream.getAudioTracks().forEach(track => track.enabled = micOn);
+    }
+  }, [camOn, micOn, localStream]);
 
   const toggleGoal = (id: string) => {
     setGoals(goals.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
@@ -138,33 +278,47 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
     setChatMessages(prev => [...prev, newMessage]);
     setChatInput('');
-    
-    // Note: In a real implementation, you would emit this message via Supabase Realtime 
-    // or WebSockets here so other participants receive it.
+    // In a full app, you'd broadcast this chat message over the signaling channel too
   };
 
   const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      // Stop sharing
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(track => track.stop());
         screenStreamRef.current = null;
       }
       setIsScreenSharing(false);
+      // Switch back to cam if available
+      if (localStream && peerConnection.current) {
+         const videoTrack = localStream.getVideoTracks()[0];
+         const senders = peerConnection.current.getSenders();
+         const sender = senders.find(s => s.track?.kind === 'video');
+         if (sender && videoTrack) sender.replaceTrack(videoTrack);
+      }
     } else {
-      // Start sharing
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
         screenStreamRef.current = stream;
         setIsScreenSharing(true);
 
-        // Handle user clicking "Stop sharing" via browser UI
-        stream.getVideoTracks()[0].onended = () => {
-          setIsScreenSharing(false);
-          screenStreamRef.current = null;
-        };
+        // Switch sender track
+        if (peerConnection.current) {
+           const screenTrack = stream.getVideoTracks()[0];
+           const senders = peerConnection.current.getSenders();
+           const sender = senders.find(s => s.track?.kind === 'video');
+           if (sender) sender.replaceTrack(screenTrack);
+           
+           screenTrack.onended = () => {
+              setIsScreenSharing(false);
+              screenStreamRef.current = null;
+              // Revert to camera
+              if (localStream) {
+                 const camTrack = localStream.getVideoTracks()[0];
+                 if (camTrack) sender.replaceTrack(camTrack);
+              }
+           };
+        }
 
-        // Attach to video element after state update and render
         setTimeout(() => {
           if (screenShareVideoRef.current) {
             screenShareVideoRef.current.srcObject = stream;
@@ -177,49 +331,27 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     }
   };
 
-  const handleEndCall = async () => {
-    // End session tracking explicitly
-    if (sessionId) {
-      try {
-        await endSession(sessionId);
-      } catch (e) {
-        console.error('Failed to end session', e);
-      }
-    }
-    onEndCall();
-  };
-
-  const handleReturnToDashboard = async () => {
-     if (sessionId) {
-      try {
-        await endSession(sessionId);
-      } catch (e) {
-        console.error('Failed to end session', e);
-      }
-    }
-    onReturnToDashboard();
-  };
-
   const handleEndCallClick = async () => {
-    // Stop screen share if active before ending
     if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(track => track.stop());
     }
-    
     setIsGeneratingSummary(true);
     try {
       const summary = await generateMeetingSummary(goals, notes);
       setSummaryText(summary);
       setIsGeneratingSummary(false);
       setShowSummary(true);
-      
-      // We do NOT end the DB session here yet. 
-      // We wait until the user clicks "Back to Dashboard" in the summary modal
-      // OR if the summary generation fails and we fallback.
     } catch (e) {
-      // Fallback if error, just exit and close session
-      handleEndCall();
+      handleReturnToDashboard(); // Fallback
     }
+  };
+
+  const handleReturnToDashboard = async () => {
+     if (sessionId) {
+      try { await endSession(sessionId); } catch (e) {}
+    }
+    cleanupCall();
+    onReturnToDashboard();
   };
 
   const inviteParticipant = (newMatch: Match) => {
@@ -229,8 +361,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     setShowInviteModal(false);
   };
 
-  // Dynamic Grid Layout Calculation
-  const totalPeople = participants.length + 1; // Remote + Local
+  const totalPeople = participants.length + 1;
   const getGridClass = () => {
     if (totalPeople === 1) return 'grid-cols-1';
     if (totalPeople === 2) return 'grid-cols-1 md:grid-cols-2';
@@ -254,7 +385,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                  <X size={24} />
                </button>
             </div>
-            
             <div className="max-h-[300px] overflow-y-auto space-y-2 mb-4 pr-2">
                {allMatches.filter(m => !participants.find(p => p.id === m.id)).length === 0 ? (
                  <p className="text-center text-text-muted py-8">No other available matches to invite.</p>
@@ -289,7 +419,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         </div>
       )}
 
-      {/* AI Summary Modal Overlay */}
+      {/* AI Summary Modal */}
       {(isGeneratingSummary || showSummary) && (
         <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
           {isGeneratingSummary ? (
@@ -314,23 +444,10 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                     <p className="text-text-muted">Here's what you achieved today</p>
                   </div>
                </div>
-               
                <div className="bg-background rounded-2xl p-6 mb-8 border border-white/10 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-primary to-gold"></div>
                   <p className="text-lg text-text-main leading-relaxed italic">"{summaryText}"</p>
                </div>
-
-               <div className="grid grid-cols-2 gap-4 mb-8">
-                  <div className="bg-background p-4 rounded-xl border border-white/10 flex flex-col items-center">
-                     <span className="text-3xl font-bold text-secondary">{goals.filter(g => g.completed).length}</span>
-                     <span className="text-xs text-text-muted uppercase font-bold tracking-wider mt-1">Goals Done</span>
-                  </div>
-                  <div className="bg-background p-4 rounded-xl border border-white/10 flex flex-col items-center">
-                     <span className="text-3xl font-bold text-text-main">{goals.length}</span>
-                     <span className="text-xs text-text-muted uppercase font-bold tracking-wider mt-1">Total Goals</span>
-                  </div>
-               </div>
-
                <button 
                  onClick={handleReturnToDashboard}
                  className="w-full py-4 bg-primary text-white font-bold rounded-xl hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
@@ -342,19 +459,19 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         </div>
       )}
 
-      {/* Main Video Section (Takes Priority on Mobile) */}
+      {/* Main Video Section */}
       <div className="flex-1 flex flex-col relative h-full min-h-0">
         
-        {/* Mobile Top Bar (Only visible on small screens) */}
+        {/* Mobile Top Bar */}
         <div className="md:hidden h-14 bg-surface border-b border-white/5 flex items-center justify-between px-4 shrink-0 z-10 pr-20">
            <button onClick={handleReturnToDashboard} className="p-2 text-text-muted hover:text-white">
               <ArrowLeft size={20} />
            </button>
            <span className="font-bold text-text-main text-sm">Co-working Session</span>
-           <div className="w-8"></div> {/* Spacer for balance */}
+           <div className="w-8"></div>
         </div>
 
-        {/* Video Grid - Scrolls if too many participants */}
+        {/* Video Grid */}
         <div className={`flex-1 grid ${getGridClass()} gap-4 p-4 overflow-y-auto`}>
           
           {/* 1. Local User (You) */}
@@ -367,15 +484,18 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                 muted 
                 className="w-full h-full object-contain bg-black"
               />
-            ) : camOn ? (
-              // @ts-ignore
-              <Webcam
-                audio={false}
-                className="w-full h-full object-cover transform scale-x-[-1]"
-                mirrored={true}
-              />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-background text-text-muted">
+              <video 
+                ref={localVideoRef}
+                autoPlay 
+                playsInline 
+                muted 
+                className={`w-full h-full object-cover transform scale-x-[-1] ${!camOn ? 'hidden' : ''}`}
+              />
+            )}
+            
+            {(!camOn && !isScreenSharing) && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background text-text-muted">
                 <VideoOff size={48} />
               </div>
             )}
@@ -393,20 +513,35 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           {/* 2. Remote Participants */}
           {participants.map((participant) => (
             <div key={participant.id} className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[180px]">
-              <img 
-                src={participant.user.imageUrl} 
-                alt={participant.user.name} 
-                className="w-full h-full object-cover" 
-                onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-              />
+              {participant.id === match.id && remoteStream ? (
+                <video 
+                  ref={remoteVideoRef}
+                  autoPlay 
+                  playsInline 
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <>
+                  <img 
+                    src={participant.user.imageUrl} 
+                    alt={participant.user.name} 
+                    className="w-full h-full object-cover filter blur-sm opacity-50" 
+                    onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                  />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                     <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-white/10 mb-3 shadow-xl">
+                        <img src={participant.user.imageUrl} className="w-full h-full object-cover" />
+                     </div>
+                     <p className="text-white font-bold text-lg drop-shadow-md">Waiting for {getDisplayName(participant.user.name)}...</p>
+                  </div>
+                </>
+              )}
               
-              {/* Name Tag */}
               <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded-lg text-sm font-medium backdrop-blur-sm text-white flex items-center gap-2">
                 {getDisplayName(participant.user.name)}
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                <span className={`w-2 h-2 rounded-full ${remoteStream ? 'bg-green-500' : 'bg-yellow-500'} animate-pulse`}></span>
               </div>
               
-              {/* Role Badge */}
               <div className="absolute top-4 right-4 bg-primary/80 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
                 {participant.user.role}
               </div>
@@ -414,12 +549,11 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           ))}
         </div>
 
-        {/* Controls Bar - Always visible, scrolls horizontally on small screens */}
+        {/* Controls Bar */}
         <div className="h-20 bg-surface border-t border-white/5 flex items-center justify-center gap-3 md:gap-6 px-4 shrink-0 overflow-x-auto no-scrollbar">
           <button 
             onClick={() => setMicOn(!micOn)}
             className={`p-3 md:p-4 rounded-full transition-all border shrink-0 ${micOn ? 'bg-background hover:bg-primary hover:border-primary border-white/10' : 'bg-red-500 hover:bg-red-600 border-red-500'}`}
-            title={micOn ? "Mute Microphone" : "Unmute Microphone"}
           >
             {micOn ? <Mic size={20} className="text-text-main" /> : <MicOff size={20} className="text-white" />}
           </button>
@@ -428,24 +562,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
             onClick={() => setCamOn(!camOn)}
             disabled={isScreenSharing}
             className={`p-3 md:p-4 rounded-full transition-all border shrink-0 ${camOn ? 'bg-background hover:bg-primary hover:border-primary border-white/10' : 'bg-red-500 hover:bg-red-600 border-red-500'} ${isScreenSharing ? 'opacity-50 cursor-not-allowed' : ''}`}
-            title={camOn ? "Turn Off Camera" : "Turn On Camera"}
           >
-            {camOn ? <Video size={20} className="text-text-main" /> : <VideoOff size={20} className="text-white" />}
+            {camOn ? <VideoIcon size={20} className="text-text-main" /> : <VideoOff size={20} className="text-white" />}
           </button>
 
           <button 
             onClick={toggleScreenShare}
             className={`p-3 md:p-4 rounded-full transition-all border shrink-0 ${isScreenSharing ? 'bg-blue-600 hover:bg-blue-700 border-blue-600 text-white' : 'bg-background hover:bg-primary hover:border-primary border-white/10 text-text-main'}`}
-            title={isScreenSharing ? "Stop Sharing" : "Share Screen"}
           >
             {isScreenSharing ? <MonitorOff size={20} /> : <Monitor size={20} />}
           </button>
 
-          {/* Invite Guest Button */}
           <button 
             onClick={() => setShowInviteModal(true)}
             className="p-3 md:p-4 rounded-full transition-all border shrink-0 bg-background hover:bg-gold hover:border-gold border-white/10 text-text-main hover:text-white group"
-            title="Add Guest"
           >
              <Users size={20} className="group-hover:scale-110 transition-transform" />
           </button>
@@ -455,17 +585,16 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           <button 
             onClick={handleEndCallClick}
             className="p-3 md:p-4 rounded-full bg-red-600 hover:bg-red-700 text-white transition-all px-6 md:px-8 shadow-lg shadow-red-900/20 shrink-0"
-            title="End Call"
           >
             <PhoneOff size={20} />
           </button>
         </div>
       </div>
 
-      {/* Sidebar Tools & Chat - Split vertically */}
+      {/* Sidebar Tools & Chat */}
       <div className="w-full md:w-96 bg-surface border-t md:border-t-0 md:border-l border-white/5 flex flex-col h-[50vh] md:h-full shrink-0">
         
-        {/* TOP HALF: Tools (Checklist / Notes) */}
+        {/* TOP HALF: Tools */}
         <div className="flex-1 flex flex-col min-h-0 border-b border-white/10">
           <div className="flex border-b border-white/5 bg-black/20 shrink-0">
             <button 
@@ -547,14 +676,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           </div>
         </div>
 
-        {/* BOTTOM HALF: Chat (Always Visible) */}
+        {/* BOTTOM HALF: Chat */}
         <div className="h-[45%] md:h-[50%] flex flex-col bg-background/50 border-t border-white/10 shrink-0">
              <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2 shrink-0 bg-surface/30">
                  <MessageSquare size={14} className="text-text-muted" />
                  <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Session Chat</span>
              </div>
 
-             {/* Messages Area */}
              <div className="flex-1 overflow-y-auto space-y-3 p-4">
                 {chatMessages.length === 0 && (
                    <div className="text-center text-text-muted text-xs mt-4 opacity-60">
@@ -595,7 +723,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                 <div ref={chatEndRef} />
              </div>
 
-             {/* Input Area */}
              <div className="p-3 border-t border-white/5 bg-surface shrink-0">
                 <div className="flex gap-2 items-center">
                    <input

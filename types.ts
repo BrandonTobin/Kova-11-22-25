@@ -88,6 +88,9 @@ export interface Match {
   lastMessage?: string;
   timestamp: Date;
   unread: number;
+  // New fields for sorting and preview
+  lastMessageText?: string | null;
+  lastMessageAt?: string | null; // ISO string
 }
 
 export interface Message {

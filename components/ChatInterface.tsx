@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Send, Video, Sparkles, Bot, UserPlus, Search, Loader2, ArrowLeft, 
   MapPin, Flag, Tag, Clock, UserMinus, X, Briefcase, Globe, Target, 
@@ -33,6 +34,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   
+  // Local state to track live message updates for sorting/previews (keyed by matchId)
+  const [liveMessageUpdates, setLiveMessageUpdates] = useState<Record<string, { text: string, timestamp: Date }>>({});
+
   // Search Matches State
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -52,10 +56,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const selectedMatch = matches.find(m => m.id === selectedMatchId);
+  
+  // Merge props with live updates to determine sorting
+  const mergedMatches = useMemo(() => {
+    return matches.map(m => {
+      const update = liveMessageUpdates[m.id];
+      if (update) {
+        return {
+          ...m,
+          lastMessageText: update.text,
+          lastMessageAt: update.timestamp.toISOString()
+        };
+      }
+      return m;
+    });
+  }, [matches, liveMessageUpdates]);
+
+  // Sort matches by latest activity (lastMessageAt or timestamp)
+  const sortedMatches = useMemo(() => {
+    return [...mergedMatches].sort((a, b) => {
+      const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+      const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+      return timeB - timeA;
+    });
+  }, [mergedMatches]);
+
+  const selectedMatch = sortedMatches.find(m => m.id === selectedMatchId) || matches.find(m => m.id === selectedMatchId);
 
   // Filter Matches based on search
-  const filteredMatches = matches.filter((match) => {
+  const filteredMatches = sortedMatches.filter((match) => {
     const rawName = match.user.name || '';
     const displayName = getDisplayName(rawName);
     return displayName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -170,13 +199,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
           if (!isMounted) return;
 
           const newRow = payload.new as any;
+          const timestamp = parseSupabaseTimestamp(newRow.created_at || newRow.timestamp);
+          
           const newMsg: Message = {
             id: newRow.id,
             matchId: newRow.match_id,
             senderId: newRow.sender_id,
             text: newRow.text,
             // Explicitly convert to Date object for local time rendering
-            timestamp: parseSupabaseTimestamp(newRow.created_at || newRow.timestamp)
+            timestamp: timestamp
           };
 
           setMessages((prev) => {
@@ -184,6 +215,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
             if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
+
+          // Update the live tracker for sorting/preview
+          setLiveMessageUpdates(prev => ({
+            ...prev,
+            [newRow.match_id]: {
+              text: newRow.text,
+              timestamp: timestamp
+            }
+          }));
         }
       )
       .subscribe();
@@ -198,17 +238,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
   const handleSendMessage = async (text: string = inputText) => {
     if (!text.trim() || !selectedMatchId || !currentUser) return;
 
+    const now = new Date();
+
     // Optimistic Update (Show immediately in UI with local time)
     const optimisticMsg: Message = {
       id: `temp-${Date.now()}`,
       matchId: selectedMatchId,
       senderId: currentUser.id,
       text: text,
-      timestamp: new Date(), // Local browser time
+      timestamp: now, // Local browser time
     };
 
     setMessages(prev => [...prev, optimisticMsg]);
     setInputText('');
+
+    // Immediately update live tracker to jump conversation to top
+    setLiveMessageUpdates(prev => ({
+      ...prev,
+      [selectedMatchId]: {
+        text: text,
+        timestamp: now
+      }
+    }));
 
     try {
       // Save to Supabase
@@ -227,6 +278,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
       
       // Update state after successful send
       if (data) {
+         const realTimestamp = new Date(data.created_at);
          setMessages(prev => {
              // Check if the Realtime subscription already added the real message while we were waiting
              const alreadyHasRealMsg = prev.some(m => m.id === data.id);
@@ -240,10 +292,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                      ...m, 
                      id: data.id,
                      // Ensure newly created timestamp is also converted to Date object
-                     timestamp: new Date(data.created_at)
+                     timestamp: realTimestamp
                  } : m);
              }
          });
+         
+         // Confirm live tracker with DB timestamp
+         setLiveMessageUpdates(prev => ({
+            ...prev,
+            [selectedMatchId]: {
+              text: text,
+              timestamp: realTimestamp
+            }
+         }));
       }
 
     } catch (err) {
@@ -698,35 +759,41 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                  <p className="text-center text-text-muted p-6 text-sm">No matches found.</p>
              )
           ) : (
-            filteredMatches.map((match) => (
-              <div
-                key={match.id}
-                onClick={() => setSelectedMatchId(match.id)}
-                className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${selectedMatchId === match.id ? 'bg-background/80 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}`}
-              >
-                <div className="relative">
-                  <img 
-                    src={match.user.imageUrl} 
-                    alt={match.user.name} 
-                    className="w-12 h-12 rounded-full object-cover border border-white/10" 
-                    onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-                  />
-                  {/* Simple Online Indicator (Mock) */}
-                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-surface"></div>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline mb-1">
-                    <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>
-                      {getDisplayName(match.user.name)}
-                    </h3>
-                    <span className="text-[10px] text-text-muted shrink-0 ml-2">
-                      {formatSidebarDate(match.timestamp)}
-                    </span>
+            filteredMatches.map((match) => {
+              const previewText = match.lastMessageText || 'Chat started';
+              const truncatedPreview = previewText.length > 40 ? previewText.slice(0, 40) + '…' : previewText;
+              const timeToDisplay = match.lastMessageAt ? formatSidebarDate(match.lastMessageAt) : formatSidebarDate(match.timestamp);
+
+              return (
+                <div
+                  key={match.id}
+                  onClick={() => setSelectedMatchId(match.id)}
+                  className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${selectedMatchId === match.id ? 'bg-background/80 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}`}
+                >
+                  <div className="relative">
+                    <img 
+                      src={match.user.imageUrl} 
+                      alt={match.user.name} 
+                      className="w-12 h-12 rounded-full object-cover border border-white/10" 
+                      onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                    />
+                    {/* Simple Online Indicator (Mock) */}
+                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-surface"></div>
                   </div>
-                  <p className="text-sm text-text-muted truncate opacity-80">{match.lastMessage || "Chat started"}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-1">
+                      <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>
+                        {getDisplayName(match.user.name)}
+                      </h3>
+                      <span className="text-[10px] text-text-muted shrink-0 ml-2">
+                        {timeToDisplay}
+                      </span>
+                    </div>
+                    <p className="text-sm text-text-muted truncate opacity-80">{truncatedPreview}</p>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Send, Video, Sparkles, Bot, UserPlus, Search, Loader2, ArrowLeft, 
@@ -25,9 +24,21 @@ interface ChatInterfaceProps {
   onStartVideoCall: (match: Match) => void;
   onConnectById: (user: User) => void;
   onUnmatch: (matchId: string) => void;
+
+  // 🔹 NEW props for "new match" indicators
+  newMatchIds: string[];
+  onMatchSeen: (matchId: string) => void;
 }
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onStartVideoCall, onConnectById, onUnmatch }) => {
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  matches,
+  currentUser,
+  onStartVideoCall,
+  onConnectById,
+  onUnmatch,
+  newMatchIds,
+  onMatchSeen,
+}) => {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(matches[0]?.id || null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
@@ -81,7 +92,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
     });
   }, [mergedMatches]);
 
-  const selectedMatch = sortedMatches.find(m => m.id === selectedMatchId) || matches.find(m => m.id === selectedMatchId);
+  const selectedMatch =
+    sortedMatches.find(m => m.id === selectedMatchId) ||
+    matches.find(m => m.id === selectedMatchId);
 
   // Filter Matches based on search
   const filteredMatches = sortedMatches.filter((match) => {
@@ -159,6 +172,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
       setSelectedMatchId(null);
     }
   }, [matches, selectedMatchId]);
+
+  // 🔹 When a "NEW" match chat is opened, mark it as seen
+  useEffect(() => {
+    if (selectedMatch && newMatchIds.includes(selectedMatch.id)) {
+      onMatchSeen(selectedMatch.id);
+    }
+  }, [selectedMatch?.id, newMatchIds, onMatchSeen]);
 
   // Load Messages & Subscribe to Realtime Updates
   useEffect(() => {
@@ -405,7 +425,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
     }
   };
 
-  const handleUnmatch = () => {
+  const handleUnmatchClick = () => {
     if (!selectedMatchId) return;
     
     if (window.confirm("Are you sure you want to unmatch? This conversation will be removed.")) {
@@ -459,7 +479,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
       <div className="flex flex-wrap gap-2 mb-2">
         {tags && tags.length > 0 ? (
           tags.map((tag, idx) => (
-            <span key={idx} className="bg-background border border-white/10 px-3 py-1 rounded-full text-xs text-text-main flex items-center gap-1">
+            <span key={idx} className="bg-background border border-white/10 px-3 py-1 rounded-full text-xs text-text-main flex items.center gap-1">
               {Icon && <Icon size={12} className="text-secondary" />}
               {tag}
             </span>
@@ -494,7 +514,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
 
           <button 
             onClick={() => handleViewConnections(user.id)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
+            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg.white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
           >
             <Users size={14} className="group-hover:text-primary transition-colors" /> 
             View Connections
@@ -571,7 +591,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
         </div>
 
         {/* Interests & Connect Card */}
-        <div className="bg-surface border border-white/10 rounded-2xl p-4">
+        <div className="bg-surface border.border-white/10 rounded-2xl p-4">
           <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">Interests & Connect</h3>
           
           <div className="space-y-4">
@@ -586,7 +606,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5"><Target size={12} /> Looking For</label>
+              <label className="block text-xs font-medium text-text-muted.mb-2 flex items-center gap-1.5"><Target size={12} /> Looking For</label>
               <TagDisplay tags={user.lookingFor || []} />
             </div>
 
@@ -599,9 +619,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
               <label className="block text-xs font-medium text-text-muted mb-3 flex items-center gap-1.5"><LinkIcon size={12} /> Links</label>
               <div className="flex flex-wrap gap-2">
                 {user.links?.linkedin && <a href={user.links.linkedin} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">LinkedIn</a>}
-                {user.links?.twitter && <a href={user.links.twitter} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Twitter / X</a>}
+                {user.links?.twitter && <a href={user.links.twitter} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border.border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Twitter / X</a>}
                 {user.links?.website && <a href={user.links.website} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Website</a>}
-                {user.links?.portfolio && <a href={user.links.portfolio} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Portfolio</a>}
+                {user.links?.portfolio && <a href={user.links.portfolio} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main.hover:text-primary hover:border-primary/50 transition-colors">Portfolio</a>}
                 {(!user.links || Object.values(user.links).every(v => !v)) && <span className="text-text-muted text-xs italic">No links added.</span>}
               </div>
             </div>
@@ -656,7 +676,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
       {showConnectModal && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
            <div className="bg-surface border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex justify-between items-center.mb-4">
                 <h3 className="text-xl font-bold text-text-main flex items-center gap-2">
                   <UserPlus size={24} className="text-primary"/> Connect by ID
                 </h3>
@@ -682,7 +702,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                 </button>
               </div>
 
-              {searchError && <p className="text-red-400 text-sm mb-4">{searchError}</p>}
+              {searchError && <p className="text-red-400 text-sm.mb-4">{searchError}</p>}
 
               {foundUser && (
                  <div className="bg-background rounded-xl p-4 mb-6 border border-white/10 flex items-center gap-4">
@@ -731,7 +751,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
       )}
 
       {/* --- Column 1: Sidebar List (Left Side) --- */}
-      <div className={`w-full md:w-72 lg:w-80 bg-surface border-r border-white/5 flex flex-col shrink-0 ${selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`w.full md:w-72 lg:w-80 bg-surface border-r border-white/5 flex flex-col shrink-0 ${selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
         <div className="flex flex-col bg-surface border-b border-white/5 shrink-0">
             <div className="p-4 pb-2 flex justify-between items-center">
               <h2 className="text-xl font-bold text-text-main">Messages</h2>
@@ -753,7 +773,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                    placeholder="Search connections..."
                    className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70"
                  />
-                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} />
+                 <Search className="absolute.left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} />
                </div>
             </div>
         </div>
@@ -777,6 +797,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
               const timeToDisplay = match.lastMessageAt ? formatSidebarDate(match.lastMessageAt) : formatSidebarDate(match.timestamp);
               const status = getPresenceStatus(match.user.lastSeenAt);
               const dotClass = status === 'online' ? 'bg-green-500' : status === 'away' ? 'bg-amber-500' : 'bg-gray-500';
+              const isNew = newMatchIds.includes(match.id);
 
               return (
                 <div
@@ -795,15 +816,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                     <div className={`absolute bottom-0 right-0 w-3 h-3 ${dotClass} rounded-full border-2 border-surface`}></div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline mb-1">
-                      <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>
-                        {getDisplayName(match.user.name)}
-                      </h3>
-                      <span className="text-[10px] text-text-muted shrink-0 ml-2">
+                    <div className="flex justify-between items-baseline mb-1 gap-2">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>
+                          {getDisplayName(match.user.name)}
+                        </h3>
+                        {isNew && (
+                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-gold/15 text-gold font-semibold uppercase tracking-wide">
+                            NEW
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-text-muted shrink-0">
                         {timeToDisplay}
                       </span>
                     </div>
-                    <p className="text-sm text-text-muted truncate opacity-80">{truncatedPreview}</p>
+                    <p className="text-sm text-text-muted truncate.opacity-80">{truncatedPreview}</p>
                   </div>
                 </div>
               );
@@ -829,7 +857,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                    onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                  />
                  <div className="min-w-0 flex-1">
-                   <h3 className="font-bold text-text-main truncate">{getDisplayName(selectedMatch.user.name)}</h3>
+                   <div className="flex items-center gap-2">
+                     <h3 className="font.bold text-text-main truncate">
+                       {getDisplayName(selectedMatch.user.name)}
+                     </h3>
+                     {newMatchIds.includes(selectedMatch.id) && (
+                       <span className="px-2 py-0.5 text-[10px] rounded-full bg-gold/20 text-gold font-semibold uppercase tracking-wide">
+                         NEW MATCH!
+                       </span>
+                     )}
+                   </div>
                    {(() => {
                       const currentStatus = getPresenceStatus(selectedMatch.user.lastSeenAt);
                       const statusLabel = currentStatus === 'online' ? 'Online' : currentStatus === 'away' ? 'Away' : 'Offline';
@@ -862,7 +899,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
 
                  {/* Unmatch */}
                  <button 
-                    onClick={handleUnmatch}
+                    onClick={handleUnmatchClick}
                     className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center gap-2 text-xs font-medium"
                     title="Unmatch"
                  >
@@ -950,13 +987,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                       onChange={(e) => setInputText(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                       placeholder="Type a message..."
-                      className="w-full bg-background text-text-main border border-white/10 rounded-2xl px-5 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 pr-12"
+                      className="w-full bg-background text-text-main border border-white/10 rounded-2xl px-5 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50.transition-all placeholder-gray-600 pr-12"
                     />
                   </div>
                   <button 
                     onClick={() => handleSendMessage()}
                     disabled={!inputText.trim()}
-                    className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
+                    className="bg-primary text-white p-3.5 rounded-xl.hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
                   >
                     <Send size={20} />
                   </button>
@@ -972,7 +1009,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
              </div>
              <h3 className="text-2xl font-bold text-text-main mb-3">No conversation selected</h3>
              <p className="text-text-muted max-w-sm mx-auto leading-relaxed">
-               Choose a match on the left or add a fellow founder via Kova ID to start collaborating.
+               Choose a match.on the left or add a fellow founder via Kova ID to start collaborating.
              </p>
              <button 
                onClick={() => setShowConnectModal(true)}

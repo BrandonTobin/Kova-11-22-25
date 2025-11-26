@@ -77,11 +77,13 @@ function App() {
   const [tabNotifications, setTabNotifications] =
     useState<Partial<Record<ViewState, number>>>({});
 
+  // --- State: NEW MATCH flags for the matches list / chat ---
+  const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
+
   // -----------------------------
   // Notification helpers
   // -----------------------------
   useEffect(() => {
-    // Use Supabase-hosted mp3
     notificationAudioRef.current = new Audio(NOTIFICATION_SOUND_URL);
   }, []);
 
@@ -117,6 +119,17 @@ function App() {
       next[view] = 0;
       return next;
     });
+  };
+
+  const addNewMatchId = (matchId: string | null | undefined) => {
+    if (!matchId) return;
+    setNewMatchIds((prev) =>
+      prev.includes(matchId) ? prev : [...prev, matchId],
+    );
+  };
+
+  const markMatchSeen = (matchId: string) => {
+    setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
   };
 
   // -----------------------------
@@ -234,7 +247,7 @@ function App() {
       .eq('swiper_id', user.id);
 
     const swipedIds = new Set<string>(
-      (swipes?.map((s: any) => s.swiped_id) as string[]) || []
+      (swipes?.map((s: any) => s.swiped_id) as string[]) || [],
     );
     swipedIds.add(user.id);
     setSwipedUserIds(swipedIds);
@@ -289,7 +302,7 @@ function App() {
         created_at,
         user1:user1_id(*),
         user2:user2_id(*)
-      `
+      `,
       )
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
 
@@ -347,11 +360,11 @@ function App() {
             lastMessageText,
             lastMessageAt,
           } as Match;
-        })
+        }),
       );
 
       const validMatches = formattedMatchesResults.filter(
-        (m): m is Match => m !== null
+        (m): m is Match => m !== null,
       );
       setMatches(validMatches);
     }
@@ -527,7 +540,10 @@ function App() {
   // -----------------------------
   // Swipes / Matches
   // -----------------------------
-  const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
+  const handleSwipe = async (
+    direction: 'left' | 'right',
+    swipedUser: User,
+  ) => {
     if (!user) return;
 
     if (direction === 'right') {
@@ -568,7 +584,7 @@ function App() {
       .from('matches')
       .select('id')
       .or(
-        `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`
+        `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`,
       )
       .maybeSingle();
 
@@ -577,15 +593,18 @@ function App() {
       return;
     }
 
+    // A match row already exists
     if (existingMatch) {
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
       playNotificationSound();
-      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
+      addTabNotification(ViewState.MATCHES); // only MATCHES tab
+      addNewMatchId(existingMatch.id);
       fetchMatches();
       return;
     }
 
+    // Create a new match row
     const { data: matchData, error: matchError } = await supabase
       .from('matches')
       .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
@@ -601,7 +620,8 @@ function App() {
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
       playNotificationSound();
-      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
+      addTabNotification(ViewState.MATCHES); // only MATCHES tab
+      addNewMatchId(matchData.id);
       fetchMatches();
     }
   };
@@ -705,6 +725,8 @@ function App() {
       .eq('id', matchId);
     if (!error) {
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
+      // Also clear any NEW flag for that match
+      setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
     }
   };
 
@@ -836,6 +858,9 @@ function App() {
               }}
               onConnectById={handleConnectById}
               onUnmatch={handleUnmatch}
+              // NEW props for "NEW MATCH" behaviour
+              newMatchIds={newMatchIds}
+              onMatchSeen={markMatchSeen}
             />
           )}
 

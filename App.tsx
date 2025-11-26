@@ -14,7 +14,6 @@ import { User, Match, ViewState, isProUser } from './types';
 import {
   LayoutGrid,
   MessageSquare,
-  Users,
   User as UserIcon,
   LogOut,
   X,
@@ -51,6 +50,9 @@ function App() {
   const [swipedUserIds, setSwipedUserIds] = useState<Set<string>>(new Set());
   const [dailySwipes, setDailySwipes] = useState(0);
 
+  // 🔹 Track which match rows should show "NEW"/"NEW MATCH!"
+  const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
+
   // --- State: UI/Navigation ---
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -76,9 +78,6 @@ function App() {
   // --- State: Tab Notification Badges ---
   const [tabNotifications, setTabNotifications] =
     useState<Partial<Record<ViewState, number>>>({});
-
-  // --- State: NEW MATCH flags for the matches list / chat ---
-  const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
 
   // -----------------------------
   // Notification helpers
@@ -119,17 +118,6 @@ function App() {
       next[view] = 0;
       return next;
     });
-  };
-
-  const addNewMatchId = (matchId: string | null | undefined) => {
-    if (!matchId) return;
-    setNewMatchIds((prev) =>
-      prev.includes(matchId) ? prev : [...prev, matchId],
-    );
-  };
-
-  const markMatchSeen = (matchId: string) => {
-    setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
   };
 
   // -----------------------------
@@ -177,6 +165,43 @@ function App() {
       return () => clearInterval(interval);
     }
   }, [user?.id]);
+
+  // 🔔 NEW: Realtime listener for unread message notifications
+  useEffect(() => {
+    if (!user || matches.length === 0) return;
+
+    const channel = supabase
+      .channel(`message_notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload: any) => {
+          const newMsg = payload.new;
+          if (!newMsg) return;
+
+          // Ignore messages we sent ourselves
+          if (newMsg.sender_id === user.id) return;
+
+          // Only care if the message belongs to one of this user's matches
+          const isForMyMatch = matches.some((m) => m.id === newMsg.match_id);
+          if (!isForMyMatch) return;
+
+          // 🔔 Bump MATCHES (and DASHBOARD if you want it to reflect activity too)
+          addTabNotification([ViewState.MATCHES]);
+          playNotificationSound();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // Depend on user id + the *ids* of matches so we resub when match list changes
+  }, [user?.id, matches.map((m) => m.id).join(',')]);
 
   // -----------------------------
   // Auth + Profile
@@ -247,7 +272,7 @@ function App() {
       .eq('swiper_id', user.id);
 
     const swipedIds = new Set<string>(
-      (swipes?.map((s: any) => s.swiped_id) as string[]) || [],
+      (swipes?.map((s: any) => s.swiped_id) as string[]) || []
     );
     swipedIds.add(user.id);
     setSwipedUserIds(swipedIds);
@@ -302,7 +327,7 @@ function App() {
         created_at,
         user1:user1_id(*),
         user2:user2_id(*)
-      `,
+      `
       )
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
 
@@ -360,11 +385,11 @@ function App() {
             lastMessageText,
             lastMessageAt,
           } as Match;
-        }),
+        })
       );
 
       const validMatches = formattedMatchesResults.filter(
-        (m): m is Match => m !== null,
+        (m): m is Match => m !== null
       );
       setMatches(validMatches);
     }
@@ -540,10 +565,7 @@ function App() {
   // -----------------------------
   // Swipes / Matches
   // -----------------------------
-  const handleSwipe = async (
-    direction: 'left' | 'right',
-    swipedUser: User,
-  ) => {
+  const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
     if (!user) return;
 
     if (direction === 'right') {
@@ -584,7 +606,7 @@ function App() {
       .from('matches')
       .select('id')
       .or(
-        `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`,
+        `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`
       )
       .maybeSingle();
 
@@ -593,18 +615,22 @@ function App() {
       return;
     }
 
-    // A match row already exists
+    // If match already exists, just show popup + mark as "new"
     if (existingMatch) {
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
       playNotificationSound();
-      addTabNotification(ViewState.MATCHES); // only MATCHES tab
-      addNewMatchId(existingMatch.id);
+      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
+
+      setNewMatchIds((prev) =>
+        prev.includes(existingMatch.id) ? prev : [...prev, existingMatch.id]
+      );
+
       fetchMatches();
       return;
     }
 
-    // Create a new match row
+    // Otherwise create a new match
     const { data: matchData, error: matchError } = await supabase
       .from('matches')
       .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
@@ -620,8 +646,12 @@ function App() {
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
       playNotificationSound();
-      addTabNotification(ViewState.MATCHES); // only MATCHES tab
-      addNewMatchId(matchData.id);
+      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
+
+      setNewMatchIds((prev) =>
+        prev.includes(matchData.id) ? prev : [...prev, matchData.id]
+      );
+
       fetchMatches();
     }
   };
@@ -706,14 +736,20 @@ function App() {
       alert('You are already matched!');
       return;
     }
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('matches')
-      .insert([{ user1_id: user.id, user2_id: targetUser.id }]);
+      .insert([{ user1_id: user.id, user2_id: targetUser.id }])
+      .select()
+      .single();
 
-    if (!error) {
+    if (!error && data) {
+      // new manual connection should also show as "new"
+      setNewMatchIds((prev) =>
+        prev.includes(data.id) ? prev : [...prev, data.id]
+      );
       fetchMatches();
       setCurrentView(ViewState.MATCHES);
-    } else {
+    } else if (error) {
       alert('Failed to connect.');
     }
   };
@@ -725,9 +761,14 @@ function App() {
       .eq('id', matchId);
     if (!error) {
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
-      // Also clear any NEW flag for that match
+      // make sure we don’t leave a stray "NEW" label around
       setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
     }
+  };
+
+  // 🔹 called from ChatInterface when user opens a match that had the "NEW" tag
+  const handleMatchSeen = (matchId: string) => {
+    setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
   };
 
   // -----------------------------
@@ -810,14 +851,14 @@ function App() {
 
         {showUpgradeModal && (
           <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in.duration-200">
               <button
                 onClick={() => setShowUpgradeModal(false)}
-                className="absolute top-4 right-4 text-text-muted hover:text-white"
+                className="absolute top-4 right-4.text-text-muted hover:text-white"
               >
                 <X />
               </button>
-              <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
+              <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto.mb-6 flex items-center justify-center text-white shadow-lg">
                 <Crown size={32} fill="currentColor" />
               </div>
               <h2 className="text-2xl font-bold text-text-main mb-2">
@@ -858,9 +899,8 @@ function App() {
               }}
               onConnectById={handleConnectById}
               onUnmatch={handleUnmatch}
-              // NEW props for "NEW MATCH" behaviour
               newMatchIds={newMatchIds}
-              onMatchSeen={markMatchSeen}
+              onMatchSeen={handleMatchSeen}
             />
           )}
 
@@ -904,50 +944,51 @@ function App() {
 
         {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
         {currentView !== ViewState.VIDEO_ROOM && (
-          <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
-            <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
-              {navItems.map((item) => {
-                const count = tabNotifications[item.id] ?? 0;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavClick(item.id)}
-                    className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
-                      currentView === item.id
-                        ? 'text-gold'
-                        : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
-                    }`}
-                  >
-                    {count > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
-                        {count > 9 ? '9+' : count}
-                      </span>
-                    )}
+  <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
+    <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
+      {navItems.map((item) => {
+        const count = tabNotifications[item.id] ?? 0;
+        return (
+          <button
+            key={item.id}
+            onClick={() => handleNavClick(item.id)}
+            className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
+              currentView === item.id
+                ? 'text-gold'
+                : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
+          >
+            {count > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
+                {count > 9 ? '9+' : count}
+              </span>
+            )}
 
-                    <item.icon
-                      size={20}
-                      className={
-                        currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'
-                      }
-                    />
-                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
-                      {item.label}
-                    </span>
-                  </button>
-                );
-              })}
-              <button
-                onClick={handleLogout}
-                className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
-              >
-                <LogOut size={20} strokeWidth={2} />
-                <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
-                  LOGOUT
-                </span>
-              </button>
-            </div>
-          </nav>
-        )}
+            <item.icon
+              size={20}
+              className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'}
+            />
+            <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
+              {item.label}
+            </span>
+          </button>
+        );
+      })}
+
+      {/* Logout button */}
+      <button
+        onClick={handleLogout}
+        className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
+      >
+        <LogOut size={20} strokeWidth={2} />
+        <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
+          LOGOUT
+        </span>
+      </button>
+    </div>
+  </nav>
+)}
+
       </div>
     );
   }

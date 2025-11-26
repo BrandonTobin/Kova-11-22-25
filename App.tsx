@@ -754,14 +754,43 @@ function App() {
   };
 
   const handleUnmatch = async (matchId: string) => {
-    const { error } = await supabase
-      .from('matches')
-      .delete()
-      .eq('id', matchId);
-    if (!error) {
+    try {
+      console.log('[UNMATCH] Starting unmatch for matchId =', matchId);
+
+      // 1) Delete all messages that belong to this match
+      const { error: msgError } = await supabase
+        .from('messages')
+        .delete()
+        .eq('match_id', matchId);
+
+      if (msgError) {
+        console.error('[UNMATCH] Failed to delete messages for match:', msgError);
+        // we don't return here – we still attempt to delete the match row itself
+      } else {
+        console.log('[UNMATCH] Messages deleted for matchId =', matchId);
+      }
+
+      // 2) Delete the match row itself
+      const { error: matchError } = await supabase
+        .from('matches')
+        .delete()
+        .eq('id', matchId);
+
+      if (matchError) {
+        console.error('[UNMATCH] Failed to delete match row:', matchError);
+        alert('Failed to unmatch. Please check the console for details.');
+        return;
+      }
+
+      console.log('[UNMATCH] Match row deleted for matchId =', matchId);
+
+      // 3) Update local React state so the UI reflects the deletion immediately
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
-      // make sure we don’t leave a stray "NEW" label around
       setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
+
+    } catch (err) {
+      console.error('[UNMATCH] Unexpected error while unmatching:', err);
+      alert('Unexpected error while unmatching. See console for details.');
     }
   };
 
@@ -990,8 +1019,6 @@ function App() {
     </div>
   </nav>
 )}
-
-        )}
       </div>
     );
   }

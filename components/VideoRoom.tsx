@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Webcam from 'react-webcam';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft, MessageSquare, Send } from 'lucide-react';
 import { Match, Goal, User } from '../types';
 import { generateSharedGoals, generateMeetingSummary } from '../services/geminiService';
 import { startSession, endSession } from '../services/sessionService'; // Import Session Service
@@ -15,6 +15,14 @@ interface VideoRoomProps {
   onReturnToDashboard: () => void;
 }
 
+interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: Date;
+}
+
 const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, onEndCall, onReturnToDashboard }) => {
   // Call State
   const [participants, setParticipants] = useState<Match[]>([match]);
@@ -27,11 +35,17 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   
   // Tools State
-  const [activeTab, setActiveTab] = useState<'goals' | 'notes'>('goals');
+  // Changed from activeTab to activeTool, removed 'chat' as a tab since it's now permanent
+  const [activeTool, setActiveTool] = useState<'goals' | 'notes'>('goals');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoal, setNewGoal] = useState('');
   const [notes, setNotes] = useState('# Shared Notes\n\n- Discussing GTM strategy\n- ');
   const [aiSuggesting, setAiSuggesting] = useState(false);
+
+  // Chat State
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   
   // Screen share ref
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
@@ -62,7 +76,23 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         { id: '2', text: 'Silent Focus Block (25 min)', completed: false },
         { id: '3', text: 'Review & Feedback (10 min)', completed: false },
     ]);
+    
+    // Initial system message
+    setChatMessages([
+      {
+        id: 'system-1',
+        senderId: 'system',
+        senderName: 'System',
+        text: 'Welcome to the video room! Use this chat to share links or text.',
+        timestamp: new Date()
+      }
+    ]);
   }, []);
+
+  // Auto-scroll chat - scroll whenever messages change
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
 
   // Cleanup screen share on unmount
   useEffect(() => {
@@ -93,6 +123,24 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
       }));
       setGoals(prev => [...prev, ...newGoals]);
       setAiSuggesting(false);
+  };
+
+  const handleSendChatMessage = () => {
+    if (!chatInput.trim()) return;
+    
+    const newMessage: ChatMessage = {
+      id: Date.now().toString(),
+      senderId: currentUser.id,
+      senderName: getDisplayName(currentUser.name),
+      text: chatInput,
+      timestamp: new Date()
+    };
+
+    setChatMessages(prev => [...prev, newMessage]);
+    setChatInput('');
+    
+    // Note: In a real implementation, you would emit this message via Supabase Realtime 
+    // or WebSockets here so other participants receive it.
   };
 
   const toggleScreenShare = async () => {
@@ -414,83 +462,159 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         </div>
       </div>
 
-      {/* Sidebar Tools - Collapsed to bottom or side based on screen */}
-      <div className="w-full md:w-96 bg-surface border-t md:border-t-0 md:border-l border-white/5 flex flex-col h-[35vh] md:h-full shrink-0">
-        <div className="flex border-b border-white/5">
-          <button 
-            onClick={() => setActiveTab('goals')}
-            className={`flex-1 py-4 font-medium text-sm flex items-center justify-center gap-2 transition-colors ${activeTab === 'goals' ? 'text-gold border-b-2 border-gold bg-white/5' : 'text-text-muted hover:text-text-main'}`}
-          >
-            <CheckSquare size={16} /> Goals
-          </button>
-          <button 
-            onClick={() => setActiveTab('notes')}
-            className={`flex-1 py-4 font-medium text-sm flex items-center justify-center gap-2 transition-colors ${activeTab === 'notes' ? 'text-gold border-b-2 border-gold bg-white/5' : 'text-text-muted hover:text-text-main'}`}
-          >
-            <FileText size={16} /> Shared Notes
-          </button>
+      {/* Sidebar Tools & Chat - Split vertically */}
+      <div className="w-full md:w-96 bg-surface border-t md:border-t-0 md:border-l border-white/5 flex flex-col h-[50vh] md:h-full shrink-0">
+        
+        {/* TOP HALF: Tools (Checklist / Notes) */}
+        <div className="flex-1 flex flex-col min-h-0 border-b border-white/10">
+          <div className="flex border-b border-white/5 bg-black/20 shrink-0">
+            <button 
+              onClick={() => setActiveTool('goals')}
+              className={`flex-1 py-3 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTool === 'goals' ? 'text-gold border-b-2 border-gold bg-white/5' : 'text-text-muted hover:text-text-main'}`}
+            >
+              <CheckSquare size={14} /> <span className="hidden sm:inline">Checklist</span>
+            </button>
+            <button 
+              onClick={() => setActiveTool('notes')}
+              className={`flex-1 py-3 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${activeTool === 'notes' ? 'text-gold border-b-2 border-gold bg-white/5' : 'text-text-muted hover:text-text-main'}`}
+            >
+              <FileText size={14} /> <span className="hidden sm:inline">Notes</span>
+            </button>
+          </div>
+
+          <div className="flex-1 p-4 overflow-y-auto bg-background relative">
+            {activeTool === 'goals' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-200">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-text-main font-semibold text-sm">Session Goals</h3>
+                  <button 
+                    onClick={handleAiGoals}
+                    disabled={aiSuggesting}
+                    className="text-xs text-gold hover:text-gold-hover flex items-center gap-1"
+                  >
+                    <Sparkles size={12} /> {aiSuggesting ? 'Thinking...' : 'AI Suggest'}
+                  </button>
+                </div>
+                
+                <div className="space-y-2">
+                  {goals.map(goal => (
+                    <div 
+                      key={goal.id} 
+                      className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${goal.completed ? 'bg-primary/10 border-primary/30 opacity-60' : 'bg-surface border-white/5'}`}
+                    >
+                      <button 
+                        onClick={() => toggleGoal(goal.id)}
+                        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors shrink-0 ${goal.completed ? 'bg-primary border-primary text-white' : 'border-text-muted hover:border-gold'}`}
+                      >
+                        {goal.completed && <CheckSquare size={14} />}
+                      </button>
+                      <span className={`flex-1 text-xs md:text-sm ${goal.completed ? 'line-through text-text-muted' : 'text-text-main'}`}>
+                        {goal.text}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 mt-4">
+                  <input
+                    type="text"
+                    value={newGoal}
+                    onChange={(e) => setNewGoal(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addGoal()}
+                    placeholder="Add a goal..."
+                    className="flex-1 bg-surface border border-white/10 rounded-lg px-3 py-2 text-xs md:text-sm text-text-main focus:outline-none focus:border-gold/50"
+                  />
+                  <button 
+                    onClick={addGoal}
+                    className="bg-surface border border-white/10 hover:bg-primary hover:border-primary text-white p-2 rounded-lg transition-colors"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {activeTool === 'notes' && (
+              <div className="h-full flex flex-col animate-in fade-in slide-in-from-right-2 duration-200">
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="flex-1 bg-transparent text-text-muted resize-none focus:outline-none font-mono text-xs md:text-sm leading-relaxed p-2 h-full"
+                  placeholder="Type your shared notes here..."
+                />
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex-1 p-6 overflow-y-auto bg-background">
-          {activeTab === 'goals' ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between mb-2">
-                 <h3 className="text-text-main font-semibold">Session Checklist</h3>
-                 <button 
-                   onClick={handleAiGoals}
-                   disabled={aiSuggesting}
-                   className="text-xs text-gold hover:text-gold-hover flex items-center gap-1"
-                 >
-                   <Sparkles size={12} /> {aiSuggesting ? 'Thinking...' : 'AI Suggest'}
-                 </button>
-              </div>
-              
-              <div className="space-y-2">
-                {goals.map(goal => (
-                  <div 
-                    key={goal.id} 
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${goal.completed ? 'bg-primary/10 border-primary/30 opacity-60' : 'bg-surface border-white/5'}`}
-                  >
-                    <button 
-                      onClick={() => toggleGoal(goal.id)}
-                      className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${goal.completed ? 'bg-primary border-primary text-white' : 'border-text-muted hover:border-gold'}`}
-                    >
-                      {goal.completed && <CheckSquare size={14} />}
-                    </button>
-                    <span className={`flex-1 text-sm ${goal.completed ? 'line-through text-text-muted' : 'text-text-main'}`}>
-                      {goal.text}
-                    </span>
-                  </div>
-                ))}
-              </div>
+        {/* BOTTOM HALF: Chat (Always Visible) */}
+        <div className="h-[45%] md:h-[50%] flex flex-col bg-background/50 border-t border-white/10 shrink-0">
+             <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2 shrink-0 bg-surface/30">
+                 <MessageSquare size={14} className="text-text-muted" />
+                 <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Session Chat</span>
+             </div>
 
-              <div className="flex gap-2 mt-4">
-                <input
-                  type="text"
-                  value={newGoal}
-                  onChange={(e) => setNewGoal(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addGoal()}
-                  placeholder="Add a goal..."
-                  className="flex-1 bg-surface border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50"
-                />
-                <button 
-                  onClick={addGoal}
-                  className="bg-surface border border-white/10 hover:bg-primary hover:border-primary text-white p-2 rounded-lg transition-colors"
-                >
-                  <Plus size={18} />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="h-full flex flex-col">
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="flex-1 bg-transparent text-text-muted resize-none focus:outline-none font-mono text-sm leading-relaxed p-2"
-                placeholder="Type your shared notes here..."
-              />
-            </div>
-          )}
+             {/* Messages Area */}
+             <div className="flex-1 overflow-y-auto space-y-3 p-4">
+                {chatMessages.length === 0 && (
+                   <div className="text-center text-text-muted text-xs mt-4 opacity-60">
+                      Start the conversation...
+                   </div>
+                )}
+                {chatMessages.map((msg) => {
+                  const isMe = msg.senderId === currentUser.id;
+                  const isSystem = msg.senderId === 'system';
+                  
+                  if (isSystem) {
+                    return (
+                      <div key={msg.id} className="text-center my-2">
+                         <span className="text-[10px] bg-white/5 text-text-muted px-2 py-1 rounded-full border border-white/5">
+                           {msg.text}
+                         </span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                       <div className={`max-w-[90%] rounded-2xl px-3 py-2 text-xs md:text-sm ${
+                         isMe 
+                           ? 'bg-primary text-white rounded-tr-sm' 
+                           : 'bg-surface border border-white/10 text-text-main rounded-tl-sm'
+                       }`}>
+                         <p>{msg.text}</p>
+                       </div>
+                       <div className={`flex items-center gap-1 mt-1 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
+                          <span className="text-[10px] text-text-muted font-bold opacity-70">
+                             {isMe ? 'You' : msg.senderName}
+                          </span>
+                       </div>
+                    </div>
+                  );
+                })}
+                <div ref={chatEndRef} />
+             </div>
+
+             {/* Input Area */}
+             <div className="p-3 border-t border-white/5 bg-surface shrink-0">
+                <div className="flex gap-2 items-center">
+                   <input
+                     type="text"
+                     value={chatInput}
+                     onChange={(e) => setChatInput(e.target.value)}
+                     onKeyDown={(e) => e.key === 'Enter' && handleSendChatMessage()}
+                     placeholder="Type a message..."
+                     className="flex-1 bg-background border border-white/10 rounded-xl px-3 py-2 text-xs md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all"
+                   />
+                   <button 
+                     onClick={handleSendChatMessage}
+                     disabled={!chatInput.trim()}
+                     className="bg-primary/10 text-primary hover:bg-primary hover:text-white p-2 rounded-xl transition-colors disabled:opacity-50"
+                   >
+                     <Send size={16} />
+                   </button>
+                </div>
+             </div>
         </div>
       </div>
     </div>

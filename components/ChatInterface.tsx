@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Video, Sparkles, Bot, UserPlus, Search, Loader2, ArrowLeft, MapPin, Flag, Tag, Clock, UserMinus, X } from 'lucide-react';
+import { 
+  Send, Video, Sparkles, Bot, UserPlus, Search, Loader2, ArrowLeft, 
+  MapPin, Flag, Tag, Clock, UserMinus, X, Briefcase, Globe, Target, 
+  MessageCircle, Link as LinkIcon, Users, Hash
+} from 'lucide-react';
 import { User, Match, Message } from '../types';
 import { generateIcebreaker } from '../services/geminiService';
 import { supabase } from '../supabaseClient';
@@ -41,6 +45,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
 
   // Profile Modal State
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Connections Modal State
+  const [connectionsModalOpen, setConnectionsModalOpen] = useState(false);
+  const [connectionsList, setConnectionsList] = useState<User[]>([]);
+  const [isLoadingConnections, setIsLoadingConnections] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const selectedMatch = matches.find(m => m.id === selectedMatchId);
@@ -332,87 +341,244 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
     }
   };
 
-  // Reusable Profile Details Component
-  const ProfileDetailView = ({ match }: { match: Match }) => (
-    <>
-        <div className="p-8 flex flex-col items-center text-center border-b border-white/5">
-            <img 
-            src={match.user.imageUrl} 
-            alt={match.user.name} 
-            className="w-24 h-24 rounded-full object-cover border-4 border-surface shadow-xl mb-4" 
-            onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-            />
-            <h2 className="text-xl font-bold text-text-main">{getDisplayName(match.user.name)}</h2>
-            <p className="text-sm text-gold font-medium mt-1">{match.user.role}</p>
-            
-            <div className="flex gap-2 mt-4">
-                <span className="px-3 py-1 bg-background rounded-full text-xs font-bold text-text-muted border border-white/5 uppercase tracking-wide">
-                {match.user.stage}
-                </span>
-                <span className="px-3 py-1 bg-background rounded-full text-xs font-bold text-text-muted border border-white/5 uppercase tracking-wide">
-                {match.user.industry}
-                </span>
+  const handleViewConnections = async (userId: string) => {
+    setConnectionsModalOpen(true);
+    setIsLoadingConnections(true);
+    setConnectionsList([]);
+    
+    // Fetch matches where user is user1 OR user2
+    const { data, error } = await supabase
+        .from('matches')
+        .select(`
+          user1:user1_id(id, name, image_url, role, industry),
+          user2:user2_id(id, name, image_url, role, industry)
+        `)
+        .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+
+    if (error) {
+        console.error("Error fetching connections:", error);
+    } else if (data) {
+        // Map to flat user objects
+        const connectedUsers = data.map((m: any) => {
+             const other = m.user1.id === userId ? m.user2 : m.user1;
+             return {
+                 id: other.id,
+                 name: other.name,
+                 imageUrl: other.image_url || DEFAULT_PROFILE_IMAGE,
+                 role: other.role,
+                 industry: other.industry,
+                 // Placeholders for required User fields not needed for display
+                 kovaId: '', email: '', password: '', bio: '', tags: [], badges: [],
+                 dob: '', age: 0, gender: 'Male', stage: '', location: {city:'', state:''},
+                 mainGoal: '', securityQuestion: '', securityAnswer: '', subscriptionTier: 'free', proExpiresAt: null
+             } as User;
+        });
+        setConnectionsList(connectedUsers);
+    }
+    setIsLoadingConnections(false);
+  };
+
+  // Reusable Profile Details Component - Matches ProfileEditor Style
+  const ProfileDetailView = ({ match }: { match: Match }) => {
+    const user = match.user;
+    
+    const TagDisplay = ({ tags, icon: Icon }: { tags: string[], icon?: React.ElementType }) => (
+      <div className="flex flex-wrap gap-2 mb-2">
+        {tags && tags.length > 0 ? (
+          tags.map((tag, idx) => (
+            <span key={idx} className="bg-background border border-white/10 px-3 py-1 rounded-full text-xs text-text-main flex items-center gap-1">
+              {Icon && <Icon size={12} className="text-secondary" />}
+              {tag}
+            </span>
+          ))
+        ) : (
+          <span className="text-text-muted text-xs italic">None listed</span>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="p-4 space-y-4 pb-20">
+        {/* Header / Profile Pic Card */}
+        <div className="bg-surface border border-white/10 rounded-2xl p-6 flex flex-col items-center text-center">
+          <div className="relative group mb-4">
+            <div className="w-24 h-24 rounded-full border-4 border-background shadow-xl overflow-hidden relative">
+              <img 
+                src={user.imageUrl || DEFAULT_PROFILE_IMAGE} 
+                alt="Profile" 
+                className="w-full h-full object-cover"
+                onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+              />
             </div>
+          </div>
+          <h2 className="text-xl font-bold text-text-main">{getDisplayName(user.name)}</h2>
+          <p className="text-sm text-text-muted mb-3">{user.role}</p>
+          
+          <div className="flex items-center gap-2 text-xs text-text-muted bg-background/50 px-3 py-1.5 rounded-lg border border-white/5 mb-3">
+             <Hash size={12} className="text-gold" />
+             <span className="font-mono">{user.kovaId || 'N/A'}</span>
+          </div>
+
+          <button 
+            onClick={() => handleViewConnections(user.id)}
+            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
+          >
+            <Users size={14} className="group-hover:text-primary transition-colors" /> 
+            View Connections
+          </button>
         </div>
 
-        <div className="p-6 space-y-8">
-            {/* About Section */}
+        {/* Professional Info Card */}
+        <div className="bg-surface border border-white/10 rounded-2xl p-4">
+          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">Professional Info</h3>
+          
+          <div className="space-y-4">
             <div>
-                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">About</h4>
-                <p className="text-sm text-text-main leading-relaxed opacity-90">
-                {match.user.bio || "No bio available."}
-                </p>
+              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5"><Briefcase size={12} /> Title / Role</label>
+              <p className="text-sm text-text-main font-medium">{user.role}</p>
             </div>
 
-            {/* Location */}
-            {match.user.location && (match.user.location.city || match.user.location.state) && (
             <div>
-                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Location</h4>
-                <div className="flex items-center gap-2 text-sm text-text-main">
-                    <MapPin size={16} className="text-secondary" />
-                    {match.user.location.city}, {match.user.location.state}
-                </div>
-            </div>
-            )}
-
-            {/* Main Goal */}
-            <div>
-                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Current Focus</h4>
-                <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 flex items-start gap-3">
-                <Flag size={16} className="text-primary mt-0.5 shrink-0" />
-                <p className="text-sm text-primary font-medium">{match.user.mainGoal}</p>
-                </div>
+              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5"><Globe size={12} /> Industry</label>
+              <p className="text-sm text-text-main">{user.industry}</p>
             </div>
 
-            {/* Tags */}
-            {match.user.tags && match.user.tags.length > 0 && (
-            <div>
-                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Interests</h4>
-                <div className="flex flex-wrap gap-2">
-                    {match.user.tags.map(tag => (
-                    <span key={tag} className="text-xs px-2.5 py-1 bg-background border border-white/10 rounded-md text-text-muted flex items-center gap-1">
-                        <Tag size={10} /> {tag}
-                    </span>
-                    ))}
-                </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">Stage</label>
+                <span className="inline-block px-2.5 py-0.5 bg-primary/10 text-primary rounded text-xs font-bold border border-primary/20">{user.stage}</span>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-muted mb-1">Experience</label>
+                <p className="text-sm text-text-main">{user.experienceLevel || 'N/A'}</p>
+              </div>
             </div>
-            )}
-            
-            {/* Join Date */}
+
             <div>
-                <h4 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Member Since</h4>
-                <div className="flex items-center gap-2 text-sm text-text-muted">
-                <Clock size={14} />
-                {new Date(match.timestamp).toLocaleDateString([], {month: 'long', year: 'numeric'})}
-                </div>
+              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5"><MapPin size={12} /> Location</label>
+              <p className="text-sm text-text-main">
+                {user.location && (user.location.city || user.location.state)
+                  ? `${user.location.city}${user.location.city && user.location.state ? ', ' : ''}${user.location.state}`
+                  : 'Not specified'}
+              </p>
             </div>
+          </div>
         </div>
-    </>
-  );
+
+        {/* About You Card */}
+        <div className="bg-surface border border-white/10 rounded-2xl p-4">
+          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">About</h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1">Bio</label>
+              <p className="text-sm text-text-main leading-relaxed opacity-90">{user.bio || "No bio available."}</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5"><Target size={12} /> Goals</label>
+              <ul className="space-y-1.5">
+                {(user.goalsList && user.goalsList.filter(Boolean).length > 0) ? (
+                  user.goalsList.filter(Boolean).map((goal, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-sm text-text-main">
+                      <span className="text-gold mt-1.5">•</span> <span className="flex-1">{goal}</span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-text-muted text-xs italic">No goals listed.</li>
+                )}
+              </ul>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5"><MessageCircle size={12} /> Communication</label>
+              <span className="inline-block px-2.5 py-1 bg-surface border border-white/10 rounded-full text-xs text-text-main">{user.communicationStyle || 'Not specified'}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Interests & Connect Card */}
+        <div className="bg-surface border border-white/10 rounded-2xl p-4">
+          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">Interests & Connect</h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-2">Skills / Strengths</label>
+              <TagDisplay tags={user.skills || []} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-2">Interests</label>
+              <TagDisplay tags={user.tags || []} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5"><Target size={12} /> Looking For</label>
+              <TagDisplay tags={user.lookingFor || []} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5"><Clock size={12} /> Availability</label>
+              <TagDisplay tags={user.availability || []} />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-text-muted mb-3 flex items-center gap-1.5"><LinkIcon size={12} /> Links</label>
+              <div className="flex flex-wrap gap-2">
+                {user.links?.linkedin && <a href={user.links.linkedin} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">LinkedIn</a>}
+                {user.links?.twitter && <a href={user.links.twitter} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Twitter / X</a>}
+                {user.links?.website && <a href={user.links.website} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Website</a>}
+                {user.links?.portfolio && <a href={user.links.portfolio} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Portfolio</a>}
+                {(!user.links || Object.values(user.links).every(v => !v)) && <span className="text-text-muted text-xs italic">No links added.</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden border-t border-white/5 relative">
       
+      {/* Connections Modal */}
+      {connectionsModalOpen && (
+        <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-surface w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-4 shrink-0">
+                   <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
+                       <Users size={18} className="text-gold"/> Connections
+                   </h3>
+                   <button onClick={() => setConnectionsModalOpen(false)} className="text-text-muted hover:text-white"><X size={20} /></button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto">
+                    {isLoadingConnections ? (
+                        <div className="flex justify-center p-8"><Loader2 className="animate-spin text-gold" /></div>
+                    ) : connectionsList.length === 0 ? (
+                        <p className="text-center text-text-muted py-8 text-sm">No connections found.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {connectionsList.map(u => (
+                                <div key={u.id} className="flex items-center gap-3 p-3 bg-background/50 rounded-xl border border-white/5">
+                                    <img 
+                                        src={u.imageUrl} 
+                                        className="w-10 h-10 rounded-full object-cover border border-white/10"
+                                        onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                                    />
+                                    <div>
+                                        <p className="font-bold text-sm text-text-main">{getDisplayName(u.name)}</p>
+                                        <p className="text-xs text-text-muted">{u.role} • {u.industry}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* Connect By ID Modal Overlay */}
       {showConnectModal && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">

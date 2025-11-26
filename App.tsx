@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
-
 import LoginScreen from './components/LoginScreen';
 import RegisterScreen from './components/RegisterScreen';
 import OnboardingScreen from './components/OnboardingScreen';
@@ -11,11 +10,11 @@ import VideoRoom from './components/VideoRoom';
 import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import Notes from './components/Notes';
-
 import { User, Match, ViewState, isProUser } from './types';
 import {
   LayoutGrid,
   MessageSquare,
+  Users,
   User as UserIcon,
   LogOut,
   X,
@@ -26,6 +25,10 @@ import {
   Notebook,
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from './constants';
+
+// ✅ Your Supabase audio URL
+const NOTIFICATION_SOUND_URL =
+  'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/notifications.mp3';
 
 function App() {
   // --- State: Auth & User ---
@@ -52,11 +55,6 @@ function App() {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
-  // Notifications per tab (for badge numbers)
-  const [tabNotifications, setTabNotifications] = useState<{
-    [key in ViewState]?: number;
-  }>({});
-
   // --- State: Theme ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -72,17 +70,19 @@ function App() {
   const [showMatchPopup, setShowMatchPopup] = useState(false);
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
 
-  // --- State: "New match!" flags for specific matches ---
-  const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
-
   // --- State: Notification Sound ---
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize notification sound once (Supabase Storage URL)
+  // --- State: Tab Notification Badges ---
+  const [tabNotifications, setTabNotifications] =
+    useState<Partial<Record<ViewState, number>>>({});
+
+  // -----------------------------
+  // Notification helpers
+  // -----------------------------
   useEffect(() => {
-    notificationAudioRef.current = new Audio(
-      'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/notifications.mp3'
-    );
+    // Use Supabase-hosted mp3
+    notificationAudioRef.current = new Audio(NOTIFICATION_SOUND_URL);
   }, []);
 
   const playNotificationSound = () => {
@@ -99,27 +99,33 @@ function App() {
     }
   };
 
-  // --- Helpers: tab notification counts ---
-  const addTabNotification = (view: ViewState, count: number = 1) => {
-    setTabNotifications((prev) => ({
-      ...prev,
-      [view]: (prev[view] ?? 0) + count,
-    }));
+  const addTabNotification = (views: ViewState | ViewState[]) => {
+    setTabNotifications((prev) => {
+      const next = { ...prev };
+      const list = Array.isArray(views) ? views : [views];
+      for (const v of list) {
+        next[v] = (next[v] ?? 0) + 1;
+      }
+      return next;
+    });
   };
 
   const clearTabNotification = (view: ViewState) => {
-    setTabNotifications((prev) => ({
-      ...prev,
-      [view]: 0,
-    }));
+    setTabNotifications((prev) => {
+      if (!prev[view]) return prev;
+      const next = { ...prev };
+      next[view] = 0;
+      return next;
+    });
   };
 
-  // --- 1. Initialize & Auth Check ---
+  // -----------------------------
+  // Session + Theme Effects
+  // -----------------------------
   useEffect(() => {
     checkSession();
   }, []);
 
-  // --- Theme Effect ---
   useEffect(() => {
     const root = document.documentElement;
     if (isDarkMode) {
@@ -131,9 +137,7 @@ function App() {
     }
   }, [isDarkMode]);
 
-  const toggleTheme = () => setIsDarkMode((prev) => !prev);
-
-  // --- Presence Heartbeat Effect ---
+  // Presence heartbeat
   useEffect(() => {
     if (!user) return;
 
@@ -144,32 +148,26 @@ function App() {
         .eq('id', user.id);
     };
 
-    // Immediately update once on mount / login
     updateLastSeen();
-
-    // Then update every 30 seconds while the app is open
     const interval = setInterval(updateLastSeen, 30000);
-
     return () => clearInterval(interval);
   }, [user?.id]);
 
-  // --- Clear "new match" flags when user changes ---
-  useEffect(() => {
-    setNewMatchIds([]);
-  }, [user?.id]);
+  const toggleTheme = () => setIsDarkMode((prev) => !prev);
 
-  // --- 2. Data Fetching on User Change ---
+  // Fetch data when user changes
   useEffect(() => {
     if (user) {
       fetchMatches();
       fetchUsersToSwipe();
-
-      // Poll matches every 30s to refresh presence & last messages
       const interval = setInterval(fetchMatches, 30000);
       return () => clearInterval(interval);
     }
   }, [user?.id]);
 
+  // -----------------------------
+  // Auth + Profile
+  // -----------------------------
   const checkSession = async () => {
     setIsLoading(true);
     try {
@@ -230,19 +228,17 @@ function App() {
   const fetchUsersToSwipe = async () => {
     if (!user) return;
 
-    // Fetch IDs user has already swiped on
     const { data: swipes } = await supabase
       .from('swipes')
       .select('swiped_id')
       .eq('swiper_id', user.id);
 
     const swipedIds = new Set<string>(
-      ((swipes?.map((s: any) => s.swiped_id) as string[]) || [])
+      (swipes?.map((s: any) => s.swiped_id) as string[]) || []
     );
-    swipedIds.add(user.id); // Don't show self
+    swipedIds.add(user.id);
     setSwipedUserIds(swipedIds);
 
-    // Count daily swipes for limit
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { count } = await supabase
@@ -253,7 +249,6 @@ function App() {
 
     setDailySwipes(count || 0);
 
-    // Fetch candidates
     const { data: candidates } = await supabase
       .from('users')
       .select('*')
@@ -326,12 +321,10 @@ function App() {
             goalsList: otherUserRaw.goals_list,
             links: otherUserRaw.links,
             lastSeenAt: otherUserRaw.last_seen_at,
-            securityQuestion: '',
-            securityAnswer: '',
           };
 
-          let lastMessageText: string | null = null;
-          let lastMessageAt: string | null = null;
+          let lastMessageText = null;
+          let lastMessageAt = null;
 
           const { data: lastMsgData } = await supabase
             .from('messages')
@@ -339,23 +332,21 @@ function App() {
             .eq('match_id', m.id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .maybeSingle();
+            .single();
 
           if (lastMsgData) {
             lastMessageText = lastMsgData.text;
             lastMessageAt = lastMsgData.created_at;
           }
 
-          const formatted: Match = {
+          return {
             id: m.id,
             user: otherUser,
             timestamp: new Date(m.created_at),
             unread: 0,
             lastMessageText,
             lastMessageAt,
-          };
-
-          return formatted;
+          } as Match;
         })
       );
 
@@ -366,9 +357,9 @@ function App() {
     }
   };
 
-  // --- Actions ---
-
-  // LOGIN
+  // -----------------------------
+  // Auth Handlers
+  // -----------------------------
   const handleLogin = async (email: string, pass: string) => {
     setIsLoading(true);
     setAuthError('');
@@ -411,7 +402,6 @@ function App() {
     }
   };
 
-  // REGISTER
   const handleRegister = async (newUser: User, profileImage?: File) => {
     setIsLoading(true);
     setAuthError('');
@@ -448,7 +438,6 @@ function App() {
         return;
       }
 
-      // Profile picture upload
       let finalImageUrl = newUser.imageUrl;
 
       if (profileImage && authData.user) {
@@ -535,21 +524,21 @@ function App() {
     setCurrentView(ViewState.LOGIN);
   };
 
-  // --- Swiping & Mutual Match Logic (with notifications) ---
+  // -----------------------------
+  // Swipes / Matches
+  // -----------------------------
   const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
     if (!user) return;
 
-    // Daily swipe counter (only for right swipes)
     if (direction === 'right') {
       setDailySwipes((prev) => prev + 1);
     }
 
-    // Record swipe
     const { error: swipeError } = await supabase.from('swipes').insert([
       {
         swiper_id: user.id,
         swiped_id: swipedUser.id,
-        direction,
+        direction: direction,
       },
     ]);
 
@@ -558,10 +547,8 @@ function App() {
       return;
     }
 
-    // Only right swipes can create matches
     if (direction !== 'right') return;
 
-    // Has the other user already swiped right on you?
     const { data: reciprocal, error: reciprocalError } = await supabase
       .from('swipes')
       .select('id')
@@ -575,9 +562,8 @@ function App() {
       return;
     }
 
-    if (!reciprocal) return; // not mutual yet
+    if (!reciprocal) return;
 
-    // If mutual, check if match already exists
     const { data: existingMatch, error: existingError } = await supabase
       .from('matches')
       .select('id')
@@ -592,21 +578,14 @@ function App() {
     }
 
     if (existingMatch) {
-      // Already matched in DB → just show popup + sound + tab badge + "NEW MATCH" marker
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
       playNotificationSound();
-      addTabNotification(ViewState.MATCHES);
-
-      setNewMatchIds((prev) =>
-        prev.includes(existingMatch.id) ? prev : [...prev, existingMatch.id]
-      );
-
+      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
       fetchMatches();
       return;
     }
 
-    // No existing match → create new row
     const { data: matchData, error: matchError } = await supabase
       .from('matches')
       .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
@@ -622,17 +601,11 @@ function App() {
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
       playNotificationSound();
-      addTabNotification(ViewState.MATCHES);
-
-      setNewMatchIds((prev) =>
-        prev.includes(matchData.id) ? prev : [...prev, matchData.id]
-      );
-
+      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
       fetchMatches();
     }
   };
 
-  // --- Update Profile ---
   const handleUpdateProfile = async (updatedUser: User, profileImage?: File) => {
     if (!user) return;
     setIsLoading(true);
@@ -713,7 +686,6 @@ function App() {
       alert('You are already matched!');
       return;
     }
-
     const { error } = await supabase
       .from('matches')
       .insert([{ user1_id: user.id, user2_id: targetUser.id }]);
@@ -721,7 +693,6 @@ function App() {
     if (!error) {
       fetchMatches();
       setCurrentView(ViewState.MATCHES);
-      clearTabNotification(ViewState.MATCHES);
     } else {
       alert('Failed to connect.');
     }
@@ -734,11 +705,12 @@ function App() {
       .eq('id', matchId);
     if (!error) {
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
-      setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
     }
   };
 
-  // --- Navigation Configuration ---
+  // -----------------------------
+  // Navigation
+  // -----------------------------
   const navItems = [
     { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
     { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
@@ -747,8 +719,15 @@ function App() {
     { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
 
-  // --- Render Views Determination ---
-  let content: React.ReactNode;
+  const handleNavClick = (view: ViewState) => {
+    setCurrentView(view);
+    clearTabNotification(view);
+  };
+
+  // -----------------------------
+  // Render
+  // -----------------------------
+  let content;
 
   if (isLoading && !user) {
     content = (
@@ -790,7 +769,7 @@ function App() {
   } else {
     content = (
       <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
-        {/* Global Match Popup */}
+        {/* Global Modals */}
         {showMatchPopup && newMatch && (
           <MatchPopup
             matchedUser={newMatch}
@@ -803,12 +782,10 @@ function App() {
               setShowMatchPopup(false);
               setNewMatch(null);
               setCurrentView(ViewState.MATCHES);
-              clearTabNotification(ViewState.MATCHES);
             }}
           />
         )}
 
-        {/* Upgrade Modal */}
         {showUpgradeModal && (
           <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
@@ -859,10 +836,6 @@ function App() {
               }}
               onConnectById={handleConnectById}
               onUnmatch={handleUnmatch}
-              newMatchIds={newMatchIds}
-              onMatchSeen={(matchId) => {
-                setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
-              }}
             />
           )}
 
@@ -904,44 +877,40 @@ function App() {
           )}
         </main>
 
-        {/* Bottom Navigation Bar (not in Video Room) */}
+        {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
         {currentView !== ViewState.VIDEO_ROOM && (
           <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
             <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
               {navItems.map((item) => {
-                const notifCount = tabNotifications[item.id] ?? 0;
-                const isActive = currentView === item.id;
-
+                const count = tabNotifications[item.id] ?? 0;
                 return (
                   <button
                     key={item.id}
-                    onClick={() => {
-                      setCurrentView(item.id);
-                      clearTabNotification(item.id);
-                    }}
+                    onClick={() => handleNavClick(item.id)}
                     className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
-                      isActive
+                      currentView === item.id
                         ? 'text-gold'
                         : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
                     }`}
                   >
+                    {count > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
+                        {count > 9 ? '9+' : count}
+                      </span>
+                    )}
+
                     <item.icon
                       size={20}
-                      className={isActive ? 'stroke-[2.5px]' : 'stroke-2'}
+                      className={
+                        currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'
+                      }
                     />
                     <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
                       {item.label}
                     </span>
-
-                    {notifCount > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center px-1">
-                        {notifCount}
-                      </span>
-                    )}
                   </button>
                 );
               })}
-
               <button
                 onClick={handleLogout}
                 className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"

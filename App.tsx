@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+
 import LoginScreen from './components/LoginScreen';
 import RegisterScreen from './components/RegisterScreen';
 import OnboardingScreen from './components/OnboardingScreen';
@@ -10,6 +11,7 @@ import VideoRoom from './components/VideoRoom';
 import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import Notes from './components/Notes';
+
 import { User, Match, ViewState, isProUser } from './types';
 import {
   LayoutGrid,
@@ -21,13 +23,9 @@ import {
   Search,
   Sun,
   Moon,
-  Notebook
+  Notebook,
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from './constants';
-
-// 🔔 Your Supabase-hosted notification sound
-const NOTIFICATION_SOUND_URL =
-  'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/notifications.mp3';
 
 function App() {
   // --- State: Auth & User ---
@@ -54,6 +52,11 @@ function App() {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
+  // Notifications per tab (for badge numbers)
+  const [tabNotifications, setTabNotifications] = useState<{
+    [key in ViewState]?: number;
+  }>({});
+
   // --- State: Theme ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -69,12 +72,17 @@ function App() {
   const [showMatchPopup, setShowMatchPopup] = useState(false);
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
 
+  // --- State: "New match!" flags for specific matches ---
+  const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
+
   // --- State: Notification Sound ---
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Initialize notification sound once
+  // Initialize notification sound once (Supabase Storage URL)
   useEffect(() => {
-    notificationAudioRef.current = new Audio(NOTIFICATION_SOUND_URL);
+    notificationAudioRef.current = new Audio(
+      'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/notifications.mp3'
+    );
   }, []);
 
   const playNotificationSound = () => {
@@ -89,6 +97,21 @@ function App() {
     } catch (err) {
       console.warn('Notification sound error:', err);
     }
+  };
+
+  // --- Helpers: tab notification counts ---
+  const addTabNotification = (view: ViewState, count: number = 1) => {
+    setTabNotifications((prev) => ({
+      ...prev,
+      [view]: (prev[view] ?? 0) + count,
+    }));
+  };
+
+  const clearTabNotification = (view: ViewState) => {
+    setTabNotifications((prev) => ({
+      ...prev,
+      [view]: 0,
+    }));
   };
 
   // --- 1. Initialize & Auth Check ---
@@ -110,7 +133,7 @@ function App() {
 
   const toggleTheme = () => setIsDarkMode((prev) => !prev);
 
-  // --- Heartbeat Effect ---
+  // --- Presence Heartbeat Effect ---
   useEffect(() => {
     if (!user) return;
 
@@ -130,13 +153,18 @@ function App() {
     return () => clearInterval(interval);
   }, [user?.id]);
 
+  // --- Clear "new match" flags when user changes ---
+  useEffect(() => {
+    setNewMatchIds([]);
+  }, [user?.id]);
+
   // --- 2. Data Fetching on User Change ---
   useEffect(() => {
     if (user) {
       fetchMatches();
       fetchUsersToSwipe();
 
-      // Poll matches every 30s to refresh presence status
+      // Poll matches every 30s to refresh presence & last messages
       const interval = setInterval(fetchMatches, 30000);
       return () => clearInterval(interval);
     }
@@ -187,7 +215,7 @@ function App() {
           links: data.links,
           lastSeenAt: data.last_seen_at,
           securityQuestion: '',
-          securityAnswer: ''
+          securityAnswer: '',
         };
         setUser(mappedUser);
         setCurrentView(ViewState.DISCOVER);
@@ -202,17 +230,19 @@ function App() {
   const fetchUsersToSwipe = async () => {
     if (!user) return;
 
+    // Fetch IDs user has already swiped on
     const { data: swipes } = await supabase
       .from('swipes')
       .select('swiped_id')
       .eq('swiper_id', user.id);
 
     const swipedIds = new Set<string>(
-      (swipes?.map((s: any) => s.swiped_id) as string[]) || []
+      ((swipes?.map((s: any) => s.swiped_id) as string[]) || [])
     );
-    swipedIds.add(user.id);
+    swipedIds.add(user.id); // Don't show self
     setSwipedUserIds(swipedIds);
 
+    // Count daily swipes for limit
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const { count } = await supabase
@@ -223,6 +253,7 @@ function App() {
 
     setDailySwipes(count || 0);
 
+    // Fetch candidates
     const { data: candidates } = await supabase
       .from('users')
       .select('*')
@@ -246,7 +277,7 @@ function App() {
           availability: c.availability,
           goalsList: c.goals_list,
           links: c.links,
-          lastSeenAt: c.last_seen_at
+          lastSeenAt: c.last_seen_at,
         }));
       setUsersToSwipe(filtered);
     }
@@ -255,7 +286,7 @@ function App() {
   const fetchMatches = async () => {
     if (!user) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('matches')
       .select(
         `
@@ -266,6 +297,11 @@ function App() {
       `
       )
       .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+
+    if (error) {
+      console.error('Error fetching matches:', error);
+      return;
+    }
 
     if (data) {
       const formattedMatchesResults = await Promise.all(
@@ -289,11 +325,13 @@ function App() {
             availability: otherUserRaw.availability,
             goalsList: otherUserRaw.goals_list,
             links: otherUserRaw.links,
-            lastSeenAt: otherUserRaw.last_seen_at
+            lastSeenAt: otherUserRaw.last_seen_at,
+            securityQuestion: '',
+            securityAnswer: '',
           };
 
-          let lastMessageText = null;
-          let lastMessageAt = null;
+          let lastMessageText: string | null = null;
+          let lastMessageAt: string | null = null;
 
           const { data: lastMsgData } = await supabase
             .from('messages')
@@ -301,21 +339,23 @@ function App() {
             .eq('match_id', m.id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           if (lastMsgData) {
             lastMessageText = lastMsgData.text;
             lastMessageAt = lastMsgData.created_at;
           }
 
-          return {
+          const formatted: Match = {
             id: m.id,
             user: otherUser,
             timestamp: new Date(m.created_at),
             unread: 0,
             lastMessageText,
-            lastMessageAt
-          } as Match;
+            lastMessageAt,
+          };
+
+          return formatted;
         })
       );
 
@@ -328,6 +368,7 @@ function App() {
 
   // --- Actions ---
 
+  // LOGIN
   const handleLogin = async (email: string, pass: string) => {
     setIsLoading(true);
     setAuthError('');
@@ -336,7 +377,7 @@ function App() {
       const { data: authData, error: authError } =
         await supabase.auth.signInWithPassword({
           email,
-          password: pass
+          password: pass,
         });
 
       if (authError || !authData.user) {
@@ -370,6 +411,7 @@ function App() {
     }
   };
 
+  // REGISTER
   const handleRegister = async (newUser: User, profileImage?: File) => {
     setIsLoading(true);
     setAuthError('');
@@ -394,11 +436,10 @@ function App() {
         return;
       }
 
-      const { data: authData, error: authError } =
-        await supabase.auth.signUp({
-          email: newUser.email,
-          password
-        });
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUser.email,
+        password,
+      });
 
       if (authError || !authData.user) {
         console.error('Supabase signUp error:', authError);
@@ -407,6 +448,7 @@ function App() {
         return;
       }
 
+      // Profile picture upload
       let finalImageUrl = newUser.imageUrl;
 
       if (profileImage && authData.user) {
@@ -418,7 +460,7 @@ function App() {
             .from('avatars')
             .upload(fileName, profileImage, {
               cacheControl: '3600',
-              upsert: true
+              upsert: true,
             });
 
           if (uploadError) {
@@ -461,8 +503,8 @@ function App() {
             security_question: newUser.securityQuestion,
             security_answer: newUser.securityAnswer,
             subscription_tier: 'free',
-            last_seen_at: new Date().toISOString()
-          }
+            last_seen_at: new Date().toISOString(),
+          },
         ])
         .select()
         .single();
@@ -493,20 +535,22 @@ function App() {
     setCurrentView(ViewState.LOGIN);
   };
 
-  // --- Swipe / Match Logic (mutual only + sound) ---
+  // --- Swiping & Mutual Match Logic (with notifications) ---
   const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
     if (!user) return;
 
+    // Daily swipe counter (only for right swipes)
     if (direction === 'right') {
       setDailySwipes((prev) => prev + 1);
     }
 
+    // Record swipe
     const { error: swipeError } = await supabase.from('swipes').insert([
       {
         swiper_id: user.id,
         swiped_id: swipedUser.id,
-        direction
-      }
+        direction,
+      },
     ]);
 
     if (swipeError) {
@@ -514,8 +558,10 @@ function App() {
       return;
     }
 
+    // Only right swipes can create matches
     if (direction !== 'right') return;
 
+    // Has the other user already swiped right on you?
     const { data: reciprocal, error: reciprocalError } = await supabase
       .from('swipes')
       .select('id')
@@ -529,8 +575,9 @@ function App() {
       return;
     }
 
-    if (!reciprocal) return;
+    if (!reciprocal) return; // not mutual yet
 
+    // If mutual, check if match already exists
     const { data: existingMatch, error: existingError } = await supabase
       .from('matches')
       .select('id')
@@ -545,13 +592,21 @@ function App() {
     }
 
     if (existingMatch) {
+      // Already matched in DB → just show popup + sound + tab badge + "NEW MATCH" marker
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
-      playNotificationSound(); // 🔔 existing match
+      playNotificationSound();
+      addTabNotification(ViewState.MATCHES);
+
+      setNewMatchIds((prev) =>
+        prev.includes(existingMatch.id) ? prev : [...prev, existingMatch.id]
+      );
+
       fetchMatches();
       return;
     }
 
+    // No existing match → create new row
     const { data: matchData, error: matchError } = await supabase
       .from('matches')
       .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
@@ -566,11 +621,18 @@ function App() {
     if (matchData) {
       setNewMatch(swipedUser);
       setShowMatchPopup(true);
-      playNotificationSound(); // 🔔 new match
+      playNotificationSound();
+      addTabNotification(ViewState.MATCHES);
+
+      setNewMatchIds((prev) =>
+        prev.includes(matchData.id) ? prev : [...prev, matchData.id]
+      );
+
       fetchMatches();
     }
   };
 
+  // --- Update Profile ---
   const handleUpdateProfile = async (updatedUser: User, profileImage?: File) => {
     if (!user) return;
     setIsLoading(true);
@@ -586,7 +648,7 @@ function App() {
           .from('avatars')
           .upload(fileName, profileImage, {
             cacheControl: '3600',
-            upsert: true
+            upsert: true,
           });
 
         if (uploadError) {
@@ -632,7 +694,7 @@ function App() {
         looking_for: updatedUser.lookingFor,
         availability: updatedUser.availability,
         goals_list: updatedUser.goalsList,
-        links: updatedUser.links
+        links: updatedUser.links,
       })
       .eq('id', user.id);
 
@@ -651,6 +713,7 @@ function App() {
       alert('You are already matched!');
       return;
     }
+
     const { error } = await supabase
       .from('matches')
       .insert([{ user1_id: user.id, user2_id: targetUser.id }]);
@@ -658,6 +721,7 @@ function App() {
     if (!error) {
       fetchMatches();
       setCurrentView(ViewState.MATCHES);
+      clearTabNotification(ViewState.MATCHES);
     } else {
       alert('Failed to connect.');
     }
@@ -670,6 +734,7 @@ function App() {
       .eq('id', matchId);
     if (!error) {
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
+      setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
     }
   };
 
@@ -679,16 +744,16 @@ function App() {
     { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
     { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
     { id: ViewState.NOTES, label: 'NOTES', icon: Notebook },
-    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon }
+    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
 
   // --- Render Views Determination ---
-  let content;
+  let content: React.ReactNode;
 
   if (isLoading && !user) {
     content = (
       <div className="h-screen w-full bg-background flex flex-col items-center justify-center text-text-main">
-        <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mb-4" />
+        <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mb-4"></div>
         <p className="animate-pulse">Loading Kova...</p>
       </div>
     );
@@ -725,7 +790,7 @@ function App() {
   } else {
     content = (
       <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
-        {/* Global Modals */}
+        {/* Global Match Popup */}
         {showMatchPopup && newMatch && (
           <MatchPopup
             matchedUser={newMatch}
@@ -738,10 +803,12 @@ function App() {
               setShowMatchPopup(false);
               setNewMatch(null);
               setCurrentView(ViewState.MATCHES);
+              clearTabNotification(ViewState.MATCHES);
             }}
           />
         )}
 
+        {/* Upgrade Modal */}
         {showUpgradeModal && (
           <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
@@ -792,6 +859,10 @@ function App() {
               }}
               onConnectById={handleConnectById}
               onUnmatch={handleUnmatch}
+              newMatchIds={newMatchIds}
+              onMatchSeen={(matchId) => {
+                setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
+              }}
             />
           )}
 
@@ -833,31 +904,44 @@ function App() {
           )}
         </main>
 
-        {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
+        {/* Bottom Navigation Bar (not in Video Room) */}
         {currentView !== ViewState.VIDEO_ROOM && (
           <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
             <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setCurrentView(item.id)}
-                  className={`flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
-                    currentView === item.id
-                      ? 'text-gold'
-                      : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
-                  }`}
-                >
-                  <item.icon
-                    size={20}
-                    className={
-                      currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'
-                    }
-                  />
-                  <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
-                    {item.label}
-                  </span>
-                </button>
-              ))}
+              {navItems.map((item) => {
+                const notifCount = tabNotifications[item.id] ?? 0;
+                const isActive = currentView === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentView(item.id);
+                      clearTabNotification(item.id);
+                    }}
+                    className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
+                      isActive
+                        ? 'text-gold'
+                        : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    <item.icon
+                      size={20}
+                      className={isActive ? 'stroke-[2.5px]' : 'stroke-2'}
+                    />
+                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
+                      {item.label}
+                    </span>
+
+                    {notifCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center px-1">
+                        {notifCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+
               <button
                 onClick={handleLogout}
                 className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"

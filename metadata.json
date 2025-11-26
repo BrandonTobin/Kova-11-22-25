@@ -8,6 +8,10 @@
   ],
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
-    "react-webcam": "^7.2.0"
+    "react-webcam": "^7.2.0",
+    "lucide-react": "^0.554.0",
+    "framer-motion": "^12.23.24",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.1"
   }
 }

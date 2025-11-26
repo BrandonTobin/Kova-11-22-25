@@ -1,12 +1,14 @@
 
+
 export enum ViewState {
   DISCOVER = 'DISCOVER',
   MATCHES = 'MATCHES',
-  VIDEO_ROOM = 'VIDEO_ROOM',
   DASHBOARD = 'DASHBOARD',
+  NOTES = 'NOTES',
   PROFILE = 'PROFILE',
   REGISTER = 'REGISTER',
-  LOGIN = 'LOGIN'
+  LOGIN = 'LOGIN',
+  VIDEO_ROOM = 'VIDEO_ROOM'
 }
 
 export type SubscriptionTier = 'free' | 'pro';
@@ -100,6 +102,17 @@ export interface Message {
   senderId: string;
   text: string;
   timestamp: Date;
+}
+
+export interface Note {
+  id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  category: 'General' | 'Ideas' | 'Competitors' | 'Customers' | 'Goals' | 'Personal';
+  created_at: string;
+  updated_at: string;
 }
 
 export const isProUser = (user: User | null): boolean => {

@@ -10,8 +10,9 @@ import ChatInterface from './components/ChatInterface';
 import VideoRoom from './components/VideoRoom';
 import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
+import Notes from './components/Notes';
 import { User, Match, ViewState, isProUser } from './types';
-import { LayoutGrid, MessageSquare, Users, User as UserIcon, LogOut, X, Crown, Search, Sun, Moon } from 'lucide-react';
+import { LayoutGrid, MessageSquare, Users, User as UserIcon, LogOut, X, Crown, Search, Sun, Moon, Notebook } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from './constants';
 
 function App() {
@@ -660,6 +661,7 @@ function App() {
     { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
     { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
     { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
+    { id: ViewState.NOTES, label: 'NOTES', icon: Notebook },
     { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
 
@@ -776,6 +778,10 @@ function App() {
               <Dashboard user={user} matches={matches} onUpgrade={() => setShowUpgradeModal(true)} />
             )}
 
+            {currentView === ViewState.NOTES && (
+              <Notes user={user} />
+            )}
+
             {currentView === ViewState.PROFILE && (
               <div className="h-full p-4 md:p-6 overflow-y-auto">
                   <ProfileEditor 
@@ -796,18 +802,18 @@ function App() {
                   <button
                     key={item.id}
                     onClick={() => setCurrentView(item.id)}
-                    className={`flex flex-col items-center justify-center w-20 h-full gap-1.5 transition-all duration-200 ${currentView === item.id ? 'text-gold' : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                    className={`flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${currentView === item.id ? 'text-gold' : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'}`}
                   >
-                    <item.icon size={24} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'} />
-                    <span className="text-[10px] font-bold tracking-widest">{item.label}</span>
+                    <item.icon size={20} className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'} />
+                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest">{item.label}</span>
                   </button>
                 ))}
                 <button 
                   onClick={handleLogout}
-                  className="flex flex-col items-center justify-center w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
+                  className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
                 >
-                  <LogOut size={24} strokeWidth={2} />
-                  <span className="text-[10px] font-bold tracking-widest">LOGOUT</span>
+                  <LogOut size={20} strokeWidth={2} />
+                  <span className="text-[9px] md:text-[10px] font-bold tracking-widest">LOGOUT</span>
                 </button>
             </div>
           </nav>

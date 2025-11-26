@@ -166,7 +166,7 @@ function App() {
     }
   }, [user?.id]);
 
-  // 🔔 NEW: Realtime listener for unread message notifications
+  // 🔔 Realtime listener for unread message notifications
   useEffect(() => {
     if (!user || matches.length === 0) return;
 
@@ -190,7 +190,7 @@ function App() {
           const isForMyMatch = matches.some((m) => m.id === newMsg.match_id);
           if (!isForMyMatch) return;
 
-          // 🔔 Bump MATCHES (and DASHBOARD if you want it to reflect activity too)
+          // 🔔 Bump MATCHES tab
           addTabNotification([ViewState.MATCHES]);
           playNotificationSound();
         }
@@ -200,7 +200,6 @@ function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-    // Depend on user id + the *ids* of matches so we resub when match list changes
   }, [user?.id, matches.map((m) => m.id).join(',')]);
 
   // -----------------------------
@@ -851,14 +850,14 @@ function App() {
 
         {showUpgradeModal && (
           <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in.duration-200">
+            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
               <button
                 onClick={() => setShowUpgradeModal(false)}
-                className="absolute top-4 right-4.text-text-muted hover:text-white"
+                className="absolute top-4 right-4 text-text-muted hover:text-white"
               >
                 <X />
               </button>
-              <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto.mb-6 flex items-center justify-center text-white shadow-lg">
+              <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
                 <Crown size={32} fill="currentColor" />
               </div>
               <h2 className="text-2xl font-bold text-text-main mb-2">
@@ -964,10 +963,13 @@ function App() {
               </span>
             )}
 
+            {/* icon on top */}
             <item.icon
               size={20}
               className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'}
             />
+
+            {/* label below */}
             <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
               {item.label}
             </span>
@@ -989,6 +991,7 @@ function App() {
   </nav>
 )}
 
+        )}
       </div>
     );
   }

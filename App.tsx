@@ -54,7 +54,17 @@ function App() {
   const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
 
   // --- State: UI/Navigation ---
-  const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
+  // Initialize currentView from localStorage if available
+  const [currentView, setCurrentView] = useState<ViewState>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('kova_current_view');
+      if (stored && Object.values(ViewState).includes(stored as ViewState)) {
+        return stored as ViewState;
+      }
+    }
+    return ViewState.DISCOVER;
+  });
+
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // --- State: Theme ---
@@ -253,7 +263,7 @@ function App() {
           securityAnswer: '',
         };
         setUser(mappedUser);
-        setCurrentView(ViewState.DISCOVER);
+        // We do NOT force DISCOVER here; we restore from localStorage via useState initialization
       }
     } catch (error) {
       console.error('Error fetching profile', error);
@@ -557,6 +567,7 @@ function App() {
       console.error('Error signing out of Supabase auth', e);
     }
     localStorage.removeItem('kova_current_user_id');
+    localStorage.removeItem('kova_current_view');
     setUser(null);
     setCurrentView(ViewState.LOGIN);
   };
@@ -814,6 +825,16 @@ function App() {
     setCurrentView(view);
     clearTabNotification(view);
   };
+
+  // Persist currentView to localStorage whenever it changes
+  useEffect(() => {
+    if (!user) return;
+    try {
+      localStorage.setItem('kova_current_view', currentView);
+    } catch (e) {
+      console.warn('Failed to persist current view', e);
+    }
+  }, [currentView, user?.id]);
 
   // -----------------------------
   // Render

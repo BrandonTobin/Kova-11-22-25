@@ -21,6 +21,7 @@ import {
   Link as LinkIcon,
   Users,
   Hash,
+  Trash2,
 } from 'lucide-react';
 import { User, Match, Message } from '../types';
 import { generateIcebreaker } from '../services/geminiService';
@@ -75,6 +76,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [liveMessageUpdates, setLiveMessageUpdates] = useState<
     Record<string, { text: string; timestamp: Date }>
   >({});
+  
+  // Local state for cleared chats in this session
+  const [clearedChats, setClearedChats] = useState<Record<string, boolean>>({});
 
   // Search Matches State
   const [searchTerm, setSearchTerm] = useState('');
@@ -136,6 +140,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const mergedMatches = useMemo(() => {
     return matches.map((m) => {
       const update = liveMessageUpdates[m.id];
+
+      // If this chat was cleared in this session, hide preview + lastMessageAt
+      if (clearedChats[m.id]) {
+        return {
+          ...m,
+          lastMessageText: null,
+          lastMessageAt: null,
+        };
+      }
+
       if (update) {
         return {
           ...m,
@@ -145,7 +159,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
       return m;
     });
-  }, [matches, liveMessageUpdates]);
+  }, [matches, liveMessageUpdates, clearedChats]);
 
   // Sort matches by latest activity (lastMessageAt or timestamp)
   const sortedMatches = useMemo(() => {
@@ -170,6 +184,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Filter Matches based on search
   const filteredMatches = sortedMatches.filter((match) => {
+    // If this chat was cleared in this session, hide it from the sidebar
+    if (clearedChats[match.id]) return false;
+
     const rawName = match.user.name || '';
     const displayName = getDisplayName(rawName);
     return displayName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -276,6 +293,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const loadMessages = async () => {
       setIsLoadingMessages(true);
 
+      // 1) Check if this chat is hidden for the current user
+      const { data: hiddenRow, error: hiddenError } = await supabase
+        .from('hidden_chats')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .eq('match_id', selectedMatchId)
+        .maybeSingle();
+
+      if (hiddenError) {
+        console.error('Error checking hidden_chats:', hiddenError);
+      }
+
+      // If user has hidden this chat, start with an empty history.
+      // Realtime subscription (below) will still show brand new messages.
+      if (hiddenRow) {
+        if (!isMounted) return;
+        setMessages([]);
+        setIsLoadingMessages(false);
+        return;
+      }
+
+      // 2) Normal message load when not hidden
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -292,7 +331,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           matchId: msg.match_id,
           senderId: msg.sender_id,
           text: msg.text,
-          // Treat DB value as UTC, then localize in UI
           timestamp: parseSupabaseTimestamp(msg.created_at || msg.timestamp),
         }));
         setMessages(loadedMsgs);
@@ -352,7 +390,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [selectedMatchId]);
+  }, [selectedMatchId, currentUser.id]);
 
   const handleSendMessage = async (text: string = inputText) => {
     if (!text.trim() || !selectedMatchId || !currentUser) return;
@@ -519,6 +557,52 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     ) {
       onUnmatch(selectedMatchId);
       setSelectedMatchId(null);
+    }
+  };
+
+  const handleDeleteChat = async () => {
+    if (!selectedMatchId || !currentUser) return;
+
+    const confirmed = window.confirm(
+      'Delete this chat history on your side? The other person will still keep their messages.'
+    );
+
+    if (!confirmed) return;
+
+    try {
+      // Mark this match as hidden for the current user
+      const { error } = await supabase
+        .from('hidden_chats')
+        .upsert(
+          {
+            user_id: currentUser.id,
+            match_id: selectedMatchId,
+          },
+          { onConflict: 'user_id,match_id' }
+        );
+
+      if (error) {
+        console.error('Error marking chat as hidden for this user:', error);
+        alert('Failed to delete chat. Please try again.');
+        return;
+      }
+
+      // Locally clear the chat history for this user
+      setMessages([]);
+
+      setLiveMessageUpdates((prev) => {
+        const next = { ...prev };
+        delete next[selectedMatchId];
+        return next;
+      });
+
+      setClearedChats((prev) => ({
+        ...prev,
+        [selectedMatchId]: true,
+      }));
+    } catch (err) {
+      console.error('Unexpected error hiding chat:', err);
+      alert('Failed to delete chat. Please try again.');
     }
   };
 
@@ -1196,6 +1280,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </button>
 
                 <button
+                  onClick={handleDeleteChat}
+                  className="px-3 py-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center gap-2 text-xs font-medium"
+                  title="Delete Chat History"
+                >
+                  <Trash2 size={16} />
+                  <span className="hidden md:inline">Delete Chat</span>
+                </button>
+
+                <button
                   onClick={handleUnmatchClick}
                   className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center gap-2 text-xs font-medium"
                   title="Unmatch"
@@ -1363,9 +1456,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         ) : (
           /* Empty State (Desktop) */
           <div className="w-full h-full hidden md:flex flex-col items-center.justify-center bg-background p-8 text-center">
-            <div className="w-24 h-24 bg-surface rounded-full flex items-center.justify-center mb-6 border border-white/5 shadow-xl">
-              <Bot size={48} className="text-primary opacity-80" />
-            </div>
             <h3 className="text-2xl font-bold text-text-main mb-3">
               No conversation selected
             </h3>

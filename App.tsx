@@ -24,6 +24,7 @@ import {
   Notebook,
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from './constants';
+import TimerOverlay from './components/TimerOverlay';
 
 // ✅ Your Supabase audio URL
 const NOTIFICATION_SOUND_URL =
@@ -795,13 +796,12 @@ function App() {
 
       console.log('[UNMATCH] Match row deleted for matchId =', matchId);
 
-      // 3) Update local React state so the UI reflects the deletion immediately
+      // 3) Update local React state so it disappears immediately from UI
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
       setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
-
     } catch (err) {
       console.error('[UNMATCH] Unexpected error while unmatching:', err);
-      alert('Unexpected error while unmatching. See console for details.');
+      alert('Unexpected error while unmatching. Please try again.');
     }
   };
 
@@ -991,55 +991,58 @@ function App() {
           )}
         </main>
 
+        {/* Floating per-user timer overlay */}
+        {currentView !== ViewState.VIDEO_ROOM && <TimerOverlay />}
+
         {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
         {currentView !== ViewState.VIDEO_ROOM && (
-  <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
-    <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
-      {navItems.map((item) => {
-        const count = tabNotifications[item.id] ?? 0;
-        return (
-          <button
-            key={item.id}
-            onClick={() => handleNavClick(item.id)}
-            className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
-              currentView === item.id
-                ? 'text-gold'
-                : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
-            }`}
-          >
-            {count > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
-                {count > 9 ? '9+' : count}
-              </span>
-            )}
+          <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
+            <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
+              {navItems.map((item) => {
+                const count = tabNotifications[item.id] ?? 0;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavClick(item.id)}
+                    className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
+                      currentView === item.id
+                        ? 'text-gold'
+                        : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
+                    }`}
+                  >
+                    {count > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
+                        {count > 9 ? '9+' : count}
+                      </span>
+                    )}
 
-            {/* icon on top */}
-            <item.icon
-              size={20}
-              className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'}
-            />
+                    {/* icon on top */}
+                    <item.icon
+                      size={20}
+                      className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'}
+                    />
 
-            {/* label below */}
-            <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
-              {item.label}
-            </span>
-          </button>
-        );
-      })}
+                    {/* label below */}
+                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
 
-      {/* Logout button */}
-      <button
-        onClick={handleLogout}
-        className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
-      >
-        <LogOut size={20} strokeWidth={2} />
-        <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
-          LOGOUT
-        </span>
-      </button>
-    </div>
-  </nav>
-)}
+              {/* Logout button */}
+              <button
+                onClick={handleLogout}
+                className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
+              >
+                <LogOut size={20} strokeWidth={2} />
+                <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
+                  LOGOUT
+                </span>
+              </button>
+            </div>
+          </nav>
+        )}
       </div>
     );
   }

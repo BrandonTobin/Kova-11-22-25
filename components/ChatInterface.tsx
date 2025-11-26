@@ -95,6 +95,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLInputElement | null>(null);
 
   // --- Emoji picker ---
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -246,6 +247,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedMatchId]);
+
+  useEffect(() => {
+    if (messageInputRef.current) {
+      messageInputRef.current.focus();
+    }
+  }, [selectedMatchId]);
 
   // Safety: If selected match is removed from the list (e.g. unmatch), clear selection
   useEffect(() => {
@@ -1317,6 +1324,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     </button>
 
                     <input
+                      ref={messageInputRef}
                       type="text"
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}

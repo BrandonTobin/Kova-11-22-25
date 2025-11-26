@@ -75,6 +75,7 @@ export interface User {
   availability?: string[];
   goalsList?: string[]; // Specific text goals for profile display
   links?: UserLinks;
+  lastSeenAt?: string | null; // ISO string from Supabase
 
   // Security recovery
   securityQuestion: string;

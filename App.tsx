@@ -71,6 +71,26 @@ function App() {
     }
   }, [isDarkMode]);
 
+  // --- Heartbeat Effect ---
+  useEffect(() => {
+    if (!user) return;
+
+    const updateLastSeen = async () => {
+      await supabase
+        .from('users')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', user.id);
+    };
+
+    // Immediately update once on mount / login
+    updateLastSeen();
+
+    // Then update every 30 seconds while the app is open
+    const interval = setInterval(updateLastSeen, 30000);
+
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
   const toggleTheme = () => setIsDarkMode(prev => !prev);
 
   // --- 2. Data Fetching on User Change ---
@@ -78,6 +98,10 @@ function App() {
     if (user) {
       fetchMatches();
       fetchUsersToSwipe();
+
+      // Poll matches every 30s to refresh presence status
+      const interval = setInterval(fetchMatches, 30000);
+      return () => clearInterval(interval);
     }
   }, [user?.id]);
 
@@ -127,6 +151,7 @@ function App() {
           availability: data.availability,
           goalsList: data.goals_list,
           links: data.links,
+          lastSeenAt: data.last_seen_at,
           securityQuestion: '', 
           securityAnswer: '' 
         };
@@ -189,7 +214,8 @@ function App() {
             lookingFor: c.looking_for,
             availability: c.availability,
             goalsList: c.goals_list,
-            links: c.links
+            links: c.links,
+            lastSeenAt: c.last_seen_at
         }));
       setUsersToSwipe(filtered);
     }
@@ -229,7 +255,8 @@ function App() {
               lookingFor: otherUserRaw.looking_for,
               availability: otherUserRaw.availability,
               goalsList: otherUserRaw.goals_list,
-              links: otherUserRaw.links
+              links: otherUserRaw.links,
+              lastSeenAt: otherUserRaw.last_seen_at
           };
 
           // Fetch the most recent message for this match
@@ -408,7 +435,8 @@ function App() {
            main_goal: newUser.mainGoal,
            security_question: newUser.securityQuestion,
            security_answer: newUser.securityAnswer,
-           subscription_tier: 'free'
+           subscription_tier: 'free',
+           last_seen_at: new Date().toISOString() // Initialize presence
         }])
         .select()
         .single();

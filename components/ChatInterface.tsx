@@ -90,6 +90,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
     return displayName.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  // Helper to determine presence status
+  const getPresenceStatus = (lastSeenAt?: string | null) => {
+    if (!lastSeenAt) return 'offline';
+    const last = new Date(lastSeenAt).getTime();
+    const now = Date.now();
+    const diffMinutes = (now - last) / 1000 / 60;
+
+    if (diffMinutes < 2) return 'online';
+    if (diffMinutes < 15) return 'away';
+    return 'offline';
+  };
+
   // --- Time Formatting Helper (Local Time) ---
   const formatLocalTime = (dateInput: Date | string) => {
     const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
@@ -763,6 +775,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
               const previewText = match.lastMessageText || 'Chat started';
               const truncatedPreview = previewText.length > 40 ? previewText.slice(0, 40) + '…' : previewText;
               const timeToDisplay = match.lastMessageAt ? formatSidebarDate(match.lastMessageAt) : formatSidebarDate(match.timestamp);
+              const status = getPresenceStatus(match.user.lastSeenAt);
+              const dotClass = status === 'online' ? 'bg-green-500' : status === 'away' ? 'bg-amber-500' : 'bg-gray-500';
 
               return (
                 <div
@@ -777,8 +791,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                       className="w-12 h-12 rounded-full object-cover border border-white/10" 
                       onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                     />
-                    {/* Simple Online Indicator (Mock) */}
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-surface"></div>
+                    {/* Dynamic Presence Indicator */}
+                    <div className={`absolute bottom-0 right-0 w-3 h-3 ${dotClass} rounded-full border-2 border-surface`}></div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
@@ -816,13 +830,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ matches, currentUser, onS
                  />
                  <div className="min-w-0 flex-1">
                    <h3 className="font-bold text-text-main truncate">{getDisplayName(selectedMatch.user.name)}</h3>
-                   <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
-                      <span className="text-green-500">●</span> Online
-                      <span className="text-white/20">|</span>
-                      <span className="truncate">{selectedMatch.user.role}</span>
-                      <span className="hidden sm:inline">• {selectedMatch.user.stage}</span>
-                      <span className="hidden sm:inline">• {selectedMatch.user.industry}</span>
-                   </p>
+                   {(() => {
+                      const currentStatus = getPresenceStatus(selectedMatch.user.lastSeenAt);
+                      const statusLabel = currentStatus === 'online' ? 'Online' : currentStatus === 'away' ? 'Away' : 'Offline';
+                      const statusColor = currentStatus === 'online' ? 'text-green-500' : currentStatus === 'away' ? 'text-amber-500' : 'text-gray-500';
+                      
+                      return (
+                        <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
+                            <span className={statusColor}>●</span> {statusLabel}
+                            <span className="text-white/20">|</span>
+                            <span className="truncate">{selectedMatch.user.role}</span>
+                            <span className="hidden sm:inline">• {selectedMatch.user.stage}</span>
+                            <span className="hidden sm:inline">• {selectedMatch.user.industry}</span>
+                        </p>
+                      );
+                   })()}
                  </div>
               </div>
               

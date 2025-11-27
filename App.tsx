@@ -55,16 +55,8 @@ function App() {
   const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
 
   // --- State: UI/Navigation ---
-  // Initialize currentView from localStorage if available
-  const [currentView, setCurrentView] = useState<ViewState>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('kova_current_view');
-      if (stored && Object.values(ViewState).includes(stored as ViewState)) {
-        return stored as ViewState;
-      }
-    }
-    return ViewState.DISCOVER;
-  });
+  // Set default view to DISCOVER (always valid on first render)
+  const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
@@ -264,7 +256,10 @@ function App() {
           securityAnswer: '',
         };
         setUser(mappedUser);
-        // We do NOT force DISCOVER here; we restore from localStorage via useState initialization
+        
+        // Force Discover view on login/restore
+        setCurrentView(ViewState.DISCOVER);
+        localStorage.setItem('kova_current_view', ViewState.DISCOVER);
       }
     } catch (error) {
       console.error('Error fetching profile', error);

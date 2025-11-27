@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
   Video,
-  Sparkles,
   Bot,
   UserPlus,
   Search,
@@ -24,7 +23,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import { User, Match, Message } from '../types';
-import { generateIcebreaker } from '../services/geminiService';
 import { supabase } from '../supabaseClient';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
@@ -35,21 +33,17 @@ interface ChatInterfaceProps {
   onStartVideoCall: (match: Match) => void;
   onConnectById: (user: User) => void;
   onUnmatch: (matchId: string) => void;
-  // NEW: highlight brand-new matches
   newMatchIds?: string[];
   onMatchSeen?: (matchId: string) => void;
 }
 
-// Supabase `timestamp without time zone` is effectively UTC.
-// This helper makes sure we treat it as UTC, then the browser
-// converts it to the viewer's local time zone.
+// Treat Supabase `timestamp without time zone` as UTC, then let browser show local time.
 const parseSupabaseTimestamp = (
   value: string | Date | null | undefined
 ): Date => {
   if (!value) return new Date();
   if (value instanceof Date) return value;
 
-  // If the string already has a timezone/offset or Z, leave it.
   const hasZone = /[zZ]|[+\-]\d{2}:\d{2}$/.test(value);
   const iso = hasZone ? value : `${value}Z`;
   return new Date(iso);
@@ -69,31 +63,30 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   );
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-  // Local state to track live message updates for sorting/previews (keyed by matchId)
+  // Live updates for previews/sorting
   const [liveMessageUpdates, setLiveMessageUpdates] = useState<
     Record<string, { text: string; timestamp: Date }>
   >({});
-  
-  // Local state for cleared chats in this session
+
+  // Chats the current user has "deleted" (hidden) this session
   const [clearedChats, setClearedChats] = useState<Record<string, boolean>>({});
 
-  // Search Matches State
+  // Search
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Connect Modal State
+  // Connect by ID modal
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [searchId, setSearchId] = useState('');
   const [foundUser, setFoundUser] = useState<User | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  // Profile Modal State
+  // Profile modal
   const [showProfileModal, setShowProfileModal] = useState(false);
 
-  // Connections Modal State
+  // Connections modal
   const [connectionsModalOpen, setConnectionsModalOpen] = useState(false);
   const [connectionsList, setConnectionsList] = useState<User[]>([]);
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
@@ -101,7 +94,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement | null>(null);
 
-  // --- Emoji picker ---
+  // Emoji picker
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const EMOJIS: string[] = [
@@ -136,12 +129,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setShowEmojiPicker(false);
   };
 
-  // Merge props with live updates to determine sorting
+  // Merge live updates into matches
   const mergedMatches = useMemo(() => {
     return matches.map((m) => {
       const update = liveMessageUpdates[m.id];
 
-      // If this chat was cleared in this session, hide preview + lastMessageAt
+      // If chat cleared this session, hide preview/lastMessageAt
       if (clearedChats[m.id]) {
         return {
           ...m,
@@ -157,11 +150,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           lastMessageAt: update.timestamp.toISOString(),
         };
       }
+
       return m;
     });
   }, [matches, liveMessageUpdates, clearedChats]);
 
-  // Sort matches by latest activity (lastMessageAt or timestamp)
+  // Sort matches by activity
   const sortedMatches = useMemo(() => {
     return [...mergedMatches].sort((a, b) => {
       const timeA = a.lastMessageAt
@@ -169,30 +163,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         : a.timestamp
         ? parseSupabaseTimestamp(a.timestamp as any).getTime()
         : 0;
+
       const timeB = b.lastMessageAt
         ? parseSupabaseTimestamp(b.lastMessageAt).getTime()
         : b.timestamp
         ? parseSupabaseTimestamp(b.timestamp as any).getTime()
         : 0;
+
       return timeB - timeA;
     });
   }, [mergedMatches]);
+
+  // Filter for search and cleared chats
+  const filteredMatches = useMemo(
+    () =>
+      sortedMatches.filter((match) => {
+        if (clearedChats[match.id]) return false;
+
+        const rawName = match.user.name || '';
+        const displayName = getDisplayName(rawName);
+        return displayName.toLowerCase().includes(searchTerm.toLowerCase());
+      }),
+    [sortedMatches, clearedChats, searchTerm]
+  );
+
+  // Auto-select top match whenever there is no selection and matches exist
+  useEffect(() => {
+    if (!selectedMatchId && filteredMatches.length > 0) {
+      setSelectedMatchId(filteredMatches[0].id);
+    }
+  }, [filteredMatches, selectedMatchId]);
 
   const selectedMatch =
     sortedMatches.find((m) => m.id === selectedMatchId) ||
     matches.find((m) => m.id === selectedMatchId);
 
-  // Filter Matches based on search
-  const filteredMatches = sortedMatches.filter((match) => {
-    // If this chat was cleared in this session, hide it from the sidebar
-    if (clearedChats[match.id]) return false;
-
-    const rawName = match.user.name || '';
-    const displayName = getDisplayName(rawName);
-    return displayName.toLowerCase().includes(searchTerm.toLowerCase());
-  });
-
-  // Helper to determine presence status
+  // Presence helper
   const getPresenceStatus = (lastSeenAt?: string | null) => {
     if (!lastSeenAt) return 'offline';
     const last = parseSupabaseTimestamp(lastSeenAt).getTime();
@@ -204,7 +210,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return 'offline';
   };
 
-  // --- Time Formatting Helper (Local Time) ---
+  // Time formatting
   const formatLocalTime = (dateInput: Date | string) => {
     const date = parseSupabaseTimestamp(dateInput);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -213,28 +219,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const formatSidebarDate = (dateInput: Date | string) => {
     const date = parseSupabaseTimestamp(dateInput);
     const now = new Date();
+
     const isToday =
       date.getDate() === now.getDate() &&
       date.getMonth() === now.getMonth() &&
       date.getFullYear() === now.getFullYear();
 
-    if (isToday) {
-      return formatLocalTime(date);
-    }
+    if (isToday) return formatLocalTime(date);
+
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   const getDateLabel = (dateInput: Date | string) => {
     const date = parseSupabaseTimestamp(dateInput);
     const now = new Date();
+
     const isToday =
       date.getDate() === now.getDate() &&
       date.getMonth() === now.getMonth() &&
       date.getFullYear() === now.getFullYear();
 
-    // Check for Yesterday
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
+
     const isYesterday =
       date.getDate() === yesterday.getDate() &&
       date.getMonth() === yesterday.getMonth() &&
@@ -242,6 +249,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     if (isToday) return 'Today';
     if (isYesterday) return 'Yesterday';
+
     return date.toLocaleDateString([], {
       weekday: 'short',
       month: 'short',
@@ -249,7 +257,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     });
   };
 
-  // Helper to check if we need a date divider
   const shouldShowDateDivider = (
     currentMsg: Message,
     prevMsg: Message | undefined
@@ -260,18 +267,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return currDate.toDateString() !== prevDate.toDateString();
   };
 
-  // Auto-scroll to bottom
+  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedMatchId]);
 
+  // Focus input when switching conversations
   useEffect(() => {
     if (messageInputRef.current) {
       messageInputRef.current.focus();
     }
   }, [selectedMatchId]);
 
-  // Safety: If selected match is removed from the list (e.g. unmatch), clear selection
+  // If selected match disappears (unmatch), clear selection
   useEffect(() => {
     if (selectedMatchId && !matches.find((m) => m.id === selectedMatchId)) {
       setSelectedMatchId(null);
@@ -283,20 +291,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setShowEmojiPicker(false);
   }, [selectedMatchId]);
 
-  // Load Messages & Subscribe to Realtime Updates
+  // Load messages + realtime
   useEffect(() => {
     if (!selectedMatchId) return;
 
     let isMounted = true;
 
-    // 1. Initial Load of History
     const loadMessages = async () => {
       setIsLoadingMessages(true);
 
-      // 1) Check if this chat is hidden for the current user
+      // Check if this chat has been cleared by the current user
       const { data: hiddenRow, error: hiddenError } = await supabase
         .from('hidden_chats')
-        .select('id')
+        .select('cleared_at')
         .eq('user_id', currentUser.id)
         .eq('match_id', selectedMatchId)
         .maybeSingle();
@@ -305,21 +312,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         console.error('Error checking hidden_chats:', hiddenError);
       }
 
-      // If user has hidden this chat, start with an empty history.
-      // Realtime subscription (below) will still show brand new messages.
-      if (hiddenRow) {
-        if (!isMounted) return;
-        setMessages([]);
-        setIsLoadingMessages(false);
-        return;
-      }
-
-      // 2) Normal message load when not hidden
-      const { data, error } = await supabase
+      // Base query for messages in this match
+      let query = supabase
         .from('messages')
         .select('*')
         .eq('match_id', selectedMatchId)
         .order('created_at', { ascending: true });
+
+      // If user cleared the chat, only load messages after that time
+      if (hiddenRow?.cleared_at) {
+        query = query.gt('created_at', hiddenRow.cleared_at as string);
+      }
+
+      const { data, error } = await query;
 
       if (!isMounted) return;
 
@@ -335,12 +340,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }));
         setMessages(loadedMsgs);
       }
+
       setIsLoadingMessages(false);
     };
 
     loadMessages();
 
-    // 2. Realtime Subscription
     const channel = supabase
       .channel(`match_messages:${selectedMatchId}`)
       .on(
@@ -368,12 +373,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           };
 
           setMessages((prev) => {
-            // Deduplication
             if (prev.some((m) => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
 
-          // Update the live tracker for sorting/preview
           setLiveMessageUpdates((prev) => ({
             ...prev,
             [newRow.match_id]: {
@@ -385,7 +388,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       )
       .subscribe();
 
-    // 3. Cleanup
     return () => {
       isMounted = false;
       supabase.removeChannel(channel);
@@ -397,23 +399,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     const now = new Date();
 
-    // Optimistic Update (local time)
     const optimisticMsg: Message = {
       id: `temp-${Date.now()}`,
       matchId: selectedMatchId,
       senderId: currentUser.id,
-      text: text,
+      text,
       timestamp: now,
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
     setInputText('');
 
-    // Immediately update live tracker to jump conversation to top
     setLiveMessageUpdates((prev) => ({
       ...prev,
       [selectedMatchId]: {
-        text: text,
+        text,
         timestamp: now,
       },
     }));
@@ -425,7 +425,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {
             match_id: selectedMatchId,
             sender_id: currentUser.id,
-            text: text,
+            text,
           },
         ])
         .select()
@@ -435,28 +435,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (data) {
         const realTimestamp = parseSupabaseTimestamp(data.created_at);
+
         setMessages((prev) => {
           const alreadyHasRealMsg = prev.some((m) => m.id === data.id);
 
           if (alreadyHasRealMsg) {
             return prev.filter((m) => m.id !== optimisticMsg.id);
-          } else {
-            return prev.map((m) =>
-              m.id === optimisticMsg.id
-                ? {
-                    ...m,
-                    id: data.id,
-                    timestamp: realTimestamp,
-                  }
-                : m
-            );
           }
+
+          return prev.map((m) =>
+            m.id === optimisticMsg.id
+              ? { ...m, id: data.id, timestamp: realTimestamp }
+              : m
+          );
         });
 
         setLiveMessageUpdates((prev) => ({
           ...prev,
           [selectedMatchId]: {
-            text: text,
+            text,
             timestamp: realTimestamp,
           },
         }));
@@ -466,18 +463,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const handleAiIcebreaker = async () => {
-    if (!selectedMatch) return;
-    setIsGenerating(true);
-    const icebreaker = await generateIcebreaker(
-      currentUser,
-      selectedMatch.user
-    );
-    setInputText(icebreaker);
-    setIsGenerating(false);
-  };
-
-  // Supabase Search (Connect by ID)
+  // Connect-by-ID search
   const handleSearchUser = async () => {
     setIsSearching(true);
     setSearchError('');
@@ -560,6 +546,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
+  // Delete chat only for current user (soft delete via hidden_chats)
   const handleDeleteChat = async () => {
     if (!selectedMatchId || !currentUser) return;
 
@@ -570,13 +557,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!confirmed) return;
 
     try {
-      // Mark this match as hidden for the current user
       const { error } = await supabase
         .from('hidden_chats')
         .upsert(
           {
             user_id: currentUser.id,
             match_id: selectedMatchId,
+            cleared_at: new Date().toISOString(), // store when the user cleared
           },
           { onConflict: 'user_id,match_id' }
         );
@@ -587,7 +574,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return;
       }
 
-      // Locally clear the chat history for this user
       setMessages([]);
 
       setLiveMessageUpdates((prev) => {
@@ -614,9 +600,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const { data, error } = await supabase
       .from('matches')
       .select(`
-          user1:user1_id(id, name, image_url, role, industry),
-          user2:user2_id(id, name, image_url, role, industry)
-        `)
+        user1:user1_id(id, name, image_url, role, industry),
+        user2:user2_id(id, name, image_url, role, industry)
+      `)
       .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
 
     if (error) {
@@ -650,10 +636,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       });
       setConnectionsList(connectedUsers);
     }
+
     setIsLoadingConnections(false);
   };
 
-  // Reusable Profile Details Component - Matches ProfileEditor Style
+  // Profile details (right panel + modal)
   const ProfileDetailView = ({ match }: { match: Match }) => {
     const user = match.user;
 
@@ -709,7 +696,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
           <button
             onClick={() => handleViewConnections(user.id)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
+            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg.white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
           >
             <Users
               size={14}
@@ -774,7 +761,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
         </div>
 
-        {/* About You Card */}
+        {/* About Card */}
         <div className="bg-surface border border-white/10 rounded-2xl p-4">
           <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">
             About
@@ -801,9 +788,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     .map((goal, idx) => (
                       <li
                         key={idx}
-                        className="flex items-start gap-2 text-sm text-text-main"
+                        className="flex items-start gap-2 text-sm text-text.main"
                       >
-                        <span className="text-gold mt-1.5">•</span>{' '}
+                        <span className="text-gold mt-1.5">•</span>
                         <span className="flex-1">{goal}</span>
                       </li>
                     ))
@@ -924,8 +911,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Connections Modal */}
       {connectionsModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center.mb-4 shrink-0">
+          <div className="bg-surface w.full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-4 shrink-0">
               <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
                 <Users size={18} className="text-gold" /> Connections
               </h3>
@@ -977,7 +964,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       )}
 
-      {/* Connect By ID Modal Overlay */}
+      {/* Connect By ID Modal */}
       {showConnectModal && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-surface border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
@@ -1008,7 +995,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <button
                 onClick={handleSearchUser}
                 disabled={isSearching}
-                className="bg-surface border border-white/10 hover:bg-white/5 text-white px-4 py-2 rounded-lg transition-colors.disabled:opacity-50"
+                className="bg-surface border border-white/10 hover:bg-white/5 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
               >
                 {isSearching ? (
                   <Loader2 size={20} className="animate-spin" />
@@ -1023,7 +1010,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             )}
 
             {foundUser && (
-              <div className="bg-background rounded-xl p-4 mb-6 border border-white/10 flex items-center.gap-4">
+              <div className="bg-background rounded-xl p-4 mb-6 border border-white/10 flex items-center gap-4">
                 <img
                   src={foundUser.imageUrl}
                   alt={foundUser.name}
@@ -1053,7 +1040,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <button
                 onClick={handleSendRequest}
                 disabled={!foundUser}
-                className="px-4 py-2 bg-primary text-white rounded-lg font-medium.disabled:opacity-50 hover:bg-primary-hover transition-colors"
+                className="px-4 py-2 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary-hover transition-colors"
               >
                 Send Request
               </button>
@@ -1062,10 +1049,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       )}
 
-      {/* Profile Details Modal (Desktop & Mobile) */}
+      {/* Profile modal (mobile/desktop) */}
       {showProfileModal && selectedMatch && (
-        <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center.justify-center p-4">
-          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10.shadow-2xl h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
             <button
               onClick={() => setShowProfileModal(false)}
               className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text-white hover:bg-black/60 transition-colors"
@@ -1079,7 +1066,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       )}
 
-      {/* --- Column 1: Sidebar List (Left Side) --- */}
+      {/* Column 1: sidebar */}
       <div
         className={`w-full md:w-72 lg:w-80 bg-surface border-r border-white/5 flex flex-col shrink-0 ${
           selectedMatchId ? 'hidden md:flex' : 'flex'
@@ -1090,13 +1077,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <h2 className="text-xl font-bold text-text-main">Messages</h2>
             <button
               onClick={() => setShowConnectModal(true)}
-              className="flex items-center.gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold transition-colors rounded-lg border border-white/10"
+              className="flex items-center gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold transition-colors rounded-lg border border-white/10"
             >
               <UserPlus size={14} /> Add via Kova ID
             </button>
           </div>
 
-          {/* Search Bar */}
           <div className="px-4 pb-4">
             <div className="relative">
               <input
@@ -1117,8 +1103,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="flex-1 overflow-y-auto">
           {filteredMatches.length === 0 ? (
             matches.length === 0 ? (
-              <div className="p-8 text-center text-text-muted flex flex-col.items-center gap-4">
-                <div className="w-16 h-16 bg-background rounded-full flex items-center.justify-center border border-white/5">
+              <div className="p-8 text-center text-text-muted flex flex-col items-center gap-4">
+                <div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border border-white/5">
                   <Bot size={32} className="opacity-20" />
                 </div>
                 <p>No matches yet. Start swiping or add by ID!</p>
@@ -1135,9 +1121,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 previewText.length > 40
                   ? previewText.slice(0, 40) + '…'
                   : previewText;
+
               const timeToDisplay = match.lastMessageAt
                 ? formatSidebarDate(match.lastMessageAt)
                 : formatSidebarDate(match.timestamp as any);
+
               const status = getPresenceStatus(match.user.lastSeenAt);
               const dotClass =
                 status === 'online'
@@ -1165,14 +1153,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <img
                       src={match.user.imageUrl}
                       alt={match.user.name}
-                      className="w-12 h-12 rounded-full object-cover border.border-white/10"
+                      className="w-12 h-12 rounded-full object-cover border border-white/10"
                       onError={(e) => {
                         e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
                       }}
                     />
                     <div
                       className={`absolute bottom-0 right-0 w-3 h-3 ${dotClass} rounded-full border-2 border-surface`}
-                    ></div>
+                    />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
@@ -1207,7 +1195,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       </div>
 
-      {/* --- Column 2: Main Chat Area (Center) --- */}
+      {/* Column 2: main chat area */}
       <div
         className={`flex-1 flex flex-col min-w-0 bg-background relative ${
           !selectedMatchId ? 'hidden md:flex' : 'flex'
@@ -1215,10 +1203,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       >
         {selectedMatch ? (
           <>
-            {/* Chat Header */}
-                        {/* Chat Header */}
+            {/* Chat header */}
             <div className="h-16 border-b border-white/5 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20 px-3 md:px-6 relative">
-              {/* Left side: avatar, name, status */}
               <div className="flex items-center gap-3 min-w-0 mr-2 pr-40 h-full">
                 <button
                   onClick={() => setSelectedMatchId(null)}
@@ -1239,7 +1225,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     {getDisplayName(selectedMatch.user.name)}
                   </h3>
                   {(() => {
-                    const currentStatus = getPresenceStatus(selectedMatch.user.lastSeenAt);
+                    const currentStatus = getPresenceStatus(
+                      selectedMatch.user.lastSeenAt
+                    );
                     const statusLabel =
                       currentStatus === 'online'
                         ? 'Online'
@@ -1257,8 +1245,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
                         <span className={statusColor}>●</span> {statusLabel}
                         <span className="text-white/20">|</span>
-                        <span className="truncate">{selectedMatch.user.role}</span>
-                        <span className="hidden sm:inline">• {selectedMatch.user.stage}</span>
+                        <span className="truncate">
+                          {selectedMatch.user.role}
+                        </span>
+                        <span className="hidden sm:inline">
+                          • {selectedMatch.user.stage}
+                        </span>
                         <span className="hidden sm:inline">
                           • {selectedMatch.user.industry}
                         </span>
@@ -1268,7 +1260,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               </div>
 
-              {/* Right side: actions, pinned to header right */}
               <div className="flex items-center gap-2 shrink-0 absolute right-3 md:right-6 top-1/2 -translate-y-1/2">
                 <button
                   onClick={() => onStartVideoCall(selectedMatch)}
@@ -1299,8 +1290,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             </div>
 
-
-            {/* Messages Area */}
+            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
               <div className="w-full space-y-4">
                 {isLoadingMessages && (
@@ -1310,14 +1300,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 )}
 
                 {messages.length === 0 && !isLoadingMessages && (
-                  <div className="flex flex-col items-center.justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
-                    <Sparkles className="w-12 h-12 mb-4 text-gold/50" />
+                  <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
+                    <div className="w-12 h-12 bg-surface rounded-full flex items-center justify-center mb-4 border border-white/5">
+                      <Bot size={24} className="text-gold" />
+                    </div>
                     <p>
                       This is the start of your conversation with{' '}
                       {getDisplayName(selectedMatch.user.name)}.
                     </p>
                     <p className="text-xs mt-2">
-                      Say hello or generate an icebreaker!
+                      Say hello to start collaborating!
                     </p>
                   </div>
                 )}
@@ -1330,12 +1322,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   return (
                     <React.Fragment key={msg.id}>
                       {showDate && (
-                        <div className="flex items-center.justify-center my-6">
-                          <div className="h-px bg-white/5 flex-1 max-w-[100px]"></div>
+                        <div className="flex items-center justify-center my-6">
+                          <div className="h-px bg-white/5 flex-1 max-w-[100px]" />
                           <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-4">
                             {getDateLabel(msg.timestamp as any)}
                           </span>
-                          <div className="h-px bg-white/5 flex-1 max-w-[100px]"></div>
+                          <div className="h-px bg-white/5 flex-1 max-w-[100px]" />
                         </div>
                       )}
 
@@ -1376,35 +1368,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             </div>
 
-            {/* Input Area */}
+            {/* Input area */}
             <div className="p-4 bg-surface border-t border-white/5 shrink-0">
               <div className="max-w-4xl mx-auto w-full">
-                {messages.length < 3 && (
-                  <div className="mb-3 flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                    <button
-                      onClick={handleAiIcebreaker}
-                      disabled={isGenerating}
-                      className="flex items-center.gap-2 px-4 py-2 bg-gradient-to-r from-gold/10 to-transparent text-gold text-xs font-medium rounded-full border border-gold/20 hover:border-gold/50 transition-colors whitespace-nowrap"
-                    >
-                      {isGenerating ? (
-                        <span className="animate-spin">⏳</span>
-                      ) : (
-                        <Sparkles size={12} />
-                      )}
-                      Generate Icebreaker
-                    </button>
-                    <button
-                      onClick={() =>
-                        setInputText(
-                          'Hey! Would you be up for a quick co-working session?'
-                        )
-                      }
-                      className="px-4 py-2 bg-background text-text-muted text-xs font-medium rounded-full hover:bg-white/5 transition-colors whitespace-nowrap border border-white/10 hover:border-white/20"
-                    >
-                      Suggest Co-working
-                    </button>
-                  </div>
-                )}
                 <div className="flex gap-2 items-end">
                   <div className="flex-1 relative">
                     {/* Emoji toggle button */}
@@ -1421,12 +1387,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       type="text"
                       value={inputText}
                       onChange={(e) => setInputText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                      onKeyDown={(e) =>
+                        e.key === 'Enter' && handleSendMessage()
+                      }
                       placeholder="Type a message..."
                       className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600"
                     />
 
-                    {/* Emoji picker panel */}
+                    {/* Emoji Picker */}
                     {showEmojiPicker && (
                       <div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
                         {EMOJIS.map((e, i) => (
@@ -1442,10 +1410,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       </div>
                     )}
                   </div>
+
                   <button
                     onClick={() => handleSendMessage()}
                     disabled={!inputText.trim()}
-                    className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors.disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
+                    className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
                   >
                     <Send size={20} />
                   </button>
@@ -1454,8 +1423,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           </>
         ) : (
-          /* Empty State (Desktop) */
-          <div className="w-full h-full hidden md:flex flex-col items-center.justify-center bg-background p-8 text-center">
+          // Empty state (desktop)
+          <div className="w-full h-full hidden md:flex flex-col.items-center justify-center bg-background p-8 text-center">
             <h3 className="text-2xl font-bold text-text-main mb-3">
               No conversation selected
             </h3>
@@ -1465,7 +1434,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </p>
             <button
               onClick={() => setShowConnectModal(true)}
-              className="mt-8 px-6 py-3 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-sm font-medium transition-colors flex items-center.gap-2 text-gold"
+              className="mt-8 px-6 py-3 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 text-gold"
             >
               <UserPlus size={16} /> Connect New User
             </button>
@@ -1473,7 +1442,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         )}
       </div>
 
-      {/* --- Column 3: Profile Context Panel (Desktop Only) --- */}
+      {/* Column 3: profile context (desktop) */}
       {selectedMatch && (
         <div className="hidden lg:flex w-80 bg-surface/50 border-l border-white/5 flex-col shrink-0 overflow-y-auto">
           <ProfileDetailView match={selectedMatch} />

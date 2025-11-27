@@ -1,50 +1,69 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Clock, X, Pause, Play, RotateCcw } from 'lucide-react';
 
-const MAX_SECONDS = 24 * 60 * 60; // 24 hours
+const MAX_SECONDS = 24 * 60 * 60; // 24 hours max
 
 const TimerOverlay: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [durationSeconds, setDurationSeconds] = useState(5 * 60); // default 5 min
   const [remainingSeconds, setRemainingSeconds] = useState(5 * 60);
+  const [volume, setVolume] = useState(0.7); // 0–1
 
-  // simple draggable state
-  const [position, setPosition] = useState({ x: 24, y: 24 });
-  const dragStartRef = useRef<{ mouseX: number; mouseY: number; x: number; y: number } | null>(
-    null
-  );
+  const timerSound = useMemo(() => {
+    const audio = new Audio('/timer-finished.mp3'); // served from public/
+    audio.preload = 'auto';
+    audio.volume = 0.7;
+    return audio;
+  }, []);
+
+  // Sync volume
+  useEffect(() => {
+    if (timerSound) {
+      timerSound.volume = volume;
+    }
+  }, [volume, timerSound]);
 
   // --- Timer logic ---
   useEffect(() => {
     if (!isRunning || remainingSeconds <= 0) return;
 
     const id = window.setInterval(() => {
-      setRemainingSeconds((prev) => {
+      setRemainingSeconds(prev => {
         if (prev <= 1) {
-          // stop at zero
+          // Stop timer
           setIsRunning(false);
+
+          // 🔔 Play sound when we hit 0
+          try {
+            timerSound.currentTime = 0;
+            timerSound.play().catch(() => {
+              // ignore autoplay block errors
+            });
+          } catch (e) {
+            console.warn('Timer sound failed:', e);
+          }
+
           return 0;
         }
+
         return prev - 1;
       });
     }, 1000);
 
     return () => window.clearInterval(id);
-  }, [isRunning, remainingSeconds]);
+  }, [isRunning, remainingSeconds, timerSound]);
 
-  const clampDuration = (seconds: number) => {
-    if (seconds < 1) return 1;
-    if (seconds > MAX_SECONDS) return MAX_SECONDS;
-    return seconds;
-  };
+  const updateDuration = (hours: number, minutes: number) => {
+    const h = Math.max(0, hours);
+    const m = Math.max(0, minutes);
 
-  const handleDurationChange = (value: string) => {
-    const minutes = Number(value);
-    if (Number.isNaN(minutes)) return;
-    const totalSeconds = clampDuration(minutes * 60);
-    setDurationSeconds(totalSeconds);
-    setRemainingSeconds(totalSeconds);
+    let total = h * 3600 + m * 60;
+    if (total > MAX_SECONDS) total = MAX_SECONDS;
+
+    setDurationSeconds(total);
+    setRemainingSeconds(total);
+    setIsRunning(false);
   };
 
   const handleStart = () => {
@@ -72,10 +91,20 @@ const TimerOverlay: React.FC = () => {
         .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    return `${minutes.toString().padStart(2, '0')}:${seconds
+      .toString()
+      .padStart(2, '0')}`;
   };
 
-  // --- Drag handlers ---
+  // --- Drag state ---
+  const [position, setPosition] = useState({ x: 24, y: 24 });
+  const dragStartRef = useRef<{
+    mouseX: number;
+    mouseY: number;
+    x: number;
+    y: number;
+  } | null>(null);
+
   const handleDragStart: React.MouseEventHandler<HTMLDivElement> = (e) => {
     dragStartRef.current = {
       mouseX: e.clientX,
@@ -104,7 +133,10 @@ const TimerOverlay: React.FC = () => {
     window.removeEventListener('mouseup', handleDragEnd);
   };
 
-  // collapsed button
+  // Helper values for inputs
+  const currentHours = Math.floor(durationSeconds / 3600);
+  const currentMinutes = Math.floor((durationSeconds % 3600) / 60);
+
   if (!isOpen) {
     return (
       <button
@@ -124,7 +156,7 @@ const TimerOverlay: React.FC = () => {
       style={{ left: position.x, top: position.y }}
     >
       <div className="bg-surface border border-white/15 rounded-2xl shadow-2xl overflow-hidden">
-        {/* draggable header */}
+        {/* Header (draggable) */}
         <div
           className="flex items-center justify-between px-3 py-2 bg-background/80 border-b border-white/10 cursor-move"
           onMouseDown={handleDragStart}
@@ -152,25 +184,52 @@ const TimerOverlay: React.FC = () => {
               {formatTime(remainingSeconds)}
             </div>
             <p className="text-[10px] text-text-muted mt-1">
-              Max 24 hours. Use it for breaks, movement, or focus sprints.
+              Use it for breaks, movement, or focus sprints.
             </p>
           </div>
 
-          {/* Duration input */}
-          <div className="flex items-center gap-2 text-xs">
-            <label className="text-text-muted whitespace-nowrap" htmlFor="timer-minutes">
-              Duration:
-            </label>
+          {/* Duration inputs */}
+          <div className="flex items-center justify-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0}
+                value={currentHours}
+                onChange={(e) =>
+                  updateDuration(parseInt(e.target.value) || 0, currentMinutes)
+                }
+                className="w-12 bg-background border border-white/10 rounded-md px-1 py-1 text-xs text-text-main text-center focus:outline-none focus:border-gold/50"
+              />
+              <span className="text-text-muted">h</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0}
+                value={currentMinutes}
+                onChange={(e) =>
+                  updateDuration(currentHours, parseInt(e.target.value) || 0)
+                }
+                className="w-12 bg-background border border-white/10 rounded-md px-1 py-1 text-xs text-text-main text-center focus:outline-none focus:border-gold/50"
+              />
+              <span className="text-text-muted">m</span>
+            </div>
+          </div>
+
+          {/* Volume slider */}
+          <div className="flex flex-col gap-1 text-[10px]">
+            <div className="flex justify-between text-text-muted mb-0.5">
+              <span>Volume</span>
+              <span>{Math.round(volume * 100)}%</span>
+            </div>
             <input
-              id="timer-minutes"
-              type="number"
-              min={1}
-              max={1440}
-              value={Math.round(durationSeconds / 60)}
-              onChange={(e) => handleDurationChange(e.target.value)}
-              className="w-16 bg-background border border-white/10 rounded-md px-2 py-1 text-xs text-text-main focus:outline-none focus:border-gold/50"
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(volume * 100)}
+              onChange={(e) => setVolume(Number(e.target.value) / 100)}
+              className="w-full accent-gold"
             />
-            <span className="text-text-muted">min (max 1440)</span>
           </div>
 
           {/* Controls */}

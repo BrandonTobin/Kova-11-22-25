@@ -816,7 +816,7 @@ function App() {
     { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
     { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
     { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
-    { id: ViewState.NOTES, label: 'NOTES', icon: Notebook },
+    // Notes removed from here to be a floating pill
     { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
 
@@ -990,8 +990,13 @@ function App() {
           )}
         </main>
 
-        {/* Floating per-user timer overlay */}
-        {currentView !== ViewState.VIDEO_ROOM && <TimerOverlay />}
+        {/* Floating per-user timer overlay + Notes Pill */}
+        {currentView !== ViewState.VIDEO_ROOM && (
+          <TimerOverlay 
+            onNotesClick={() => handleNavClick(ViewState.NOTES)}
+            isNotesActive={currentView === ViewState.NOTES}
+          />
+        )}
 
         {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
         {currentView !== ViewState.VIDEO_ROOM && (

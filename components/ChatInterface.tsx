@@ -104,6 +104,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Emoji picker
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  // Read receipts
+  const [otherUserLastReadAt, setOtherUserLastReadAt] = useState<Date | null>(
+    null
+  );
+
+  // Typing indicator
+  const [isOtherTyping, setIsOtherTyping] = useState(false);
+  const typingTimeoutRef = useRef<number | null>(null); // for our own typing status debounce
+  const otherTypingTimeoutRef = useRef<number | null>(null); // for auto-hiding "other is typing"
+
   const EMOJIS: string[] = [
     '😀',
     '😁',
@@ -274,6 +284,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return currDate.toDateString() !== prevDate.toDateString();
   };
 
+  // Which of *my* messages is the last one the other user has seen?
+  const lastSeenMessageId = useMemo(() => {
+    if (!otherUserLastReadAt) return null;
+
+    const cutoff = otherUserLastReadAt.getTime();
+    const sentByMe = messages.filter(
+      (m) =>
+        m.senderId === currentUser.id &&
+        parseSupabaseTimestamp(m.timestamp as any).getTime() <= cutoff
+    );
+
+    if (sentByMe.length === 0) return null;
+    return sentByMe[sentByMe.length - 1].id;
+  }, [messages, otherUserLastReadAt, currentUser.id]);
+
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -411,6 +436,178 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
   }, [selectedMatchId, currentUser.id]);
 
+  // ---- Helpers for typing + read receipts ----
+
+  const sendTypingStatus = async (isTyping: boolean) => {
+    if (!selectedMatchId || !currentUser) return;
+
+    try {
+      await supabase
+        .from('typing_status')
+        .upsert(
+          {
+            match_id: selectedMatchId,
+            user_id: currentUser.id,
+            is_typing: isTyping,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'match_id,user_id' }
+        );
+    } catch (err) {
+      console.error('Failed to update typing status:', err);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputText(value);
+
+    if (!selectedMatchId) return;
+
+    // mark as typing immediately
+    sendTypingStatus(true);
+
+    // clear previous timeout
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current);
+    }
+
+    // if user stops typing for 3s, set is_typing = false
+    typingTimeoutRef.current = window.setTimeout(() => {
+      sendTypingStatus(false);
+    }, 3000);
+  };
+
+  const markMessagesAsRead = async () => {
+    if (!selectedMatchId || !currentUser || messages.length === 0) return;
+
+    try {
+      await supabase
+        .from('message_reads')
+        .upsert(
+          {
+            match_id: selectedMatchId,
+            user_id: currentUser.id,
+            last_read_at: new Date().toISOString(),
+          },
+          { onConflict: 'match_id,user_id' }
+        );
+    } catch (err) {
+      console.error('Failed to update read receipts:', err);
+    }
+  };
+
+  // Whenever we view a match and there are messages, mark them as read for *us*
+  useEffect(() => {
+    if (!selectedMatchId || messages.length === 0) return;
+    markMessagesAsRead();
+  }, [selectedMatchId, messages.length]);
+
+  // Listen for the OTHER user's read receipts for this match
+  useEffect(() => {
+    if (!selectedMatchId) {
+      setOtherUserLastReadAt(null);
+      return;
+    }
+
+    const matchForThis = matches.find((m) => m.id === selectedMatchId);
+    const otherUserId = matchForThis?.user.id;
+    if (!otherUserId) return;
+
+    const fetchInitial = async () => {
+      const { data, error } = await supabase
+        .from('message_reads')
+        .select('last_read_at')
+        .eq('match_id', selectedMatchId)
+        .eq('user_id', otherUserId)
+        .maybeSingle();
+
+      if (!error && data?.last_read_at) {
+        setOtherUserLastReadAt(
+          parseSupabaseTimestamp(data.last_read_at as any)
+        );
+      } else {
+        setOtherUserLastReadAt(null);
+      }
+    };
+
+    fetchInitial();
+
+    const channel = supabase
+      .channel(`message_reads:${selectedMatchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_reads',
+          filter: `match_id=eq.${selectedMatchId}`,
+        },
+        (payload) => {
+          const row = (payload as any).new;
+          if (!row || row.user_id !== otherUserId) return;
+          if (row.last_read_at) {
+            setOtherUserLastReadAt(
+              parseSupabaseTimestamp(row.last_read_at as any)
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedMatchId, matches]);
+
+  // Listen for the OTHER user's typing status for this match
+  useEffect(() => {
+    if (!selectedMatchId) {
+      setIsOtherTyping(false);
+      return;
+    }
+
+    const matchForThis = matches.find((m) => m.id === selectedMatchId);
+    const otherUserId = matchForThis?.user.id;
+    if (!otherUserId) return;
+
+    const channel = supabase
+      .channel(`typing_status:${selectedMatchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'typing_status',
+          filter: `match_id=eq.${selectedMatchId}`,
+        },
+        (payload) => {
+          const row = (payload as any).new;
+          if (!row || row.user_id !== otherUserId) return;
+
+          if (row.is_typing) {
+            setIsOtherTyping(true);
+            if (otherTypingTimeoutRef.current) {
+              window.clearTimeout(otherTypingTimeoutRef.current);
+            }
+            otherTypingTimeoutRef.current = window.setTimeout(() => {
+              setIsOtherTyping(false);
+            }, 5000); // auto-hide if no updates
+          } else {
+            setIsOtherTyping(false);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (otherTypingTimeoutRef.current) {
+        window.clearTimeout(otherTypingTimeoutRef.current);
+      }
+    };
+  }, [selectedMatchId, matches]);
+
   const handleSendMessage = async (text: string = inputText) => {
     if (!text.trim() || !selectedMatchId || !currentUser) return;
 
@@ -434,6 +631,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         timestamp: now,
       },
     }));
+
+    // user just sent, so they're no longer typing
+    sendTypingStatus(false);
 
     try {
       const { data, error } = await supabase
@@ -1375,6 +1575,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             >
                               {formatLocalTime(msg.timestamp as any)}
                             </span>
+                            {isMe && msg.id === lastSeenMessageId && (
+                              <span className="text-[10px] text-emerald-400 ml-2">
+                                Seen
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1385,6 +1590,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             </div>
 
+            {/* Typing indicator */}
+            {isOtherTyping && (
+              <div className="px-6 pb-1 text-xs text-text-muted italic">
+                {getDisplayName(selectedMatch.user.name)} is typing…
+              </div>
+            )}
+
             {/* Input area */}
             <div className="p-4 bg-surface border-t border-white/5 shrink-0">
               <div className="max-w-4xl mx-auto w-full">
@@ -1394,7 +1606,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowEmojiPicker((prev) => !prev)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
+                      className="absolute.left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
                     >
                       🙂
                     </button>
@@ -1403,7 +1615,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       ref={messageInputRef}
                       type="text"
                       value={inputText}
-                      onChange={(e) => setInputText(e.target.value)}
+                      onChange={handleInputChange}
                       onKeyDown={(e) =>
                         e.key === 'Enter' && handleSendMessage()
                       }

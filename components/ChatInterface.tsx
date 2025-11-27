@@ -168,7 +168,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const REACTION_EMOJIS: string[] = ['👍', '🔥', '💡', '✅', '😂'];
 
   const handleEmojiClick = (emoji: string) => {
-    setInputText((prev) => (prev || '') + emoji);
+    setInputText((prev) => {
+      const next = (prev || '') + emoji;
+
+      // Make sure the cursor goes back to the input after the emoji is added
+      requestAnimationFrame(() => {
+        if (messageInputRef.current) {
+          const input = messageInputRef.current;
+          input.focus();
+          const len = next.length;
+          input.setSelectionRange(len, len); // caret at end
+        }
+      });
+
+      return next;
+    });
+
     setShowEmojiPicker(false);
   };
 

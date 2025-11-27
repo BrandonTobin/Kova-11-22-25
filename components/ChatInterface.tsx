@@ -27,6 +27,13 @@ import { supabase } from '../supabaseClient';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 
+// Separate sound JUST for incoming chat messages (not the match sound)
+const incomingMessageSound = new Audio(
+  'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/chat.mp3'
+);
+incomingMessageSound.preload = 'auto';
+incomingMessageSound.volume = 0.025;
+
 interface ChatInterfaceProps {
   matches: Match[];
   currentUser: User;
@@ -364,6 +371,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             newRow.created_at || newRow.timestamp
           );
 
+          // Only play sound if message is from the other user
+          if (newRow.sender_id !== currentUser.id) {
+            try {
+              incomingMessageSound.currentTime = 0;
+              incomingMessageSound.play().catch(() => {});
+            } catch (e) {
+              console.warn('Incoming message sound failed:', e);
+            }
+          }
+
           const newMsg: Message = {
             id: newRow.id,
             matchId: newRow.match_id,
@@ -696,7 +713,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
           <button
             onClick={() => handleViewConnections(user.id)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg.white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
+            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
           >
             <Users
               size={14}
@@ -788,7 +805,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     .map((goal, idx) => (
                       <li
                         key={idx}
-                        className="flex items-start gap-2 text-sm text-text.main"
+                        className="flex items-start gap-2 text-sm text-text-main"
                       >
                         <span className="text-gold mt-1.5">•</span>
                         <span className="flex-1">{goal}</span>
@@ -911,7 +928,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Connections Modal */}
       {connectionsModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface w.full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
+          <div className="bg-surface w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
             <div className="flex justify-between items-center mb-4 shrink-0">
               <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
                 <Users size={18} className="text-gold" /> Connections
@@ -968,7 +985,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {showConnectModal && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-surface border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center.mb-4">
               <h3 className="text-xl font-bold text-text-main flex items-center gap-2">
                 <UserPlus size={24} className="text-primary" /> Connect by ID
               </h3>
@@ -1396,7 +1413,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                     {/* Emoji Picker */}
                     {showEmojiPicker && (
-                      <div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
+                      <div className="absolute.bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
                         {EMOJIS.map((e, i) => (
                           <button
                             key={i}
@@ -1424,7 +1441,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </>
         ) : (
           // Empty state (desktop)
-          <div className="w-full h-full hidden md:flex flex-col.items-center justify-center bg-background p-8 text-center">
+          <div className="w-full h-full hidden md:flex flex-col items-center justify-center bg-background p-8 text-center">
             <h3 className="text-2xl font-bold text-text-main mb-3">
               No conversation selected
             </h3>

@@ -193,9 +193,10 @@ function App() {
           const isForMyMatch = matches.some((m) => m.id === newMsg.match_id);
           if (!isForMyMatch) return;
 
-          // 🔔 Bump MATCHES tab
+          // 🔔 Bump MATCHES tab (badge only, sound handled in ChatInterface)
           addTabNotification([ViewState.MATCHES]);
-          playNotificationSound();
+          // ❌ Do NOT call playNotificationSound() here – that would play
+          // the global notifications.mp3 for every message.
         }
       )
       .subscribe();
@@ -256,7 +257,7 @@ function App() {
           securityAnswer: '',
         };
         setUser(mappedUser);
-        
+
         // Force Discover view on login/restore
         setCurrentView(ViewState.DISCOVER);
         localStorage.setItem('kova_current_view', ViewState.DISCOVER);

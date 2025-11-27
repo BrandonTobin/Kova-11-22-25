@@ -1816,24 +1816,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   return (
                     <React.Fragment key={msg.id}>
                       {showDate && (
-                        <div className="flex items-center.justify-center my-6">
-                          <div className="h-px bg-white/5 flex-1 max-w-[100px]" />
-                          <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-4">
-                            {getDateLabel(msg.timestamp as any)}
-                          </span>
-                          <div className="h-px bg-white/5 flex-1 max-w-[100px]" />
-                        </div>
-                      )}
+  <div className="w-full flex justify-center my-6">
+    <div className="flex items-center justify-center">
+      <div className="h-px bg-white/5 w-16" />
+      <span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">
+        {getDateLabel(msg.timestamp as any)}
+      </span>
+      <div className="h-px bg-white/5 w-16" />
+    </div>
+  </div>
+)}
 
-                      {showNewDivider && (
-                        <div className="flex items-center.justify-center my-3">
-                          <div className="h-px bg-gold/40 flex-1 max-w-[60px]" />
-                          <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
-                            New messages
-                          </span>
-                          <div className="h-px bg-gold/40 flex-1 max-w-[60px]" />
-                        </div>
-                      )}
+{showNewDivider && (
+  <div className="w-full flex justify-center my-3">
+    <div className="flex items-center justify-center">
+      <div className="h-px bg-gold/40 w-12" />
+      <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
+        New messages
+      </span>
+      <div className="h-px bg-gold/40 w-12" />
+    </div>
+  </div>
+)}
+
 
                       <div
                         className={`flex ${

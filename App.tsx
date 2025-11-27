@@ -1000,8 +1000,8 @@ function App() {
 
         {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
         {currentView !== ViewState.VIDEO_ROOM && (
-          <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
-            <div className="flex justify-between items-center h-20 w-full max-w-5xl mx-auto">
+          <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
+            <div className="flex justify-between md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
               {navItems.map((item) => {
                 const count = tabNotifications[item.id] ?? 0;
                 return (

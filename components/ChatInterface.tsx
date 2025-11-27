@@ -56,6 +56,16 @@ const parseSupabaseTimestamp = (
   return new Date(iso);
 };
 
+type MessageReactionsState = Record<
+  string,
+  {
+    [emoji: string]: {
+      count: number;
+      reactedByCurrentUser: boolean;
+    };
+  }
+>;
+
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
   matches,
   currentUser,
@@ -104,15 +114,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Emoji picker
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  // Read receipts
+  // Read receipts: what the OTHER person has seen
   const [otherUserLastReadAt, setOtherUserLastReadAt] = useState<Date | null>(
     null
   );
+
+  // Read state for *this* user (for "New messages" divider)
+  const [lastReadAt, setLastReadAt] = useState<Date | null>(null);
 
   // Typing indicator
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const typingTimeoutRef = useRef<number | null>(null); // for our own typing status debounce
   const otherTypingTimeoutRef = useRef<number | null>(null); // for auto-hiding "other is typing"
+
+  // Reactions
+  const [messageReactions, setMessageReactions] =
+    useState<MessageReactionsState>({});
 
   const EMOJIS: string[] = [
     '😀',
@@ -140,6 +157,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     '📉',
     '✅',
   ];
+
+  const REACTION_EMOJIS: string[] = ['👍', '🔥', '💡', '✅', '😂'];
 
   const handleEmojiClick = (emoji: string) => {
     setInputText((prev) => (prev || '') + emoji);
@@ -299,6 +318,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return sentByMe[sentByMe.length - 1].id;
   }, [messages, otherUserLastReadAt, currentUser.id]);
 
+  // Index of first unread message (for this user) for the "New messages" divider
+  const firstUnreadIndex = useMemo(() => {
+    if (!lastReadAt || messages.length === 0) return -1;
+    const cutoff = lastReadAt.getTime();
+    return messages.findIndex(
+      (m) =>
+        parseSupabaseTimestamp(m.timestamp as any).getTime() > cutoff
+    );
+  }, [messages, lastReadAt]);
+
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -323,7 +352,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setShowEmojiPicker(false);
   }, [selectedMatchId]);
 
-  // Load messages + realtime
+  // Load messages + our own read state + realtime for messages
   useEffect(() => {
     if (!selectedMatchId) return;
 
@@ -331,6 +360,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     const loadMessages = async () => {
       setIsLoadingMessages(true);
+
+      // Reset "our" lastReadAt when switching matches
+      setLastReadAt(null);
 
       // Check if this chat has been cleared by the current user
       const { data: hiddenRow, error: hiddenError } = await supabase
@@ -373,12 +405,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         setMessages(loadedMsgs);
       }
 
+      // Load our own last_read_at for this match to compute "New messages" divider
+      try {
+        const { data: readRow, error: readError } = await supabase
+          .from('message_reads')
+          .select('last_read_at')
+          .eq('match_id', selectedMatchId)
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+
+        if (!readError && readRow?.last_read_at) {
+          setLastReadAt(
+            parseSupabaseTimestamp(readRow.last_read_at as any)
+          );
+        } else {
+          setLastReadAt(null);
+        }
+      } catch (err) {
+        console.error('Failed to load read state for current user:', err);
+        setLastReadAt(null);
+      }
+
       setIsLoadingMessages(false);
     };
 
     loadMessages();
 
-    const channel = supabase
+    const messageChannel = supabase
       .channel(`match_messages:${selectedMatchId}`)
       .on(
         'postgres_changes',
@@ -432,7 +485,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      supabase.removeChannel(messageChannel);
     };
   }, [selectedMatchId, currentUser.id]);
 
@@ -492,6 +545,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           },
           { onConflict: 'match_id,user_id' }
         );
+      // Note: we do NOT update lastReadAt here so that the divider stays
+      // anchored to when we opened this thread.
     } catch (err) {
       console.error('Failed to update read receipts:', err);
     }
@@ -607,6 +662,186 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     };
   }, [selectedMatchId, matches]);
+
+  // Load + subscribe to message reactions
+  useEffect(() => {
+    if (!selectedMatchId) {
+      setMessageReactions({});
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadReactions = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('message_reactions')
+          .select('message_id, user_id, emoji')
+          .eq('match_id', selectedMatchId);
+
+        if (error) {
+          console.error('Error loading reactions:', error);
+          return;
+        }
+
+        if (!isMounted || !data) return;
+
+        const map: MessageReactionsState = {};
+        (data as any[]).forEach((row) => {
+          const msgId = row.message_id as string;
+          const emoji = row.emoji as string;
+          const userId = row.user_id as string;
+
+          if (!map[msgId]) {
+            map[msgId] = {};
+          }
+          if (!map[msgId][emoji]) {
+            map[msgId][emoji] = {
+              count: 0,
+              reactedByCurrentUser: false,
+            };
+          }
+          map[msgId][emoji].count += 1;
+          if (userId === currentUser.id) {
+            map[msgId][emoji].reactedByCurrentUser = true;
+          }
+        });
+
+        setMessageReactions(map);
+      } catch (err) {
+        console.error('Unexpected error loading reactions:', err);
+      }
+    };
+
+    loadReactions();
+
+    const reactionChannel = supabase
+      .channel(`message_reactions:${selectedMatchId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_reactions',
+          filter: `match_id=eq.${selectedMatchId}`,
+        },
+        (payload) => {
+          const row = (payload as any).new;
+          if (!row) return;
+          const msgId = row.message_id as string;
+          const emoji = row.emoji as string;
+          const userId = row.user_id as string;
+
+          setMessageReactions((prev) => {
+            const next: MessageReactionsState = { ...prev };
+            if (!next[msgId]) next[msgId] = {};
+            const existing = next[msgId][emoji] || {
+              count: 0,
+              reactedByCurrentUser: false,
+            };
+            next[msgId][emoji] = {
+              count: existing.count + 1,
+              reactedByCurrentUser:
+                existing.reactedByCurrentUser || userId === currentUser.id,
+            };
+            return next;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'message_reactions',
+          filter: `match_id=eq.${selectedMatchId}`,
+        },
+        (payload) => {
+          const row = (payload as any).old;
+          if (!row) return;
+          const msgId = row.message_id as string;
+          const emoji = row.emoji as string;
+          const userId = row.user_id as string;
+
+          setMessageReactions((prev) => {
+            const existingForMsg = prev[msgId];
+            if (!existingForMsg || !existingForMsg[emoji]) return prev;
+
+            const next: MessageReactionsState = { ...prev };
+            const existing = existingForMsg[emoji];
+            const newCount = existing.count - 1;
+
+            if (newCount <= 0) {
+              // Remove emoji entirely for that message
+              const { [emoji]: _removed, ...restEmoji } = existingForMsg;
+              if (Object.keys(restEmoji).length === 0) {
+                const { [msgId]: _removedMsg, ...restMessages } = next;
+                return restMessages;
+              }
+              next[msgId] = restEmoji;
+            } else {
+              next[msgId] = {
+                ...existingForMsg,
+                [emoji]: {
+                  count: newCount,
+                  reactedByCurrentUser:
+                    userId === currentUser.id
+                      ? false
+                      : existing.reactedByCurrentUser,
+                },
+              };
+            }
+
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(reactionChannel);
+    };
+  }, [selectedMatchId, currentUser.id]);
+
+  const handleToggleReaction = async (messageId: string, emoji: string) => {
+    if (!selectedMatchId) return;
+
+    const alreadyReacted =
+      messageReactions[messageId]?.[emoji]?.reactedByCurrentUser;
+
+    try {
+      if (alreadyReacted) {
+        const { error } = await supabase
+          .from('message_reactions')
+          .delete()
+          .eq('match_id', selectedMatchId)
+          .eq('message_id', messageId)
+          .eq('user_id', currentUser.id)
+          .eq('emoji', emoji);
+
+        if (error) {
+          console.error('Error removing reaction:', error);
+        }
+      } else {
+        const { error } = await supabase.from('message_reactions').insert([
+          {
+            match_id: selectedMatchId,
+            message_id: messageId,
+            user_id: currentUser.id,
+            emoji,
+          },
+        ]);
+
+        if (error) {
+          console.error('Error adding reaction:', error);
+        }
+      }
+      // State is updated via realtime subscription.
+    } catch (err) {
+      console.error('Unexpected reaction error:', err);
+    }
+  };
 
   const handleSendMessage = async (text: string = inputText) => {
     if (!text.trim() || !selectedMatchId || !currentUser) return;
@@ -1059,7 +1294,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-2 flex.items-center gap-1.5">
                 <Clock size={12} /> Availability
               </label>
               <TagDisplay tags={user.availability || []} />
@@ -1535,6 +1770,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   const isMe = msg.senderId === currentUser.id;
                   const prevMsg = messages[idx - 1];
                   const showDate = shouldShowDateDivider(msg, prevMsg);
+                  const showNewDivider =
+                    firstUnreadIndex !== -1 && idx === firstUnreadIndex;
+
+                  const reactionsForMsg = messageReactions[msg.id] || {};
 
                   return (
                     <React.Fragment key={msg.id}>
@@ -1545,6 +1784,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             {getDateLabel(msg.timestamp as any)}
                           </span>
                           <div className="h-px bg-white/5 flex-1 max-w-[100px]" />
+                        </div>
+                      )}
+
+                      {showNewDivider && (
+                        <div className="flex items-center justify-center my-3">
+                          <div className="h-px bg-gold/40 flex-1 max-w-[60px]" />
+                          <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
+                            New messages
+                          </span>
+                          <div className="h-px bg-gold/40 flex-1 max-w-[60px]" />
                         </div>
                       )}
 
@@ -1563,23 +1812,77 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           <p className="text-sm md:text-base leading-relaxed">
                             {msg.text}
                           </p>
+
                           <div
-                            className={`flex items-center gap-1 mt-1 ${
-                              isMe ? 'justify-end' : 'justify-start'
+                            className={`mt-1 space-y-1 ${
+                              isMe ? 'text-right' : 'text-left'
                             }`}
                           >
-                            <span
-                              className={`text-[10px] ${
-                                isMe ? 'text-white/60' : 'text-text-muted/60'
+                            {/* Time + Seen */}
+                            <div
+                              className={`flex items-center gap-1 ${
+                                isMe ? 'justify-end' : 'justify-start'
                               }`}
                             >
-                              {formatLocalTime(msg.timestamp as any)}
-                            </span>
-                            {isMe && msg.id === lastSeenMessageId && (
-                              <span className="text-[10px] text-emerald-400 ml-2">
-                                Seen
+                              <span
+                                className={`text-[10px] ${
+                                  isMe
+                                    ? 'text-white/60'
+                                    : 'text-text-muted/60'
+                                }`}
+                              >
+                                {formatLocalTime(msg.timestamp as any)}
                               </span>
-                            )}
+                              {isMe && msg.id === lastSeenMessageId && (
+                                <span className="text-[10px] text-emerald-400 ml-2">
+                                  Seen
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Reactions + quick reaction bar */}
+                            <div
+                              className={`flex items-center gap-1 flex-wrap ${
+                                isMe ? 'justify-end' : 'justify-start'
+                              }`}
+                            >
+                              {Object.entries(reactionsForMsg).map(
+                                ([emoji, info]) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() =>
+                                      handleToggleReaction(msg.id, emoji)
+                                    }
+                                    className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
+                                      info.reactedByCurrentUser
+                                        ? 'bg-gold/20 border-gold/60 text-gold'
+                                        : isMe
+                                        ? 'bg-black/20 border-white/20 text-white/90'
+                                        : 'bg-black/10 border-white/10 text-text-main/90'
+                                    }`}
+                                  >
+                                    <span>{emoji}</span>
+                                    <span>{info.count}</span>
+                                  </button>
+                                )
+                              )}
+
+                              <div className="flex items-center gap-0.5 opacity-70 hover:opacity-100 transition-opacity">
+                                {REACTION_EMOJIS.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() =>
+                                      handleToggleReaction(msg.id, emoji)
+                                    }
+                                    className="text-[12px] px-1 rounded-full hover:bg-black/20"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1592,7 +1895,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
             {/* Typing indicator */}
             {isOtherTyping && (
-              <div className="px-6 pb-1 text-xs text-text-muted italic">
+              <div className="px-6.pb-1 text-xs text-text-muted italic">
                 {getDisplayName(selectedMatch.user.name)} is typing…
               </div>
             )}
@@ -1606,7 +1909,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowEmojiPicker((prev) => !prev)}
-                      className="absolute.left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
                     >
                       🙂
                     </button>
@@ -1625,7 +1928,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                     {/* Emoji Picker */}
                     {showEmojiPicker && (
-                      <div className="absolute.bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
+                      <div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
                         {EMOJIS.map((e, i) => (
                           <button
                             key={i}

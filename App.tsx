@@ -193,6 +193,9 @@ function App() {
           const isForMyMatch = matches.some((m) => m.id === newMsg.match_id);
           if (!isForMyMatch) return;
 
+          // 👇 NEW: don't badge while user is already on MATCHES view
+          if (currentView === ViewState.MATCHES) return;
+
           // 🔔 Bump MATCHES tab (badge only, sound handled in ChatInterface)
           addTabNotification([ViewState.MATCHES]);
           // ❌ Do NOT call playNotificationSound() here – that would play
@@ -204,7 +207,7 @@ function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, matches.map((m) => m.id).join(',')]);
+  }, [user?.id, matches.map((m) => m.id).join(','), currentView]); // 👈 added currentView here
 
   // -----------------------------
   // Auth + Profile
@@ -896,7 +899,7 @@ function App() {
 
         {showUpgradeModal && (
           <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative.animate-in fade-in zoom-in duration-200">
               <button
                 onClick={() => setShowUpgradeModal(false)}
                 className="absolute top-4 right-4 text-text-muted hover:text-white"
@@ -1007,7 +1010,7 @@ function App() {
                     }`}
                   >
                     {count > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1.min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
                         {count > 9 ? '9+' : count}
                       </span>
                     )}

@@ -56,7 +56,22 @@ function App() {
 
   // --- State: UI/Navigation ---
   // Set default view to DISCOVER (always valid on first render)
-  const [currentView, setCurrentView] = useState<ViewState>(ViewState.DISCOVER);
+  const [currentView, setCurrentView] = useState<ViewState>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('kova_current_view') as ViewState;
+      // Only restore main navigable views to avoid stuck states (like Video Room without a match)
+      if ([
+        ViewState.DISCOVER, 
+        ViewState.MATCHES, 
+        ViewState.DASHBOARD, 
+        ViewState.PROFILE, 
+        ViewState.NOTES
+      ].includes(stored)) {
+        return stored;
+      }
+    }
+    return ViewState.DISCOVER;
+  });
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
@@ -260,10 +275,8 @@ function App() {
           securityAnswer: '',
         };
         setUser(mappedUser);
-
-        // Force Discover view on login/restore
-        setCurrentView(ViewState.DISCOVER);
-        localStorage.setItem('kova_current_view', ViewState.DISCOVER);
+        // Note: We deliberately do NOT force set currentView here anymore,
+        // so that the persisted view from localStorage (initialized in useState) takes precedence.
       }
     } catch (error) {
       console.error('Error fetching profile', error);

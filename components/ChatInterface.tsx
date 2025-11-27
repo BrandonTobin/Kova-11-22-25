@@ -1709,7 +1709,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         {selectedMatch ? (
           <>
             {/* Chat header */}
-            <div className="h-16 border-b border-white/5 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20 px-3 md:px-6 relative">
+            <div className="h-16 border-b border-white/5 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20 px-3 md:px-6 relative py-1">
               <div className="flex items-center.gap-3 min-w-0 mr-2 pr-40 h-full">
                 <button
                   onClick={() => setSelectedMatchId(null)}

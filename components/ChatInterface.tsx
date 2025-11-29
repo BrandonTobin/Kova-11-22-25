@@ -544,7 +544,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!selectedMatchId || !currentUser) return;
 
     try {
-      await supabase
+      const { error } = await supabase
         .from('typing_status')
         .upsert(
           {
@@ -555,8 +555,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           },
           { onConflict: 'match_id,user_id' }
         );
+
+      if (error) {
+        console.error('Failed to update typing status:', error.message);
+      }
     } catch (err) {
-      console.error('Failed to update typing status:', err);
+      console.error('Exception updating typing status:', err);
     }
   };
 
@@ -584,7 +588,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!selectedMatchId || !currentUser || messages.length === 0) return;
 
     try {
-      await supabase
+      const { error } = await supabase
         .from('message_reads')
         .upsert(
           {
@@ -594,10 +598,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           },
           { onConflict: 'match_id,user_id' }
         );
+      
+      if (error) {
+        console.error('Failed to update read receipts:', error.message);
+      }
       // Note: we do NOT update lastReadAt here so that the divider stays
       // anchored to when we opened this thread.
     } catch (err) {
-      console.error('Failed to update read receipts:', err);
+      console.error('Exception updating read receipts:', err);
     }
   };
 
@@ -870,7 +878,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           .eq('emoji', emoji);
 
         if (error) {
-          console.error('Error removing reaction:', error);
+          console.error('Error removing reaction:', error.message);
         }
       } else {
         const { error } = await supabase.from('message_reactions').insert([
@@ -883,7 +891,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         ]);
 
         if (error) {
-          console.error('Error adding reaction:', error);
+          console.error('Error adding reaction:', error.message);
         }
       }
       // State is updated via realtime subscription.
@@ -898,23 +906,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const handleSendMessage = async (text: string = inputText) => {
     if (!text.trim() || !selectedMatchId || !currentUser) return;
 
+    const trimmedText = text.trim();
     const now = new Date();
 
+    // temporary optimistic message
+    const tempId = `temp-${Date.now()}`;
     const optimisticMsg: Message = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       matchId: selectedMatchId,
       senderId: currentUser.id,
-      text,
+      text: trimmedText,
       timestamp: now,
     };
 
+    // show optimistically
     setMessages((prev) => [...prev, optimisticMsg]);
     setInputText('');
 
     setLiveMessageUpdates((prev) => ({
       ...prev,
       [selectedMatchId]: {
-        text,
+        text: trimmedText,
         timestamp: now,
       },
     }));
@@ -929,41 +941,52 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {
             match_id: selectedMatchId,
             sender_id: currentUser.id,
-            text,
+            text: trimmedText,
           },
         ])
-        .select()
+        .select('*')
         .single();
 
-      if (error) throw error;
-
-      if (data) {
-        const realTimestamp = parseSupabaseTimestamp(data.created_at);
-
-        setMessages((prev) => {
-          const alreadyHasRealMsg = prev.some((m) => m.id === data.id);
-
-          if (alreadyHasRealMsg) {
-            return prev.filter((m) => m.id !== optimisticMsg.id);
-          }
-
-          return prev.map((m) =>
-            m.id === optimisticMsg.id
-              ? { ...m, id: data.id, timestamp: realTimestamp }
-              : m
-          );
-        });
-
-        setLiveMessageUpdates((prev) => ({
-          ...prev,
-          [selectedMatchId]: {
-            text,
-            timestamp: realTimestamp,
-          },
-        }));
+      if (error || !data) {
+        console.error('Supabase insert error (messages):', error);
+        // remove the optimistic message if it failed
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        alert(
+          `Message failed to send. Please try again. ${
+            (error as any)?.message ? `Details: ${(error as any).message}` : ''
+          }`
+        );
+        return;
       }
+
+      const realTimestamp = parseSupabaseTimestamp(
+        data.created_at || data.timestamp
+      );
+
+      // replace temp message with the real one from Supabase
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId
+            ? {
+                ...m,
+                id: data.id,
+                timestamp: realTimestamp,
+              }
+            : m
+        )
+      );
+
+      setLiveMessageUpdates((prev) => ({
+        ...prev,
+        [selectedMatchId]: {
+          text: trimmedText,
+          timestamp: realTimestamp,
+        },
+      }));
     } catch (err) {
-      console.error('Failed to send message:', err);
+      console.error('Unexpected error sending message:', err);
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      alert('Message failed to send. Please check the console for details.');
     }
   };
 
@@ -1073,7 +1096,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         );
 
       if (error) {
-        console.error('Error marking chat as.hidden for this user:', error);
+        console.error('Error marking chat as.hidden for this user:', error.message);
         alert('Failed to delete chat. Please try again.');
         return;
       }
@@ -1765,10 +1788,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 absolute right-3 md:right-6 top-1/2 -translate-y-1/2">
+              <div className="flex items-center justify-center gap-2 shrink-0 absolute right-3 md:right-6 top-1/2 -translate-y-1/2">
                 <button
                   onClick={() => onStartVideoCall(selectedMatch)}
-                  className="px-3 py-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center.gap-2 text-xs font-bold"
+                  className="px-3 py-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-bold"
                   title="Start Co-working Session"
                 >
                   <Video size={16} />
@@ -1777,7 +1800,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                 <button
                   onClick={handleDeleteChat}
-                  className="px-3 py-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center gap-2 text-xs font-medium"
+                  className="px-3 py-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
                   title="Delete Chat History"
                 >
                   <Trash2 size={16} />
@@ -1786,7 +1809,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                 <button
                   onClick={handleUnmatchClick}
-                  className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center.gap-2 text-xs font-medium"
+                  className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
                   title="Unmatch"
                 >
                   <UserMinus size={16} />
@@ -1805,17 +1828,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 )}
 
                 {messages.length === 0 && !isLoadingMessages && (
-                  <div className="flex flex-col items-center.justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
-                    <div className="w-12 h-12 bg-surface rounded-full flex items-center.justify-center mb-4 border border-white/5">
-                      <Bot size={24} className="text-gold" />
-                    </div>
-                    <p>
+                  <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
+                    <p className="mb-1">
                       This is the start of your conversation with{' '}
                       {getDisplayName(selectedMatch.user.name)}.
                     </p>
-                    <p className="text-xs mt-2">
-                      Say hello to start collaborating!
-                    </p>
+                    <p className="text-xs">Say hello to start collaborating!</p>
                   </div>
                 )}
 
@@ -1831,29 +1849,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   return (
                     <React.Fragment key={msg.id}>
                       {showDate && (
-  <div className="w-full flex justify-center my-6">
-    <div className="flex items-center justify-center">
-      <div className="h-px bg-white/5 w-16" />
-      <span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">
-        {getDateLabel(msg.timestamp as any)}
-      </span>
-      <div className="h-px bg-white/5 w-16" />
-    </div>
-  </div>
-)}
+                        <div className="w-full flex justify-center my-6">
+                          <div className="flex items-center justify-center">
+                            <div className="h-px bg-white/5 w-16" />
+                            <span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                              {getDateLabel(msg.timestamp as any)}
+                            </span>
+                            <div className="h-px bg-white/5 w-16" />
+                          </div>
+                        </div>
+                      )}
 
-{showNewDivider && (
-  <div className="w-full flex justify-center my-3">
-    <div className="flex items-center justify-center">
-      <div className="h-px bg-gold/40 w-12" />
-      <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
-        New messages
-      </span>
-      <div className="h-px bg-gold/40 w-12" />
-    </div>
-  </div>
-)}
-
+                      {showNewDivider && (
+                        <div className="w-full flex justify-center my-3">
+                          <div className="flex items-center justify-center">
+                            <div className="h-px bg-gold/40 w-12" />
+                            <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
+                              New messages
+                            </span>
+                            <div className="h-px bg-gold/40 w-12" />
+                          </div>
+                        </div>
+                      )}
 
                       <div
                         className={`flex ${
@@ -2020,13 +2037,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
 
                   <button
-  onClick={() => handleSendMessage()}
-  disabled={!inputText.trim()}
-  className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
->
-  <Send size={20} />
-</button>
-
+                    onClick={() => handleSendMessage()}
+                    disabled={!inputText.trim()}
+                    className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
+                  >
+                    <Send size={20} />
+                  </button>
                 </div>
               </div>
             </div>

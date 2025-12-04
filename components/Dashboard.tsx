@@ -1184,106 +1184,120 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               !isPro ? 'cursor-not-allowed' : ''
             }`}
           >
-            {isPro && (
-              <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
-                <Sparkles size={12} /> AI Roadmap
-              </div>
-            )}
-
-            <div className="relative z-10 flex-1 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-                    Kova Pro Goal Intelligence {!isPro && <Lock size={14} className="text-text-muted" />}
-                  </h3>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    AI-prioritized roadmap and completion predictions based on your goals.
-                  </p>
-                </div>
-                <Target size={18} className="text-text-muted" />
-              </div>
-
-              {/* Roadmap preview */}
-              <div className="space-y-3 mb-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase tracking-wide text-text-muted">AI Weekly Roadmap</span>
-                  <span className="text-[10px] text-text-muted/80">Preview</span>
-                </div>
-
-                {roadmapPreview.length > 0 ? (
-                  <div className="space-y-2">
-                    {roadmapPreview.map((goal, idx) => (
-                      <div
-                        key={goal.id || idx}
-                        className="flex items-center gap-3 p-2.5 rounded-xl bg-background/60 border border-white/5"
-                      >
-                        <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center text-[11px] text-primary font-semibold">
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-xs font-medium text-text-main line-clamp-1">{goal.text}</p>
-                          <p className="text-[10px] text-text-muted mt-0.5">
-                            {goal.completed ? 'Marked complete — reinforcing habit' : 'High leverage for this week'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-4 rounded-xl bg-background/60 border border-white/5 text-xs text-text-muted text-center">
-                    Add a few goals to unlock a personalized roadmap.
+            {/* Wrapper to disable interactions */}
+            <div className="pointer-events-none h-full flex flex-col relative">
+                {isPro && (
+                  <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                    <Sparkles size={12} /> AI Roadmap
                   </div>
                 )}
-              </div>
 
-              {/* Prediction section */}
-              <div className="mt-auto pt-4 border-t border-white/5">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] uppercase tracking-wide text-text-muted">Predicted completion</span>
-                  <span className="text-[11px] text-text-muted">
-                    Confidence: <span className="text-gold font-semibold">{confidence}%</span>
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-text-main">
-                    {totalGoalsCount > 0 ? `ETA around ${etaLabel}` : 'Waiting for more data'}
-                  </p>
-                  <div className="flex items-center gap-1 text-[10px] text-text-muted">
-                    <Clock size={12} /> {totalGoalsCount} goals tracked
+                <div className="relative z-10 flex-1 flex flex-col">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
+                        Kova Pro Goal Intelligence {!isPro && <Lock size={14} className="text-text-muted" />}
+                      </h3>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        AI-prioritized roadmap and completion predictions based on your goals.
+                      </p>
+                    </div>
+                    <Target size={18} className="text-text-muted" />
                   </div>
-                </div>
-              </div>
-            </div>
 
-            {/* Lock overlay for free users */}
-            {!isPro && (
-              <>
-                <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 rounded-2xl bg-gold/40 blur-xl opacity-80 animate-pulse" />
-                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
-                      <Lock size={28} className="text-background" />
+                  {/* Roadmap preview */}
+                  <div className="space-y-3 mb-5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] uppercase tracking-wide text-text-muted">AI Weekly Roadmap</span>
+                      <span className="text-[10px] text-text-muted/80">Preview</span>
+                    </div>
+
+                    {roadmapPreview.length > 0 ? (
+                      <div className="space-y-2">
+                        {roadmapPreview.map((goal, idx) => (
+                          <div
+                            key={goal.id || idx}
+                            className="flex items-center gap-3 p-2.5 rounded-xl bg-background/60 border border-white/5"
+                          >
+                            <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/40 flex items-center justify-center text-[11px] text-primary font-semibold">
+                              {idx + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-text-main line-clamp-1">{goal.text}</p>
+                              <p className="text-[10px] text-text-muted mt-0.5">
+                                {goal.completed ? 'Marked complete — reinforcing habit' : 'High leverage for this week'}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-xl bg-background/60 border border-white/5 text-xs text-text-muted text-center">
+                        Add a few goals to unlock a personalized roadmap.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Prediction section */}
+                  <div className="mt-auto pt-4 border-t border-white/5">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[11px] uppercase tracking-wide text-text-muted">Predicted completion</span>
+                      <span className="text-[11px] text-text-muted">
+                        Confidence: <span className="text-gold font-semibold">{confidence}%</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-text-main">
+                        {totalGoalsCount > 0 ? `ETA around ${etaLabel}` : 'Waiting for more data'}
+                      </p>
+                      <div className="flex items-center gap-1 text-[10px] text-text-muted">
+                        <Clock size={12} /> {totalGoalsCount} goals tracked
+                      </div>
                     </div>
                   </div>
-
-                  <div className="space-y-1 max-w-xs">
-                    <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
-                      Kova Pro Feature
-                    </p>
-                    <p className="text-sm text-text-muted">AI-crafted roadmap for faster, smarter progress.</p>
-                  </div>
-
-                  <button
-                    onClick={onUpgrade}
-                    className="mt-2 px-6 py-3 rounded-xl bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold shadow-xl border border-gold/70 hover:shadow-[0_0_35px_rgba(234,179,8,0.7)] transition-all flex items-center gap-2"
-                  >
-                    <Crown size={16} className="text-surface" />
-                    Upgrade to Kova Pro
-                  </button>
                 </div>
-              </>
-            )}
+
+                {/* Lock overlay for free users */}
+                {!isPro && (
+                  <>
+                    <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
+                      <div className="relative">
+                        <div className="absolute inset-0 rounded-2xl bg-gold/40 blur-xl opacity-80 animate-pulse" />
+                        <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
+                          <Lock size={28} className="text-background" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 max-w-xs">
+                        <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
+                          Kova Pro Feature
+                        </p>
+                        <p className="text-sm text-text-muted">AI-crafted roadmap for faster, smarter progress.</p>
+                      </div>
+
+                      <button
+                        onClick={onUpgrade}
+                        disabled
+                        className="mt-2 px-6 py-3 rounded-xl bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold shadow-xl border border-gold/70 transition-all flex items-center gap-2 opacity-60 cursor-not-allowed"
+                      >
+                        <Crown size={16} className="text-surface" />
+                        Upgrade to Kova Pro
+                      </button>
+                    </div>
+                  </>
+                )}
+            </div>
+
+            {/* NEW COMING SOON OVERLAY */}
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="px-6 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
+                  {/* optional lock icon here if you want */}
+                  <span className="text-xs font-semibold tracking-[0.2em] uppercase text-zinc-100">
+                    Coming Soon
+                  </span>
+                </div>
+            </div>
           </div>
 
           {/* Kova Pro Insights (Locked/Unlocked) */}
@@ -1292,92 +1306,104 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               !isPro ? 'cursor-not-allowed' : ''
             }`}
           >
-            {isPro && (
-              <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
-                <Crown size={12} fill="currentColor" /> Pro Enabled
-              </div>
-            )}
+            <div className="pointer-events-none h-full flex flex-col relative">
+                {isPro && (
+                  <div className="absolute top-4 right-4 z-20 bg-gradient-to-r from-gold to-amber-600 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg flex items-center gap-1">
+                    <Crown size={12} fill="currentColor" /> Pro Enabled
+                  </div>
+                )}
 
-            <div className="flex-1 flex flex-col transition-all duration-300 relative z-10">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
-                    Kova Pro Insights {!isPro && <Lock size={14} className="text-text-muted" />}
-                  </h3>
-                  <p className="text-xs text-text-muted mt-0.5">Unlock deeper analytics and personalized insights</p>
-                </div>
-                <Sparkles size={18} className="text-gold" />
-              </div>
+                <div className="flex-1 flex flex-col transition-all duration-300 relative z-10">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
+                        Kova Pro Insights {!isPro && <Lock size={14} className="text-text-muted" />}
+                      </h3>
+                      <p className="text-xs text-text-muted mt-0.5">Unlock deeper analytics and personalized insights</p>
+                    </div>
+                    <Sparkles size={18} className="text-gold" />
+                  </div>
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg">
-                      <BarChart2 size={16} />
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-surface rounded-lg">
+                          <BarChart2 size={16} />
+                        </div>
+                        <span className="text-sm font-medium">30-day focus trendline</span>
+                      </div>
+                      {!isPro && <Lock size={12} />}
                     </div>
-                    <span className="text-sm font-medium">30-day focus trendline</span>
-                  </div>
-                  {!isPro && <Lock size={12} />}
-                </div>
-                <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg">
-                      <Clock size={16} />
+                    <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-surface rounded-lg">
+                          <Clock size={16} />
+                        </div>
+                        <span className="text-sm font-medium">Best days & times for deep work</span>
+                      </div>
+                      {!isPro && <Lock size={12} />}
                     </div>
-                    <span className="text-sm font-medium">Best days & times for deep work</span>
-                  </div>
-                  {!isPro && <Lock size={12} />}
-                </div>
-                <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg">
-                      <Users size={16} />
+                    <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-surface rounded-lg">
+                          <Users size={16} />
+                        </div>
+                        <span className="text-sm font-medium">Top accountability partners</span>
+                      </div>
+                      {!isPro && <Lock size={12} />}
                     </div>
-                    <span className="text-sm font-medium">Top accountability partners</span>
-                  </div>
-                  {!isPro && <Lock size={12} />}
-                </div>
-                <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-surface rounded-lg">
-                      <Shield size={16} />
+                    <div className="flex items-center justify-between p-3 bg-background rounded-xl border border-white/5">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-surface rounded-lg">
+                          <Shield size={16} />
+                        </div>
+                        <span className="text-sm font-medium">Streak protection predictions</span>
+                      </div>
+                      {!isPro && <Lock size={12} />}
                     </div>
-                    <span className="text-sm font-medium">Streak protection predictions</span>
                   </div>
-                  {!isPro && <Lock size={12} />}
                 </div>
-              </div>
+
+                {!isPro && (
+                  <>
+                    <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
+
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
+                      <div className="relative">
+                        <div className="absolute inset-0 rounded-2xl bg-gold/40 blur-xl opacity-80 animate-pulse" />
+                        <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
+                          <Lock size={28} className="text-background" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 max-w-xs">
+                        <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
+                          Kova Pro Feature
+                        </p>
+                        <p className="text-sm text-text-muted">Deep performance insights that refine your focus.</p>
+                      </div>
+
+                      <button
+                        onClick={onUpgrade}
+                        disabled
+                        className="mt-2 px-6 py-3 bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold rounded-xl shadow-xl border border-gold/70 transition-all flex items-center gap-2 opacity-60 cursor-not-allowed"
+                      >
+                        <Crown size={16} className="text-surface" />
+                        Upgrade to Kova Pro
+                      </button>
+                    </div>
+                  </>
+                )}
             </div>
 
-            {!isPro && (
-              <>
-                <div className="absolute inset-0 bg-background/60 backdrop-blur-md z-10 animate-in fade-in duration-500" />
-
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 text-center px-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 rounded-2xl bg-gold/40 blur-xl opacity-80 animate-pulse" />
-                    <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-gold to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.6)] border border-gold/70">
-                      <Lock size={28} className="text-background" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1 max-w-xs">
-                    <p className="text-[10px] uppercase tracking-[0.25em] text-gold/85 font-semibold">
-                      Kova Pro Feature
-                    </p>
-                    <p className="text-sm text-text-muted">Deep performance insights that refine your focus.</p>
-                  </div>
-
-                  <button
-                    onClick={onUpgrade}
-                    className="mt-2 px-6 py-3 bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold rounded-xl shadow-xl border border-gold/70 hover:shadow-[0_0_35px_rgba(234,179,8,0.7)] transition-all flex items-center gap-2"
-                  >
-                    <Crown size={16} className="text-surface" />
-                    Upgrade to Kova Pro
-                  </button>
-                </div>
-              </>
-            )}
+            {/* NEW COMING SOON OVERLAY */}
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+              <div className="px-6 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
+                 <span className="text-xs font-semibold tracking-[0.2em] uppercase text-zinc-100">
+                   Coming Soon
+                 </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

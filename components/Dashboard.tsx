@@ -978,11 +978,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             <div className="w-full pb-2 overflow-hidden relative">
               {/* Overlay for locked modes */}
               {isLockedHeatmap && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/95 pointer-events-auto">
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black pointer-events-auto">
                    <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
                       <Lock size={12} className="text-zinc-400" />
                       <span className="text-xs font-semibold tracking-wide text-white">
-                        Kova Pro • Coming Soon
+                        Kova Pro | Coming Soon
                       </span>
                    </div>
                 </div>
@@ -1298,10 +1298,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
             {/* NEW COMING SOON OVERLAY */}
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <div className="px-6 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
-                  {/* optional lock icon here if you want */}
-                  <span className="text-xs font-semibold tracking-[0.2em] uppercase text-zinc-100">
-                    Coming Soon
+                <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
+                  <Lock size={12} className="text-zinc-400" />
+                  <span className="text-xs font-semibold tracking-wide text-white">
+                    Kova Pro | Coming Soon
                   </span>
                 </div>
             </div>
@@ -1405,9 +1405,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
             {/* NEW COMING SOON OVERLAY */}
             <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-              <div className="px-6 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
-                 <span className="text-xs font-semibold tracking-[0.2em] uppercase text-zinc-100">
-                   Coming Soon
+              <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
+                 <Lock size={12} className="text-zinc-400" />
+                 <span className="text-xs font-semibold tracking-wide text-white">
+                   Kova Pro | Coming Soon
                  </span>
               </div>
             </div>

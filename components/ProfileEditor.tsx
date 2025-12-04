@@ -101,19 +101,17 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // NEW: state for connections modal
+  // Connections modal state
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
 
-  // NEW: derive connections from matches (unique by user.id)
+  // Derive connections from matches
   const connections = useMemo(() => {
     const map = new Map<string, Match['user']>();
-
     (matches || []).forEach((m) => {
       if (m.user?.id) {
         map.set(m.user.id, m.user);
       }
     });
-
     return Array.from(map.values());
   }, [matches]);
 
@@ -189,11 +187,8 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
   };
 
   const handleSave = () => {
-    // Pass the raw file to parent for uploading
     onSave(formData, imageFile || undefined);
     setIsEditing(false);
-    // Note: We don't clear imageFile here immediately because if upload fails 
-    // we might want to keep state, but for now we rely on App.tsx to handle success.
   };
 
   const handleCancel = () => {
@@ -210,7 +205,6 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
     setIsEditing(false);
   };
 
-  // Helper for array manipulation
   const addToArray = (field: keyof User, item: string) => {
     setFormData(prev => {
       const current = (prev[field] as string[]) || [];
@@ -229,45 +223,120 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-12">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-text-main">My Profile</h1>
-          <p className="text-text-muted">Manage your personal brand and preferences.</p>
-        </div>
-        <div className="flex gap-3">
-          {!isEditing ? (
-            <button 
-              onClick={() => setIsEditing(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-colors border border-primary/20 font-medium"
-            >
-              <Edit2 size={16} /> Edit Profile
-            </button>
-          ) : (
-            <>
-              <button 
-                onClick={handleCancel}
-                className="px-5 py-2.5 border border-white/10 rounded-xl text-text-muted hover:bg-white/5 transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSave}
-                className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-bold shadow-lg flex items-center gap-2"
-              >
-                <Save size={18} /> Save Changes
-              </button>
-            </>
-          )}
-        </div>
+    <div className="max-w-6xl mx-auto pb-12 px-4 md:px-6">
+      
+      {/* 1. TOP HEADER: Identity & Actions */}
+      <div className="bg-surface border border-white/10 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center md:items-start gap-6 relative shadow-lg">
+          {/* Avatar Section */}
+          <div className="relative group shrink-0">
+             <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background shadow-2xl overflow-hidden relative bg-black">
+                <img 
+                  src={formData.imageUrl || DEFAULT_PROFILE_IMAGE} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                />
+                {isEditing && (
+                  <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    <Camera size={24} className="text-white mb-1" />
+                    <span className="text-[10px] uppercase font-bold text-white tracking-widest">Change</span>
+                  </div>
+                )}
+             </div>
+             <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept="image/*"
+                onChange={handleImageChange}
+             />
+          </div>
+
+          {/* Info Section */}
+          <div className="flex-1 text-center md:text-left pt-2 w-full md:w-auto">
+             {isEditing ? (
+                <div className="space-y-3 max-w-md mx-auto md:mx-0">
+                   <div>
+                      <label className="block text-xs font-medium text-text-muted mb-1 text-left">Full Name</label>
+                      <input 
+                        type="text" 
+                        name="name" 
+                        value={formData.name} 
+                        onChange={handleChange} 
+                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-text-main focus:outline-none focus:border-gold/50" 
+                        placeholder="Full Name"
+                      />
+                   </div>
+                   <div>
+                      <label className="block text-xs font-medium text-text-muted mb-1 text-left">Role / Title</label>
+                      <input 
+                        type="text" 
+                        name="role" 
+                        value={formData.role} 
+                        onChange={handleChange} 
+                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-text-main focus:outline-none focus:border-gold/50" 
+                        placeholder="Title / Role"
+                      />
+                   </div>
+                </div>
+             ) : (
+                <>
+                   <h1 className="text-3xl font-bold text-text-main mb-1">{formData.name || "User"}</h1>
+                   <p className="text-lg text-text-muted mb-4">{formData.role || "Founder"}</p>
+                </>
+             )}
+             
+             <div className="flex flex-wrap gap-3 justify-center md:justify-start mt-4">
+                 <button
+                  type="button"
+                  onClick={() => connections.length > 0 && setShowConnectionsModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-background border border-white/10 rounded-xl text-sm font-medium text-text-muted hover:text-primary transition-colors disabled:opacity-50"
+                  disabled={connections.length === 0}
+                >
+                  <Users size={16} className="text-primary" />
+                  <span>
+                    {connections.length} connection{connections.length !== 1 ? 's' : ''}
+                  </span>
+                </button>
+             </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 mt-2 md:mt-0 md:self-start">
+             {!isEditing ? (
+                <button 
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-colors border border-primary/20 font-medium"
+                >
+                  <Edit2 size={16} /> Edit Profile
+                </button>
+              ) : (
+                <>
+                  <button 
+                    onClick={handleCancel}
+                    className="px-5 py-2.5 border border-white/10 rounded-xl text-text-muted hover:bg-white/5 transition-colors font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleSave}
+                    className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-bold shadow-lg flex items-center gap-2"
+                  >
+                    <Save size={18} /> Save Changes
+                  </button>
+                </>
+              )}
+          </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* LEFT COLUMN: Account & Status */}
-        <div className="space-y-6">
-          {/* Plan Card */}
+        {/* LEFT COLUMN: Metadata & Subscription */}
+        <div className="space-y-6 lg:col-span-1">
+          {/* Account Tier */}
           <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
             <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Account Tier</h3>
             
@@ -282,18 +351,19 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                  </div>
                ) : (
                  <div className="w-12 h-12 bg-surface border border-white/10 rounded-full flex items-center justify-center text-text-muted shrink-0">
-                   <User size={24} />
+                   <UserIcon size={24} />
                  </div>
                )}
                <div>
-                  <p className="font-bold text-text-main text-lg">{SUBSCRIPTION_PLANS[user.subscriptionTier].name}</p>
+                  <p className="font-bold text-text-main text-lg">
+                    {SUBSCRIPTION_PLANS[user.subscriptionTier]?.name || 'Unknown'}
+                  </p>
                   <p className="text-xs text-text-muted">
                     {user.subscriptionTier === 'free' ? 'Standard Access' : 'Active Subscription'}
                   </p>
                </div>
             </div>
             
-            {/* Profile Link Action */}
             <div className="pt-4 border-t border-white/5">
               <button 
                 onClick={copyProfileLink}
@@ -305,37 +375,11 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
             </div>
           </div>
 
-          {/* Kova ID Card */}
-          <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-background rounded-md text-gold border border-gold/20">
-                  <Hash size={14} />
-                </div>
-                <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Kova ID</span>
-              </div>
-              <button 
-                onClick={copyIdToClipboard}
-                className="text-text-muted hover:text-white transition-colors"
-                title="Copy ID"
-              >
-                {copiedId ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
-              </button>
-            </div>
-            <div className="bg-background rounded-lg border border-white/5 p-3 text-center">
-              <p className="text-xl font-mono font-bold text-text-main tracking-widest">{formData.kovaId}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* CENTER & RIGHT: Main Profile Info */}
-        <div className="lg:col-span-2 space-y-6">
-
           {/* Subscription Selector */}
           <div className="bg-surface border border-white/10 rounded-2xl p-6">
              <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-6 pb-2 border-b border-white/5">Subscription</h3>
              
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+             <div className="grid grid-cols-1 gap-4">
                 {Object.values(SUBSCRIPTION_PLANS).map((plan) => {
                   const isCurrent = user.subscriptionTier === plan.id;
                   const isPro = plan.id === 'kova_pro';
@@ -371,11 +415,6 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                             <span className="leading-tight">{feat}</span>
                           </li>
                         ))}
-                        {plan.features.length > 3 && (
-                          <li className="text-xs text-text-muted/60 italic pl-5">
-                            + {plan.features.length - 3} more...
-                          </li>
-                        )}
                       </ul>
                       
                       {!isCurrent && !isFree && (
@@ -401,76 +440,38 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                 })}
              </div>
           </div>
-          
-          {/* Section: Profile Header (Image) */}
-          <div className="bg-surface border border-white/10 rounded-2xl p-6 flex flex-col items-center text-center">
-            <div className="relative group mb-4">
-              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background shadow-2xl overflow-hidden relative">
-                <img 
-                  src={formData.imageUrl || DEFAULT_PROFILE_IMAGE} 
-                  alt="Profile" 
-                  className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-                />
-                {isEditing && (
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                  >
-                    <Camera size={24} className="text-white mb-1" />
-                    <span className="text-[10px] uppercase font-bold text-white tracking-widest">Change</span>
-                  </div>
-                )}
+
+          {/* Kova ID Card */}
+          <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-background rounded-md text-gold border border-gold/20">
+                  <Hash size={14} />
+                </div>
+                <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Kova ID</span>
               </div>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/*"
-                onChange={handleImageChange}
-              />
+              <button 
+                onClick={copyIdToClipboard}
+                className="text-text-muted hover:text-white transition-colors"
+                title="Copy ID"
+              >
+                {copiedId ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
+              </button>
             </div>
-            <p className="text-sm text-text-muted">Profile Picture</p>
-
-            {/* NEW: Connections button under avatar */}
-            <button
-              type="button"
-              onClick={() => connections.length > 0 && setShowConnectionsModal(true)}
-              className="mt-3 inline-flex items-center gap-2 text-sm text-text-muted hover:text-primary transition-colors disabled:opacity-50"
-              disabled={connections.length === 0}
-            >
-              <Users size={16} className="text-primary" />
-              <span className="font-medium text-text-main">
-                {connections.length} connection{connections.length !== 1 ? 's' : ''}
-              </span>
-            </button>
+            <div className="bg-background rounded-lg border border-white/5 p-3 text-center">
+              <p className="text-xl font-mono font-bold text-text-main tracking-widest">{formData.kovaId}</p>
+            </div>
           </div>
+        </div>
 
-          {/* Section: Professional Info */}
+        {/* RIGHT COLUMN: Profile Content */}
+        <div className="lg:col-span-2 space-y-6">
+
+          {/* Professional Info */}
           <div className="bg-surface border border-white/10 rounded-2xl p-6">
             <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-6 pb-2 border-b border-white/5">Professional Info</h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Full Name */}
-              <div>
-                <label className="block text-sm font-medium text-text-muted mb-1.5">Full Name</label>
-                {isEditing ? (
-                  <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all" />
-                ) : (
-                  <p className="text-text-main font-medium">{formData.name}</p>
-                )}
-              </div>
-
-              {/* Title */}
-              <div>
-                <label className="block text-sm font-medium text-text-muted mb-1.5 flex items-center gap-1.5"><Briefcase size={14} /> Title / Role</label>
-                {isEditing ? (
-                  <input type="text" name="role" value={formData.role} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all" />
-                ) : (
-                  <p className="text-text-main">{formData.role}</p>
-                )}
-              </div>
-
               {/* Industry */}
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1.5 flex items-center gap-1.5"><Globe size={14} /> Industry</label>
@@ -525,7 +526,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
             </div>
           </div>
 
-          {/* Section: About You */}
+          {/* About You */}
           <div className="bg-surface border border-white/10 rounded-2xl p-6">
             <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-6 pb-2 border-b border-white/5">About You</h3>
             
@@ -605,7 +606,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
             </div>
           </div>
 
-          {/* Section: Interests & Connect */}
+          {/* Interests & Connect */}
           <div className="bg-surface border border-white/10 rounded-2xl p-6">
             <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-6 pb-2 border-b border-white/5">Interests & Connect</h3>
             
@@ -685,7 +686,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
         </div>
       </div>
 
-      {/* NEW: Connections modal */}
+      {/* Connections modal */}
       {showConnectionsModal && (
         <div
           className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
@@ -743,5 +744,24 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
     </div>
   );
 };
+
+// IMPORTANT: Define UserIcon locally as 'User' is already imported as a type
+const UserIcon = ({ size, className }: { size?: number, className?: string }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    width={size || 24} 
+    height={size || 24} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+  >
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
 
 export default ProfileEditor;

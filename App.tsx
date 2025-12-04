@@ -911,8 +911,14 @@ function App() {
         )}
 
         {showUpgradeModal && (
-          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative.animate-in fade-in zoom-in duration-200">
+          <div 
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowUpgradeModal(false)}
+          >
+            <div 
+              className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative.animate-in fade-in zoom-in duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 onClick={() => setShowUpgradeModal(false)}
                 className="absolute top-4 right-4 text-text-muted hover:text-white"

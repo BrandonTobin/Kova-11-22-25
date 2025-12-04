@@ -452,6 +452,9 @@ function App() {
 
       localStorage.setItem('kova_current_user_id', profile.id);
       await fetchUserProfile(profile.id);
+      
+      // Force navigation to Discover screen upon successful login
+      setCurrentView(ViewState.DISCOVER);
 
       setIsLoading(false);
     } catch (err) {
@@ -562,6 +565,8 @@ function App() {
       if (createdUser) {
         localStorage.setItem('kova_current_user_id', createdUser.id);
         await fetchUserProfile(createdUser.id);
+        // Force navigation to Discover screen upon successful registration
+        setCurrentView(ViewState.DISCOVER);
       }
 
       setIsLoading(false);

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -835,7 +834,7 @@ function App() {
       label: 'KOVA AI', 
       icon: Sparkles,
       isLocked: true,
-      onClick: () => setUpgradeTargetTier('kova_pro')
+      onClick: () => {} // Disable click functionality
     },
     { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
@@ -1055,18 +1054,30 @@ function App() {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => item.onClick ? item.onClick() : handleNavClick(item.id)}
+                    onClick={() => {
+                      if (item.id === 'KOVA_AI') return; // Disable click for locked item
+                      item.onClick ? item.onClick() : handleNavClick(item.id);
+                    }}
                     title={item.isLocked ? "Kova Pro • Coming Soon" : undefined}
+                    disabled={item.id === 'KOVA_AI'}
                     className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
                       isActive
                         ? 'text-gold'
                         : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
-                    } ${item.isLocked ? 'hover:!text-gold group' : ''}`}
+                    } ${item.isLocked ? 'hover:!text-gold group' : ''} ${item.id === 'KOVA_AI' ? 'cursor-not-allowed opacity-80' : ''}`}
                   >
                     {count > 0 && (
                       <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
                         {count > 9 ? '9+' : count}
                       </span>
+                    )}
+
+                    {/* NEW: Coming Soon Pill for Locked Items - CENTERED OVER ICON */}
+                    {item.isLocked && (
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-3/4 bg-black/90 backdrop-blur-md border border-white/15 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-[0_0_10px_rgba(0,0,0,0.5)] z-20 whitespace-nowrap pointer-events-none">
+                         <Lock size={8} className="text-zinc-400" />
+                         <span className="text-[8px] font-bold text-white tracking-wider">COMING SOON</span>
+                      </div>
                     )}
 
                     {/* icon on top */}
@@ -1075,9 +1086,8 @@ function App() {
                       className={isActive ? 'stroke-[2.5px]' : 'stroke-2'}
                     />
 
-                    {/* label below */}
+                    {/* label below - always visible, NO LOCK ICON next to text */}
                     <span className="text-[9px] md:text-[10px] font-bold tracking-widest flex items-center gap-0.5">
-                      {item.isLocked && <Lock size={8} className="mb-[1px]" />}
                       {item.label}
                     </span>
                   </button>

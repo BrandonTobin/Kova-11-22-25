@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, isProUser, Match } from '../types';
 import { supabase } from '../supabaseClient';
@@ -352,17 +353,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   const handleHeatmapModeChange = (mode: 'productivity' | 'consistency' | 'goals') => {
-    if (mode === 'productivity') {
-      setHeatmapMode(mode);
-      return;
-    }
-
-    // Gating for Consistency and Goals
-    if (!isPro) {
-      onUpgrade();
-    } else {
-      setHeatmapMode(mode);
-    }
+    // Allow selecting any mode to show the locked overlay if not pro
+    setHeatmapMode(mode);
   };
 
   const handleScheduleComplete = () => {
@@ -745,6 +737,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   const confidence = Math.round(60 + completionRatio * 35);
   // -------------------------------------------------------------------------
 
+  // Locked check for heatmaps
+  const isLockedHeatmap = !isPro && (heatmapMode === 'consistency' || heatmapMode === 'goals');
+
   return (
     <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
       {/* Schedule Modal */}
@@ -981,7 +976,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
             {/* Heatmap Container */}
             <div className="w-full pb-2 overflow-hidden relative">
-              <div className="origin-top-left scale-[0.45] lg:scale-[0.5] xl:scale-[0.65] 2xl:scale-[0.8] min-[1900px]:scale-100">
+              {/* Overlay for locked modes */}
+              {isLockedHeatmap && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/95 pointer-events-auto">
+                   <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
+                      <Lock size={12} className="text-zinc-400" />
+                      <span className="text-xs font-semibold tracking-wide text-white">
+                        Kova Pro • Coming Soon
+                      </span>
+                   </div>
+                </div>
+              )}
+
+              <div className={`origin-top-left scale-[0.45] lg:scale-[0.5] xl:scale-[0.65] 2xl:scale-[0.8] min-[1900px]:scale-100 ${isLockedHeatmap ? 'pointer-events-none' : ''}`}>
                 <div className="flex items-start gap-4 w-full justify-center min-w-max">
                   {/* Y-axis labels */}
                   <div

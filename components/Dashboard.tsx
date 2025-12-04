@@ -1,6 +1,7 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, Badge, Goal, isProUser, Match } from '../types';
+import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
 import { supabase } from '../supabaseClient';
 import {
   TrendingUp,
@@ -31,7 +32,7 @@ import { getDisplayName } from '../utils/nameUtils';
 interface DashboardProps {
   user: User;
   matches: Match[];
-  onUpgrade: () => void;
+  onUpgrade: (tier: SubscriptionTier) => void;
 }
 
 interface CalendarDay {
@@ -344,7 +345,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   const [error, setError] = useState('');
   const [heatmapMode, setHeatmapMode] = useState<'productivity' | 'consistency' | 'goals'>('productivity');
   const [refreshKey, setRefreshKey] = useState(0);
-  const isPro = isProUser(user);
+  
+  // Use new helper for specific feature access
+  const isPro = hasProAccess(user);
 
   // Heatmap constants
   const CELL_SIZE = 15;
@@ -737,7 +740,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   const confidence = Math.round(60 + completionRatio * 35);
   // -------------------------------------------------------------------------
 
-  // Locked check for heatmaps
+  // Locked check for heatmaps (Pro Only)
   const isLockedHeatmap = !isPro && (heatmapMode === 'consistency' || heatmapMode === 'goals');
 
   return (
@@ -838,7 +841,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
           {!isPro && (
             <button
-              onClick={onUpgrade}
+              onClick={() => onUpgrade('kova_pro')}
               className="ml-3 inline-flex items-center whitespace-nowrap rounded-xl border border-gold/40 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-gold hover:bg-gold/10 transition-colors"
             >
               <Crown size={12} className="mr-1" />
@@ -978,7 +981,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             <div className="w-full pb-2 overflow-hidden relative">
               {/* Overlay for locked modes */}
               {isLockedHeatmap && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black pointer-events-auto">
+                <div 
+                   className="absolute inset-0 z-50 flex items-center justify-center bg-black pointer-events-auto cursor-pointer"
+                   onClick={() => onUpgrade('kova_pro')}
+                >
                    <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
                       <Lock size={12} className="text-zinc-400" />
                       <span className="text-xs font-semibold tracking-wide text-white">
@@ -1284,7 +1290,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       </div>
 
                       <button
-                        onClick={onUpgrade}
+                        onClick={() => onUpgrade('kova_pro')}
                         disabled
                         className="mt-2 px-6 py-3 rounded-xl bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold shadow-xl border border-gold/70 transition-all flex items-center gap-2 opacity-60 cursor-not-allowed"
                       >
@@ -1297,7 +1303,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
 
             {/* NEW COMING SOON OVERLAY */}
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div 
+               className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
+               onClick={() => onUpgrade('kova_pro')}
+            >
                 <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
                   <Lock size={12} className="text-zinc-400" />
                   <span className="text-xs font-semibold tracking-wide text-white">
@@ -1391,7 +1400,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       </div>
 
                       <button
-                        onClick={onUpgrade}
+                        onClick={() => onUpgrade('kova_pro')}
                         disabled
                         className="mt-2 px-6 py-3 bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold rounded-xl shadow-xl border border-gold/70 transition-all flex items-center gap-2 opacity-60 cursor-not-allowed"
                       >
@@ -1404,7 +1413,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
 
             {/* NEW COMING SOON OVERLAY */}
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div 
+              className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
+              onClick={() => onUpgrade('kova_pro')}
+            >
               <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
                  <Lock size={12} className="text-zinc-400" />
                  <span className="text-xs font-semibold tracking-wide text-white">

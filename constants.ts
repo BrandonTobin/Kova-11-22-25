@@ -1,7 +1,34 @@
 
-import { User, Badge, Match, Message } from './types';
+import { User, Badge, Match, Message, PlanConfig, SubscriptionTier } from './types';
 
 export const DEFAULT_PROFILE_IMAGE = 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=User';
+
+export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, PlanConfig> = {
+  free: {
+    id: 'free',
+    name: 'Free',
+    price: '$0',
+    priceValue: 0,
+    description: 'Core Kova features with limited swipes and basic matching.',
+    features: ['30 Swipes per day', 'Basic Matching', 'Chat & Video Rooms']
+  },
+  kova_plus: {
+    id: 'kova_plus',
+    name: 'Kova Plus',
+    price: '$7.99/mo',
+    priceValue: 7.99,
+    description: 'Unlock unlimited swipes, see who liked you, and boost your profile visibility.',
+    features: ['Unlimited Swipes', 'See Who Liked You', 'Daily Profile Boost', 'Rewind Last Swipe']
+  },
+  kova_pro: {
+    id: 'kova_pro',
+    name: 'Kova Pro',
+    price: '$16.99/mo',
+    priceValue: 16.99,
+    description: 'Unlock Kova AI insights, deep analytics, and advanced performance tracking.',
+    features: ['Everything in Kova Plus', 'Kova AI Insights', 'Consistency Heatmap', 'Deep-Work Analytics', 'Priority Support']
+  }
+};
 
 export const ALL_BADGES: Badge[] = [
   { id: '1', icon: '🚀', name: 'Early Adopter', color: 'text-gold', criteria: 'Join Kova during the beta launch phase.' },

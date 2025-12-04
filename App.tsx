@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -10,7 +11,7 @@ import VideoRoom from './components/VideoRoom';
 import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import Notes from './components/Notes';
-import { User, Match, ViewState, isProUser } from './types';
+import { User, Match, ViewState, isProUser, SubscriptionTier } from './types';
 import {
   LayoutGrid,
   MessageSquare,
@@ -25,7 +26,7 @@ import {
   Lock,
   Sparkles,
 } from 'lucide-react';
-import { DEFAULT_PROFILE_IMAGE } from './constants';
+import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from './constants';
 import TimerOverlay from './components/TimerOverlay';
 
 // ✅ Your Supabase audio URL
@@ -75,7 +76,8 @@ function App() {
     return ViewState.DISCOVER;
   });
 
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  // Stores the tier we want to upsell (kova_plus or kova_pro)
+  const [upgradeTargetTier, setUpgradeTargetTier] = useState<SubscriptionTier | null>(null);
 
   // --- State: Theme ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -215,8 +217,6 @@ function App() {
 
           // 🔔 Bump MATCHES tab (badge only, sound handled in ChatInterface)
           addTabNotification([ViewState.MATCHES]);
-          // ❌ Do NOT call playNotificationSound() here – that would play
-          // the global notifications.mp3 for every message.
         }
       )
       .subscribe();
@@ -277,8 +277,6 @@ function App() {
           securityAnswer: '',
         };
         setUser(mappedUser);
-        // Note: We deliberately do NOT force set currentView here anymore,
-        // so that the persisted view from localStorage (initialized in useState) takes precedence.
       }
     } catch (error) {
       console.error('Error fetching profile', error);
@@ -743,6 +741,7 @@ function App() {
         availability: updatedUser.availability,
         goals_list: updatedUser.goalsList,
         links: updatedUser.links,
+        subscription_tier: updatedUser.subscriptionTier, // In case we upgrade locally before refresh
       })
       .eq('id', user.id);
 
@@ -836,7 +835,7 @@ function App() {
       label: 'KOVA AI', 
       icon: Sparkles,
       isLocked: true,
-      onClick: () => setShowUpgradeModal(true)
+      onClick: () => setUpgradeTargetTier('kova_pro')
     },
     { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
@@ -855,6 +854,23 @@ function App() {
       console.warn('Failed to persist current view', e);
     }
   }, [currentView, user?.id]);
+
+  // -----------------------------
+  // Subscription Upgrading
+  // -----------------------------
+  const handleUpgradeSubscription = (tier: SubscriptionTier) => {
+    // In a real app, integrate Stripe/Supabase payment here.
+    // For now, simulate upgrade by updating local user state.
+    if (!user) return;
+    
+    // Simulating API call
+    setTimeout(() => {
+      const updatedUser = { ...user, subscriptionTier: tier };
+      setUser(updatedUser);
+      setUpgradeTargetTier(null); // Close modal
+      alert(`Successfully upgraded to ${SUBSCRIPTION_PLANS[tier].name}!`);
+    }, 500);
+  };
 
   // -----------------------------
   // Render
@@ -899,6 +915,9 @@ function App() {
       );
     }
   } else {
+    // Helper to get modal content based on tier
+    const upgradeModalContent = upgradeTargetTier ? SUBSCRIPTION_PLANS[upgradeTargetTier] : null;
+
     content = (
       <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
         {/* Global Modals */}
@@ -918,17 +937,17 @@ function App() {
           />
         )}
 
-        {showUpgradeModal && (
+        {upgradeTargetTier && upgradeModalContent && (
           <div 
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setShowUpgradeModal(false)}
+            onClick={() => setUpgradeTargetTier(null)}
           >
             <div 
               className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200"
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                onClick={() => setShowUpgradeModal(false)}
+                onClick={() => setUpgradeTargetTier(null)}
                 className="absolute top-4 right-4 text-text-muted hover:text-white"
               >
                 <X />
@@ -937,16 +956,16 @@ function App() {
                 <Crown size={32} fill="currentColor" />
               </div>
               <h2 className="text-2xl font-bold text-text-main mb-2">
-                Upgrade to Kova Pro
+                Upgrade to {upgradeModalContent.name}
               </h2>
               <p className="text-text-muted mb-6">
-                Unlock unlimited swipes, deep analytics, and AI insights.
+                {upgradeModalContent.description}
               </p>
               <button
-                onClick={() => setShowUpgradeModal(false)}
+                onClick={() => handleUpgradeSubscription(upgradeTargetTier)}
                 className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg"
               >
-                Get Pro for $7.99/mo
+                Get {upgradeModalContent.name.replace('Kova ', '')} for {upgradeModalContent.price}
               </button>
             </div>
           </div>
@@ -958,9 +977,9 @@ function App() {
             <SwipeDeck
               users={usersToSwipe}
               onSwipe={handleSwipe}
-              remainingLikes={isProUser(user) ? null : 30 - dailySwipes}
-              isPro={isProUser(user)}
-              onUpgrade={() => setShowUpgradeModal(true)}
+              remainingLikes={user.subscriptionTier === 'free' ? 30 - dailySwipes : null}
+              userTier={user.subscriptionTier}
+              onUpgrade={(tier) => setUpgradeTargetTier(tier)}
             />
           )}
 
@@ -999,7 +1018,7 @@ function App() {
             <Dashboard
               user={user}
               matches={matches}
-              onUpgrade={() => setShowUpgradeModal(true)}
+              onUpgrade={(tier) => setUpgradeTargetTier(tier)}
             />
           )}
 
@@ -1010,7 +1029,7 @@ function App() {
               <ProfileEditor
                 user={user}
                 onSave={handleUpdateProfile}
-                onUpgrade={() => setShowUpgradeModal(true)}
+                onUpgrade={(tier) => setUpgradeTargetTier(tier)}
                 matches={matches}
               />
             </div>

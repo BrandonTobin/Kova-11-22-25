@@ -11,7 +11,16 @@ export enum ViewState {
   VIDEO_ROOM = 'VIDEO_ROOM'
 }
 
-export type SubscriptionTier = 'free' | 'pro';
+export type SubscriptionTier = 'free' | 'kova_plus' | 'kova_pro';
+
+export interface PlanConfig {
+  id: SubscriptionTier;
+  name: string;
+  price: string; // Display price string like "$7.99/mo"
+  priceValue: number;
+  description: string;
+  features: string[];
+}
 
 export interface Badge {
   id: string;
@@ -115,7 +124,19 @@ export interface Note {
   updated_at: string;
 }
 
-export const isProUser = (user: User | null): boolean => {
+// Helper: Does user have at least Plus access? (Plus or Pro)
+export const hasPlusAccess = (user: User | null): boolean => {
   if (!user) return false;
-  return user.subscriptionTier === 'pro';
+  return user.subscriptionTier === 'kova_plus' || user.subscriptionTier === 'kova_pro';
+};
+
+// Helper: Does user have Pro access? (Pro only)
+export const hasProAccess = (user: User | null): boolean => {
+  if (!user) return false;
+  return user.subscriptionTier === 'kova_pro';
+};
+
+// Legacy helper for backward compatibility, mapping to Pro features
+export const isProUser = (user: User | null): boolean => {
+  return hasProAccess(user);
 };

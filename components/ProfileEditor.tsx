@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, isProUser, Match } from '../types';
+import { User, Match, SubscriptionTier } from '../types';
 import { 
   Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, 
   Crown, MapPin, Link as LinkIcon, Briefcase, 
-  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users
+  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check
 } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
-import { DEFAULT_PROFILE_IMAGE } from '../constants';
+import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 
 interface ProfileEditorProps {
   user: User;
   onSave: (updatedUser: User, imageFile?: File) => void;
-  onUpgrade: () => void;
-  // NEW: optional matches prop so existing callers don't break
+  onUpgrade: (tier: SubscriptionTier) => void;
   matches?: Match[];
 }
 
@@ -269,37 +268,30 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
         {/* LEFT COLUMN: Account & Status */}
         <div className="space-y-6">
           {/* Plan Card */}
-          <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Crown size={64} className="text-gold" />
-            </div>
-            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Account</h3>
+          <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
+            <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Account Tier</h3>
             
-            {isProUser(user) ? (
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-gold to-amber-600 rounded-full flex items-center justify-center text-white shadow-lg shrink-0">
-                  <Crown size={24} fill="currentColor" />
-                </div>
-                <div>
-                  <p className="font-bold text-text-main text-lg">Kova Pro</p>
-                  <p className="text-xs text-gold">Active Membership</p>
-                </div>
-              </div>
-            ) : (
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-text-main text-lg">Free Plan</span>
-                  <span className="text-xs bg-white/5 px-2 py-1 rounded text-text-muted">Basic</span>
-                </div>
-                <button 
-                  onClick={onUpgrade}
-                  className="w-full py-2.5 bg-gradient-to-r from-gold to-amber-600 text-white text-sm font-bold rounded-lg shadow-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
-                >
-                  <Crown size={14} fill="currentColor" />
-                  Upgrade to Pro
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-3 mb-4">
+               {user.subscriptionTier === 'kova_pro' ? (
+                 <div className="w-12 h-12 bg-gradient-to-br from-gold to-amber-600 rounded-full flex items-center justify-center text-white shadow-lg shrink-0">
+                   <Crown size={24} fill="currentColor" />
+                 </div>
+               ) : user.subscriptionTier === 'kova_plus' ? (
+                  <div className="w-12 h-12 bg-surface border border-white/20 rounded-full flex items-center justify-center text-white shadow-lg shrink-0">
+                   <Crown size={24} className="text-white" fill="white" />
+                 </div>
+               ) : (
+                 <div className="w-12 h-12 bg-surface border border-white/10 rounded-full flex items-center justify-center text-text-muted shrink-0">
+                   <User size={24} />
+                 </div>
+               )}
+               <div>
+                  <p className="font-bold text-text-main text-lg">{SUBSCRIPTION_PLANS[user.subscriptionTier].name}</p>
+                  <p className="text-xs text-text-muted">
+                    {user.subscriptionTier === 'free' ? 'Standard Access' : 'Active Subscription'}
+                  </p>
+               </div>
+            </div>
             
             {/* Profile Link Action */}
             <div className="pt-4 border-t border-white/5">
@@ -338,6 +330,77 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
 
         {/* CENTER & RIGHT: Main Profile Info */}
         <div className="lg:col-span-2 space-y-6">
+
+          {/* Subscription Selector */}
+          <div className="bg-surface border border-white/10 rounded-2xl p-6">
+             <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-6 pb-2 border-b border-white/5">Subscription</h3>
+             
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {Object.values(SUBSCRIPTION_PLANS).map((plan) => {
+                  const isCurrent = user.subscriptionTier === plan.id;
+                  const isPro = plan.id === 'kova_pro';
+                  const isPlus = plan.id === 'kova_plus';
+                  const isFree = plan.id === 'free';
+                  
+                  return (
+                    <div 
+                      key={plan.id}
+                      className={`relative flex flex-col p-4 rounded-xl border transition-all ${
+                        isCurrent 
+                          ? 'bg-white/5 border-gold shadow-[0_0_15px_rgba(214,167,86,0.15)]' 
+                          : 'bg-background border-white/5 hover:border-white/10'
+                      }`}
+                    >
+                      {isCurrent && (
+                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-surface text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                          Current
+                        </div>
+                      )}
+                      
+                      <div className="text-center mb-4 mt-2">
+                         <h4 className={`font-bold text-lg ${isPro ? 'text-gold' : 'text-text-main'}`}>
+                           {plan.name}
+                         </h4>
+                         <p className="text-sm font-medium text-text-muted">{plan.price}</p>
+                      </div>
+
+                      <ul className="space-y-2 mb-6 flex-1">
+                        {plan.features.slice(0, 3).map((feat, i) => (
+                          <li key={i} className="text-xs text-text-muted flex items-start gap-2">
+                            <Check size={12} className={`shrink-0 mt-0.5 ${isPro ? 'text-gold' : 'text-text-muted'}`} />
+                            <span className="leading-tight">{feat}</span>
+                          </li>
+                        ))}
+                        {plan.features.length > 3 && (
+                          <li className="text-xs text-text-muted/60 italic pl-5">
+                            + {plan.features.length - 3} more...
+                          </li>
+                        )}
+                      </ul>
+                      
+                      {!isCurrent && !isFree && (
+                        <button 
+                          onClick={() => onUpgrade(plan.id)}
+                          className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
+                            isPro 
+                              ? 'bg-gradient-to-r from-gold to-amber-600 text-white hover:opacity-90' 
+                              : 'bg-surface border border-white/10 hover:bg-white/5 text-text-main'
+                          }`}
+                        >
+                          Choose {plan.name.replace('Kova ', '')}
+                        </button>
+                      )}
+                      
+                      {isCurrent && (
+                        <div className="w-full py-2 text-center text-xs font-bold text-gold/50 cursor-default">
+                          Active
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+             </div>
+          </div>
           
           {/* Section: Profile Header (Image) */}
           <div className="bg-surface border border-white/10 rounded-2xl p-6 flex flex-col items-center text-center">
@@ -644,43 +707,36 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
               <button
                 type="button"
                 onClick={() => setShowConnectionsModal(false)}
-                className="p-2 rounded-full hover:bg-background text-text-muted hover:text-white transition-colors"
+                className="text-text-muted hover:text-white"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
-
-            {connections.length === 0 ? (
-              <p className="text-sm text-text-muted">You don’t have any connections yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {connections.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-3 p-2.5 rounded-xl bg-background/70 border border-white/5"
-                  >
-                    {c.imageUrl ? (
-                      <img
-                        src={c.imageUrl}
-                        alt={getDisplayName(c.name || c.email)}
-                        className="w-9 h-9 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-primary/15 text-primary flex items-center justify-center text-xs font-semibold">
-                        {getDisplayName(c.name || c.email).charAt(0).toUpperCase()}
-                      </div>
-                    )}
-
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-text-main">
-                        {getDisplayName(c.name || c.email)}
-                      </p>
-                      {/* Only name shown – no “connect” buttons or anything */}
-                    </div>
+            
+            <div className="space-y-2">
+              {connections.map((u) => (
+                <div
+                  key={u.id}
+                  className="flex items-center gap-3 p-3 bg-background/50 rounded-xl border border-white/5"
+                >
+                  <img
+                    src={u.imageUrl}
+                    className="w-10 h-10 rounded-full object-cover border border-white/10"
+                    onError={(e) => {
+                      e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                    }}
+                  />
+                  <div>
+                    <p className="font-bold text-sm text-text-main">
+                      {getDisplayName(u.name)}
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      {u.role} • {u.industry}
+                    </p>
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

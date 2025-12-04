@@ -22,6 +22,8 @@ import {
   Sun,
   Moon,
   Notebook,
+  Lock,
+  Sparkles,
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from './constants';
 import TimerOverlay from './components/TimerOverlay';
@@ -829,7 +831,13 @@ function App() {
     { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
     { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
     { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
-    // Notes removed from here to be a floating pill
+    { 
+      id: 'KOVA_AI', 
+      label: 'KOVA AI', 
+      icon: Sparkles,
+      isLocked: true,
+      onClick: () => setShowUpgradeModal(true)
+    },
     { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
 
@@ -916,7 +924,7 @@ function App() {
             onClick={() => setShowUpgradeModal(false)}
           >
             <div 
-              className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative.animate-in fade-in zoom-in duration-200"
+              className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200"
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -1021,20 +1029,23 @@ function App() {
         {currentView !== ViewState.VIDEO_ROOM && (
           <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
             <div className="flex justify-between md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
-              {navItems.map((item) => {
-                const count = tabNotifications[item.id] ?? 0;
+              {navItems.map((item: any) => {
+                const count = !item.isLocked ? (tabNotifications[item.id as ViewState] ?? 0) : 0;
+                const isActive = currentView === item.id;
+                
                 return (
                   <button
                     key={item.id}
-                    onClick={() => handleNavClick(item.id)}
+                    onClick={() => item.onClick ? item.onClick() : handleNavClick(item.id)}
+                    title={item.isLocked ? "Kova Pro • Coming Soon" : undefined}
                     className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
-                      currentView === item.id
+                      isActive
                         ? 'text-gold'
                         : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
-                    }`}
+                    } ${item.isLocked ? 'hover:!text-gold group' : ''}`}
                   >
                     {count > 0 && (
-                      <span className="absolute -top-1 -right-1.min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
                         {count > 9 ? '9+' : count}
                       </span>
                     )}
@@ -1042,11 +1053,12 @@ function App() {
                     {/* icon on top */}
                     <item.icon
                       size={20}
-                      className={currentView === item.id ? 'stroke-[2.5px]' : 'stroke-2'}
+                      className={isActive ? 'stroke-[2.5px]' : 'stroke-2'}
                     />
 
                     {/* label below */}
-                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
+                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest flex items-center gap-0.5">
+                      {item.isLocked && <Lock size={8} className="mb-[1px]" />}
                       {item.label}
                     </span>
                   </button>

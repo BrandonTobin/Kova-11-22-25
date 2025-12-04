@@ -3,7 +3,7 @@ import { User, Match, SubscriptionTier } from '../types';
 import { 
   Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, 
   Crown, MapPin, Link as LinkIcon, Briefcase, 
-  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check
+  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check, Lock
 } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
 import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from '../constants';
@@ -395,46 +395,62 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                           : 'bg-background border-white/5 hover:border-white/10'
                       }`}
                     >
-                      {isCurrent && (
-                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-surface text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm">
-                          Current
+                      {/* Locked Overlay for Pro */}
+                      {isPro && (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
+                           <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
+                              <Lock size={12} className="text-zinc-400" />
+                              <span className="text-xs font-semibold tracking-wide text-white">
+                                Kova Pro | Coming Soon
+                              </span>
+                           </div>
                         </div>
                       )}
-                      
-                      <div className="text-center mb-4 mt-2">
-                         <h4 className={`font-bold text-lg ${isPro ? 'text-gold' : 'text-text-main'}`}>
-                           {plan.name}
-                         </h4>
-                         <p className="text-sm font-medium text-text-muted">{plan.price}</p>
-                      </div>
 
-                      <ul className="space-y-2 mb-6 flex-1">
-                        {plan.features.slice(0, 3).map((feat, i) => (
-                          <li key={i} className="text-xs text-text-muted flex items-start gap-2">
-                            <Check size={12} className={`shrink-0 mt-0.5 ${isPro ? 'text-gold' : 'text-text-muted'}`} />
-                            <span className="leading-tight">{feat}</span>
-                          </li>
-                        ))}
-                      </ul>
-                      
-                      {!isCurrent && !isFree && (
-                        <button 
-                          onClick={() => onUpgrade(plan.id)}
-                          className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
-                            isPro 
-                              ? 'bg-gradient-to-r from-gold to-amber-600 text-white hover:opacity-90' 
-                              : 'bg-surface border border-white/10 hover:bg-white/5 text-text-main'
-                          }`}
-                        >
-                          Choose {plan.name.replace('Kova ', '')}
-                        </button>
-                      )}
-                      
-                      {isCurrent && (
-                        <div className="w-full py-2 text-center text-xs font-bold text-gold/50 cursor-default">
-                          Active
+                      {/* Content Wrapper - Pointer events disabled for Pro */}
+                      <div className={isPro ? "pointer-events-none" : ""}>
+                        {isCurrent && (
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-surface text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm z-10">
+                            Current
+                          </div>
+                        )}
+                        
+                        <div className="text-center mb-4 mt-2">
+                           <h4 className={`font-bold text-lg ${isPro ? 'text-gold' : 'text-text-main'}`}>
+                             {plan.name}
+                           </h4>
+                           <p className="text-sm font-medium text-text-muted">{plan.price}</p>
                         </div>
-                      )}
+
+                        <ul className="space-y-2 mb-6 flex-1">
+                          {plan.features.slice(0, 3).map((feat, i) => (
+                            <li key={i} className="text-xs text-text-muted flex items-start gap-2">
+                              <Check size={12} className={`shrink-0 mt-0.5 ${isPro ? 'text-gold' : 'text-text-muted'}`} />
+                              <span className="leading-tight">{feat}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        
+                        {!isCurrent && !isFree && (
+                          <button 
+                            disabled={isPro}
+                            onClick={() => onUpgrade(plan.id)}
+                            className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
+                              isPro 
+                                ? 'bg-gradient-to-r from-gold to-amber-600 text-white opacity-50 cursor-not-allowed' 
+                                : 'bg-surface border border-white/10 hover:bg-white/5 text-text-main'
+                            }`}
+                          >
+                            Choose {plan.name.replace('Kova ', '')}
+                          </button>
+                        )}
+                        
+                        {isCurrent && (
+                          <div className="w-full py-2 text-center text-xs font-bold text-gold/50 cursor-default">
+                            Active
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

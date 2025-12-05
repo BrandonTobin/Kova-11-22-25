@@ -10,6 +10,7 @@ import VideoRoom from './components/VideoRoom';
 import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import Notes from './components/Notes';
+import PaymentSuccess from './components/PaymentSuccess';
 import { User, Match, ViewState, isProUser, SubscriptionTier } from './types';
 import {
   LayoutGrid,
@@ -24,6 +25,7 @@ import {
   Notebook,
   Lock,
   Sparkles,
+  Loader2
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from './constants';
 import TimerOverlay from './components/TimerOverlay';
@@ -60,6 +62,11 @@ function App() {
   // Set default view to DISCOVER (always valid on first render)
   const [currentView, setCurrentView] = useState<ViewState>(() => {
     if (typeof window !== 'undefined') {
+      // Check if we are on the payment success page via URL path
+      if (window.location.pathname === '/payment-success') {
+        return ViewState.PAYMENT_SUCCESS;
+      }
+
       const stored = localStorage.getItem('kova_current_view') as ViewState;
       // Only restore main navigable views to avoid stuck states (like Video Room without a match)
       if ([
@@ -77,6 +84,7 @@ function App() {
 
   // Stores the tier we want to upsell (kova_plus or kova_pro)
   const [upgradeTargetTier, setUpgradeTargetTier] = useState<SubscriptionTier | null>(null);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // --- State: Theme ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -853,7 +861,9 @@ function App() {
   useEffect(() => {
     if (!user) return;
     try {
-      localStorage.setItem('kova_current_view', currentView);
+      if (currentView !== ViewState.PAYMENT_SUCCESS) {
+        localStorage.setItem('kova_current_view', currentView);
+      }
     } catch (e) {
       console.warn('Failed to persist current view', e);
     }
@@ -863,17 +873,29 @@ function App() {
   // Subscription Upgrading
   // -----------------------------
   const handleUpgradeSubscription = (tier: SubscriptionTier) => {
-    // In a real app, integrate Stripe/Supabase payment here.
-    // For now, simulate upgrade by updating local user state.
     if (!user) return;
     
-    // Simulating API call
-    setTimeout(() => {
-      const updatedUser = { ...user, subscriptionTier: tier };
-      setUser(updatedUser);
-      setUpgradeTargetTier(null); // Close modal
-      alert(`Successfully upgraded to ${SUBSCRIPTION_PLANS[tier].name}!`);
-    }, 500);
+    if (tier === 'kova_pro') {
+      alert("Kova Pro is coming soon!");
+      return;
+    }
+
+    if (tier === 'kova_plus') {
+      setIsProcessingPayment(true);
+      // Redirect to Stripe Checkout Link
+      window.location.href = 'https://buy.stripe.com/test_eVq4gzbOJaJL9PS7Xn5AQ00';
+    }
+  };
+
+  // Handle successful return from Stripe
+  const handlePaymentSuccessContinue = () => {
+    // Refresh user profile to get new tier from DB (updated by webhook)
+    if (user) {
+      fetchUserProfile(user.id);
+    }
+    // Clear URL param if we want, or just navigate
+    window.history.replaceState({}, document.title, "/");
+    setCurrentView(ViewState.DASHBOARD);
   };
 
   // -----------------------------
@@ -944,7 +966,7 @@ function App() {
         {upgradeTargetTier && upgradeModalContent && (
           <div 
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setUpgradeTargetTier(null)}
+            onClick={() => !isProcessingPayment && setUpgradeTargetTier(null)}
           >
             <div 
               className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200"
@@ -952,7 +974,8 @@ function App() {
             >
               <button
                 onClick={() => setUpgradeTargetTier(null)}
-                className="absolute top-4 right-4 text-text-muted hover:text-white"
+                disabled={isProcessingPayment}
+                className="absolute top-4 right-4 text-text-muted hover:text-white disabled:opacity-50"
               >
                 <X />
               </button>
@@ -967,8 +990,10 @@ function App() {
               </p>
               <button
                 onClick={() => handleUpgradeSubscription(upgradeTargetTier)}
-                className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg"
+                disabled={isProcessingPayment}
+                className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
+                {isProcessingPayment ? <Loader2 className="animate-spin" size={20} /> : null}
                 Get {upgradeModalContent.name.replace('Kova ', '')} for {upgradeModalContent.price}
               </button>
             </div>
@@ -977,6 +1002,10 @@ function App() {
 
         {/* Main Content Area */}
         <main className="flex-1 relative overflow-hidden">
+          {currentView === ViewState.PAYMENT_SUCCESS && (
+            <PaymentSuccess onContinue={handlePaymentSuccessContinue} />
+          )}
+
           {currentView === ViewState.DISCOVER && (
             <SwipeDeck
               users={usersToSwipe}
@@ -1041,15 +1070,15 @@ function App() {
         </main>
 
         {/* Floating per-user timer overlay + Notes Pill */}
-        {currentView !== ViewState.VIDEO_ROOM && (
+        {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
           <TimerOverlay 
             onNotesClick={() => handleNavClick(ViewState.NOTES)}
             isNotesActive={currentView === ViewState.NOTES}
           />
         )}
 
-        {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room */}
-        {currentView !== ViewState.VIDEO_ROOM && (
+        {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room & Payment Success */}
+        {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
           <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
             <div className="flex justify-between md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
               {navItems.map((item: any) => {

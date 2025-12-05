@@ -8,7 +8,8 @@ export enum ViewState {
   PROFILE = 'PROFILE',
   REGISTER = 'REGISTER',
   LOGIN = 'LOGIN',
-  VIDEO_ROOM = 'VIDEO_ROOM'
+  VIDEO_ROOM = 'VIDEO_ROOM',
+  PAYMENT_SUCCESS = 'PAYMENT_SUCCESS'
 }
 
 export type SubscriptionTier = 'free' | 'kova_plus' | 'kova_pro';

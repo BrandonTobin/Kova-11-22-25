@@ -33,7 +33,8 @@ const RTC_CONFIG = {
 
 const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, onEndCall, onReturnToDashboard }) => {
   // Call State
-  const [participants, setParticipants] = useState<Match[]>([match]);
+  // Start with empty participants so we only see ourselves initially
+  const [participants, setParticipants] = useState<Match[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
@@ -61,9 +62,11 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const screenShareVideoRef = useRef<HTMLVideoElement>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  
   const peerConnection = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<any>(null);
   const isInitiator = useRef<boolean>(false);
+  const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
 
   // Summary State
   const [showSummary, setShowSummary] = useState(false);
@@ -82,10 +85,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         setLocalStream(stream);
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-        initializePeerConnection(stream);
       } catch (err) {
         console.error("Error accessing media devices:", err);
       }
@@ -113,11 +112,33 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     };
   }, []);
 
-  // --- 2. WebRTC & Signaling Logic ---
+  // --- 2. Attach Local Stream to Video Element ---
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  // --- 3. Attach Remote Stream to Video Element ---
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
+
+  // --- 4. WebRTC Initialization (Once Local Stream is Ready) ---
+  useEffect(() => {
+    if (localStream && !peerConnection.current) {
+      initializePeerConnection(localStream);
+    }
+  }, [localStream]);
+
+  // --- WebRTC Logic ---
   const initializePeerConnection = (stream: MediaStream) => {
-    // Determine if we are the initiator based on ID sort order to avoid glare
-    // Lower ID = Caller (Initiator)
+    // Determine initiator based on ID comparison (lower ID initiates)
+    // This prevents glare (both calling each other at same time)
     isInitiator.current = currentUser.id < match.user.id;
+    console.log(`[WebRTC] Initializing. Am I initiator? ${isInitiator.current}`);
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnection.current = pc;
@@ -140,9 +161,17 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
     // Handle Remote Stream
     pc.ontrack = (event) => {
+      console.log("[WebRTC] Remote track received", event.streams[0]);
       setRemoteStream(event.streams[0]);
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = event.streams[0];
+    };
+
+    // Handle Connection State
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC] ICE State: ${pc.iceConnectionState}`);
+      if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+        setRemoteStream(null);
+        // Remove participant if connection dies
+        setParticipants(prev => prev.filter(p => p.id !== match.id));
       }
     };
 
@@ -152,20 +181,29 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
     channel
       .on('broadcast', { event: 'ice-candidate' }, ({ payload }: any) => {
-        if (peerConnection.current && payload.candidate) {
-          peerConnection.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+        const candidate = new RTCIceCandidate(payload.candidate);
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+          pc.addIceCandidate(candidate).catch(e => console.error("Error adding candidate", e));
+        } else {
+          // Queue candidate if remote description isn't set yet
+          iceCandidatesQueue.current.push(payload.candidate);
         }
       })
       .on('broadcast', { event: 'offer' }, async ({ payload }: any) => {
         if (!peerConnection.current) return;
-        
-        if (isInitiator.current) {
-           // Glare resolution: If we are the initiator but received an offer, 
-           // normally this shouldn't happen with ID sorting, but safe to ignore or handle.
-           // With strict ID sorting, the higher ID (callee) should always accept the offer.
-        }
+        console.log("[WebRTC] Received offer");
+
+        // Ensure partner is visible
+        setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
 
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        
+        // Process queued candidates
+        while (iceCandidatesQueue.current.length > 0) {
+            const c = iceCandidatesQueue.current.shift();
+            if(c) await peerConnection.current.addIceCandidate(new RTCIceCandidate(c));
+        }
+
         const answer = await peerConnection.current.createAnswer();
         await peerConnection.current.setLocalDescription(answer);
         
@@ -176,35 +214,55 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         });
       })
       .on('broadcast', { event: 'answer' }, async ({ payload }: any) => {
-        if (peerConnection.current) {
-          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        if (!peerConnection.current) return;
+        console.log("[WebRTC] Received answer");
+
+        // Ensure partner is visible
+        setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
+
+        await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
+        
+        // Process queued candidates
+        while (iceCandidatesQueue.current.length > 0) {
+            const c = iceCandidatesQueue.current.shift();
+            if(c) await peerConnection.current.addIceCandidate(new RTCIceCandidate(c));
         }
       })
-      .on('broadcast', { event: 'hello' }, () => {
-        // Received Hello from a peer. If I am initiator, start call.
-        // Also reply Welcome so they know I'm here.
-        channel.send({ type: 'broadcast', event: 'welcome', payload: {} });
-        if (isInitiator.current) startCall();
+      .on('broadcast', { event: 'join' }, () => {
+        console.log("[WebRTC] Peer joined");
+        
+        // Partner joined, show them in UI
+        setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
+
+        // If peer joins and I am the initiator, start the call
+        if (isInitiator.current) {
+            createAndSendOffer();
+        }
       })
-      .on('broadcast', { event: 'welcome' }, () => {
-        // Received Welcome. If I am initiator, start call.
-        if (isInitiator.current) startCall();
+      .on('broadcast', { event: 'leave' }, () => {
+        console.log("[WebRTC] Peer left");
+        setRemoteStream(null);
+        setParticipants(prev => prev.filter(p => p.id !== match.id));
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
+          console.log("[WebRTC] Channel subscribed. Sending join signal.");
           // Announce presence
-          channel.send({ type: 'broadcast', event: 'hello', payload: {} });
+          channel.send({ type: 'broadcast', event: 'join', payload: {} });
         }
       });
   };
 
-  const startCall = async () => {
-    if (!peerConnection.current) return;
-    // If already connected/connecting, don't restart
-    if (peerConnection.current.signalingState !== 'stable') return;
+  const createAndSendOffer = async () => {
+    const pc = peerConnection.current;
+    if (!pc) return;
+    
+    // Prevent creating multiple offers if already connecting
+    if (pc.signalingState !== "stable") return;
 
-    const offer = await peerConnection.current.createOffer();
-    await peerConnection.current.setLocalDescription(offer);
+    console.log("[WebRTC] Creating offer...");
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
 
     channelRef.current?.send({
       type: 'broadcast',
@@ -222,13 +280,25 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     }
     if (peerConnection.current) {
       peerConnection.current.close();
+      peerConnection.current = null;
     }
     if (channelRef.current) {
-      channelRef.current.unsubscribe();
+      // Send leave before closing if possible
+      channelRef.current.send({ type: 'broadcast', event: 'leave', payload: {} }).then(() => {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+      }).catch(() => {
+          // ignore error if already disconnected
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+      });
+    } else {
+        setRemoteStream(null);
+        iceCandidatesQueue.current = [];
     }
   };
 
-  // --- UI & Logic Handlers (Existing) ---
+  // --- UI & Logic Handlers ---
 
   // Auto-scroll chat
   useEffect(() => {
@@ -278,7 +348,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
     setChatMessages(prev => [...prev, newMessage]);
     setChatInput('');
-    // In a full app, you'd broadcast this chat message over the signaling channel too
   };
 
   const toggleScreenShare = async () => {
@@ -532,7 +601,9 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                      <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-white/10 mb-3 shadow-xl">
                         <img src={participant.user.imageUrl} className="w-full h-full object-cover" />
                      </div>
-                     <p className="text-white font-bold text-lg drop-shadow-md">Waiting for {getDisplayName(participant.user.name)}...</p>
+                     <p className="text-white font-bold text-lg drop-shadow-md text-center px-4">
+                       Waiting for {getDisplayName(participant.user.name)} to join...
+                     </p>
                   </div>
                 </>
               )}

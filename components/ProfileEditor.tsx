@@ -226,7 +226,8 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
     <div className="max-w-6xl mx-auto pb-12 px-4 md:px-6">
       
       {/* 1. TOP HEADER: Identity & Actions */}
-      <div className="bg-surface border border-white/10 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center md:items-start gap-6 relative shadow-lg">
+      {/* Changed to lg:ml-6 to align left edge with the left column below */}
+      <div className="bg-surface border border-white/10 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center md:items-start gap-6 relative shadow-lg lg:ml-6">
           {/* Avatar Section */}
           <div className="relative group shrink-0">
              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-background shadow-2xl overflow-hidden relative bg-black">
@@ -335,7 +336,31 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* LEFT COLUMN: Metadata & Subscription */}
-        <div className="space-y-6 lg:col-span-1">
+        {/* Added lg:pl-6 for breathing room, and pt-2 to align tops */}
+        <div className="space-y-6 lg:col-span-1 lg:pl-6 pt-2">
+          
+          {/* Kova ID Card (Moved to top as requested) */}
+          <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-background rounded-md text-gold border border-gold/20">
+                  <Hash size={14} />
+                </div>
+                <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Kova ID</span>
+              </div>
+              <button 
+                onClick={copyIdToClipboard}
+                className="text-text-muted hover:text-white transition-colors"
+                title="Copy ID"
+              >
+                {copiedId ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
+              </button>
+            </div>
+            <div className="bg-background rounded-lg border border-white/5 p-3 text-center">
+              <p className="text-xl font-mono font-bold text-text-main tracking-widest">{formData.kovaId}</p>
+            </div>
+          </div>
+
           {/* Account Tier */}
           <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm relative overflow-hidden">
             <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4">Account Tier</h3>
@@ -457,27 +482,6 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
              </div>
           </div>
 
-          {/* Kova ID Card */}
-          <div className="bg-surface border border-white/10 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-background rounded-md text-gold border border-gold/20">
-                  <Hash size={14} />
-                </div>
-                <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Kova ID</span>
-              </div>
-              <button 
-                onClick={copyIdToClipboard}
-                className="text-text-muted hover:text-white transition-colors"
-                title="Copy ID"
-              >
-                {copiedId ? <CheckCircle size={16} className="text-green-500" /> : <Copy size={16} />}
-              </button>
-            </div>
-            <div className="bg-background rounded-lg border border-white/5 p-3 text-center">
-              <p className="text-xl font-mono font-bold text-text-main tracking-widest">{formData.kovaId}</p>
-            </div>
-          </div>
         </div>
 
         {/* RIGHT COLUMN: Profile Content */}

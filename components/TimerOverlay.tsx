@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Clock, X, Pause, Play, RotateCcw, Notebook } from 'lucide-react';
 
 const MAX_SECONDS = 24 * 60 * 60; // 24 hours max
+const TIMER_SOUND_URL = 'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/timer-finished.mp3';
 
 interface TimerOverlayProps {
   onNotesClick?: () => void;
@@ -16,7 +17,7 @@ const TimerOverlay: React.FC<TimerOverlayProps> = ({ onNotesClick, isNotesActive
   const [volume, setVolume] = useState(0.7); // 0–1
 
   const timerSound = useMemo(() => {
-    const audio = new Audio('/timer-finished.mp3'); // served from public/
+    const audio = new Audio(TIMER_SOUND_URL);
     audio.preload = 'auto';
     audio.volume = 0.7;
     return audio;

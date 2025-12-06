@@ -11,7 +11,7 @@ import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import Notes from './components/Notes';
 import PaymentSuccess from './components/PaymentSuccess';
-import { User, Match, ViewState, isProUser, SubscriptionTier } from './types';
+import { User, Match, ViewState, SubscriptionTier } from './types';
 import {
   LayoutGrid,
   MessageSquare,
@@ -33,6 +33,26 @@ import TimerOverlay from './components/TimerOverlay';
 // ✅ Your Supabase audio URL
 const NOTIFICATION_SOUND_URL =
   'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/notifications.mp3';
+
+/**
+ * Normalize what comes from the DB (free | plus | pro | null)
+ * into our front-end SubscriptionTier type (free | kova_plus | kova_pro)
+ */
+const normalizeTierFromDb = (dbTier?: string | null): SubscriptionTier => {
+  if (dbTier === 'plus') return 'kova_plus';
+  if (dbTier === 'pro') return 'kova_pro';
+  return 'free';
+};
+
+/**
+ * Encode our front-end SubscriptionTier back into the DB format.
+ * This prevents writing kova_plus / kova_pro into the users table.
+ */
+const encodeTierForDb = (tier: SubscriptionTier): string => {
+  if (tier === 'kova_plus') return 'plus';
+  if (tier === 'kova_pro') return 'pro';
+  return 'free';
+};
 
 function App() {
   // --- State: Auth & User ---
@@ -69,13 +89,15 @@ function App() {
 
       const stored = localStorage.getItem('kova_current_view') as ViewState;
       // Only restore main navigable views to avoid stuck states (like Video Room without a match)
-      if ([
-        ViewState.DISCOVER, 
-        ViewState.MATCHES, 
-        ViewState.DASHBOARD, 
-        ViewState.PROFILE, 
-        ViewState.NOTES
-      ].includes(stored)) {
+      if (
+        [
+          ViewState.DISCOVER,
+          ViewState.MATCHES,
+          ViewState.DASHBOARD,
+          ViewState.PROFILE,
+          ViewState.NOTES
+        ].includes(stored)
+      ) {
         return stored;
       }
     }
@@ -206,7 +228,7 @@ function App() {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'messages',
+          table: 'messages'
         },
         (payload: any) => {
           const newMsg = payload.new;
@@ -269,7 +291,7 @@ function App() {
           imageUrl: data.image_url || DEFAULT_PROFILE_IMAGE,
           kovaId: data.kova_id,
           mainGoal: data.main_goal,
-          subscriptionTier: data.subscription_tier || 'free',
+          subscriptionTier: normalizeTierFromDb(data.subscription_tier),
           proExpiresAt: data.pro_expires_at,
           location: { city: data.city || '', state: data.state || '' },
           experienceLevel: data.experience_level,
@@ -281,7 +303,7 @@ function App() {
           links: data.links,
           lastSeenAt: data.last_seen_at,
           securityQuestion: '',
-          securityAnswer: '',
+          securityAnswer: ''
         };
         setUser(mappedUser);
       }
@@ -330,7 +352,7 @@ function App() {
           kovaId: c.kova_id,
           mainGoal: c.main_goal,
           location: { city: c.city, state: c.state },
-          subscriptionTier: c.subscription_tier || 'free',
+          subscriptionTier: normalizeTierFromDb(c.subscription_tier),
           proExpiresAt: c.pro_expires_at,
           experienceLevel: c.experience_level,
           communicationStyle: c.communication_style,
@@ -339,7 +361,7 @@ function App() {
           availability: c.availability,
           goalsList: c.goals_list,
           links: c.links,
-          lastSeenAt: c.last_seen_at,
+          lastSeenAt: c.last_seen_at
         }));
       setUsersToSwipe(filtered);
     }
@@ -378,7 +400,7 @@ function App() {
             kovaId: otherUserRaw.kova_id,
             mainGoal: otherUserRaw.main_goal,
             location: { city: otherUserRaw.city, state: otherUserRaw.state },
-            subscriptionTier: otherUserRaw.subscription_tier || 'free',
+            subscriptionTier: normalizeTierFromDb(otherUserRaw.subscription_tier),
             proExpiresAt: otherUserRaw.pro_expires_at,
             experienceLevel: otherUserRaw.experience_level,
             communicationStyle: otherUserRaw.communication_style,
@@ -387,7 +409,7 @@ function App() {
             availability: otherUserRaw.availability,
             goalsList: otherUserRaw.goals_list,
             links: otherUserRaw.links,
-            lastSeenAt: otherUserRaw.last_seen_at,
+            lastSeenAt: otherUserRaw.last_seen_at
           };
 
           let lastMessageText = null;
@@ -412,7 +434,7 @@ function App() {
             timestamp: new Date(m.created_at),
             unread: 0,
             lastMessageText,
-            lastMessageAt,
+            lastMessageAt
           } as Match;
         })
       );
@@ -435,7 +457,7 @@ function App() {
       const { data: authData, error: authError } =
         await supabase.auth.signInWithPassword({
           email,
-          password: pass,
+          password: pass
         });
 
       if (authError || !authData.user) {
@@ -460,7 +482,7 @@ function App() {
 
       localStorage.setItem('kova_current_user_id', profile.id);
       await fetchUserProfile(profile.id);
-      
+
       // Force navigation to Discover screen upon successful login
       setCurrentView(ViewState.DISCOVER);
 
@@ -498,7 +520,7 @@ function App() {
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newUser.email,
-        password,
+        password
       });
 
       if (authError || !authData.user) {
@@ -519,7 +541,7 @@ function App() {
             .from('avatars')
             .upload(fileName, profileImage, {
               cacheControl: '3600',
-              upsert: true,
+              upsert: true
             });
 
           if (uploadError) {
@@ -562,8 +584,8 @@ function App() {
             security_question: newUser.securityQuestion,
             security_answer: newUser.securityAnswer,
             subscription_tier: 'free',
-            last_seen_at: new Date().toISOString(),
-          },
+            last_seen_at: new Date().toISOString()
+          }
         ])
         .select()
         .single();
@@ -611,8 +633,8 @@ function App() {
       {
         swiper_id: user.id,
         swiped_id: swipedUser.id,
-        direction: direction,
-      },
+        direction: direction
+      }
     ]);
 
     if (swipeError) {
@@ -706,7 +728,7 @@ function App() {
           .from('avatars')
           .upload(fileName, profileImage, {
             cacheControl: '3600',
-            upsert: true,
+            upsert: true
           });
 
         if (uploadError) {
@@ -753,7 +775,8 @@ function App() {
         availability: updatedUser.availability,
         goals_list: updatedUser.goalsList,
         links: updatedUser.links,
-        subscription_tier: updatedUser.subscriptionTier, // In case we upgrade locally before refresh
+        // encode front-end tier back into DB format
+        subscription_tier: encodeTierForDb(updatedUser.subscriptionTier)
       })
       .eq('id', user.id);
 
@@ -842,14 +865,14 @@ function App() {
     { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
     { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
     { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
-    { 
-      id: 'KOVA_AI', 
-      label: 'KOVA AI', 
+    {
+      id: 'KOVA_AI',
+      label: 'KOVA AI',
       icon: Sparkles,
       isLocked: true,
       onClick: () => {} // Disable click functionality
     },
-    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
+    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon }
   ];
 
   const handleNavClick = (view: ViewState) => {
@@ -874,9 +897,9 @@ function App() {
   // -----------------------------
   const handleUpgradeSubscription = (tier: SubscriptionTier) => {
     if (!user) return;
-    
+
     if (tier === 'kova_pro') {
-      alert("Kova Pro is coming soon!");
+      alert('Kova Pro is coming soon!');
       return;
     }
 
@@ -894,7 +917,7 @@ function App() {
       fetchUserProfile(user.id);
     }
     // Clear URL param if we want, or just navigate
-    window.history.replaceState({}, document.title, "/");
+    window.history.replaceState({}, document.title, '/');
     setCurrentView(ViewState.DASHBOARD);
   };
 
@@ -942,7 +965,9 @@ function App() {
     }
   } else {
     // Helper to get modal content based on tier
-    const upgradeModalContent = upgradeTargetTier ? SUBSCRIPTION_PLANS[upgradeTargetTier] : null;
+    const upgradeModalContent = upgradeTargetTier
+      ? SUBSCRIPTION_PLANS[upgradeTargetTier]
+      : null;
 
     content = (
       <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
@@ -964,11 +989,11 @@ function App() {
         )}
 
         {upgradeTargetTier && upgradeModalContent && (
-          <div 
+          <div
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => !isProcessingPayment && setUpgradeTargetTier(null)}
           >
-            <div 
+            <div
               className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200"
               onClick={(e) => e.stopPropagation()}
             >
@@ -994,7 +1019,8 @@ function App() {
                 className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isProcessingPayment ? <Loader2 className="animate-spin" size={20} /> : null}
-                Get {upgradeModalContent.name.replace('Kova ', '')} for {upgradeModalContent.price}
+                Get {upgradeModalContent.name.replace('Kova ', '')} for{' '}
+                {upgradeModalContent.price}
               </button>
             </div>
           </div>
@@ -1010,7 +1036,9 @@ function App() {
             <SwipeDeck
               users={usersToSwipe}
               onSwipe={handleSwipe}
-              remainingLikes={user.subscriptionTier === 'free' ? 30 - dailySwipes : null}
+              remainingLikes={
+                user.subscriptionTier === 'free' ? 30 - dailySwipes : null
+              }
               userTier={user.subscriptionTier}
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
             />
@@ -1070,77 +1098,91 @@ function App() {
         </main>
 
         {/* Floating per-user timer overlay + Notes Pill */}
-        {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
-          <TimerOverlay 
-            onNotesClick={() => handleNavClick(ViewState.NOTES)}
-            isNotesActive={currentView === ViewState.NOTES}
-          />
-        )}
+        {currentView !== ViewState.VIDEO_ROOM &&
+          currentView !== ViewState.PAYMENT_SUCCESS && (
+            <TimerOverlay
+              onNotesClick={() => handleNavClick(ViewState.NOTES)}
+              isNotesActive={currentView === ViewState.NOTES}
+            />
+          )}
 
         {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room & Payment Success */}
-        {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
-          <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
-            <div className="flex justify-between md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
-              {navItems.map((item: any) => {
-                const count = !item.isLocked ? (tabNotifications[item.id as ViewState] ?? 0) : 0;
-                const isActive = currentView === item.id;
-                
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      if (item.id === 'KOVA_AI') return; // Disable click for locked item
-                      item.onClick ? item.onClick() : handleNavClick(item.id);
-                    }}
-                    title={item.isLocked ? "Kova Pro • Coming Soon" : undefined}
-                    disabled={item.id === 'KOVA_AI'}
-                    className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
-                      isActive
-                        ? 'text-gold'
-                        : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
-                    } ${item.isLocked ? 'hover:!text-gold group' : ''} ${item.id === 'KOVA_AI' ? 'cursor-not-allowed opacity-80' : ''}`}
-                  >
-                    {count > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
-                        {count > 9 ? '9+' : count}
+        {currentView !== ViewState.VIDEO_ROOM &&
+          currentView !== ViewState.PAYMENT_SUCCESS && (
+            <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
+              <div className="flex justify-between md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
+                {navItems.map((item: any) => {
+                  const count = !item.isLocked
+                    ? tabNotifications[item.id as ViewState] ?? 0
+                    : 0;
+                  const isActive = currentView === item.id;
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        if (item.id === 'KOVA_AI') return; // Disable click for locked item
+                        item.onClick ? item.onClick() : handleNavClick(item.id);
+                      }}
+                      title={
+                        item.isLocked ? 'Kova Pro • Coming Soon' : undefined
+                      }
+                      disabled={item.id === 'KOVA_AI'}
+                      className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
+                        isActive
+                          ? 'text-gold'
+                          : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
+                      } ${
+                        item.isLocked ? 'hover:!text-gold group' : ''
+                      } ${
+                        item.id === 'KOVA_AI'
+                          ? 'cursor-not-allowed opacity-80'
+                          : ''
+                      }`}
+                    >
+                      {count > 0 && (
+                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
+                          {count > 9 ? '9+' : count}
+                        </span>
+                      )}
+
+                      {/* NEW: Coming Soon Pill for Locked Items - CENTERED OVER ICON */}
+                      {item.isLocked && (
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-3/4 bg-black/90 backdrop-blur-md border border-white/15 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-[0_0_10px_rgba(0,0,0,0.5)] z-20 whitespace-nowrap pointer-events-none">
+                          <Lock size={8} className="text-zinc-400" />
+                          <span className="text-[8px] font-bold text-white tracking-wider">
+                            COMING SOON
+                          </span>
+                        </div>
+                      )}
+
+                      {/* icon on top */}
+                      <item.icon
+                        size={20}
+                        className={isActive ? 'stroke-[2.5px]' : 'stroke-2'}
+                      />
+
+                      {/* label below - always visible, NO LOCK ICON next to text */}
+                      <span className="text-[9px] md:text-[10px] font-bold tracking-widest flex items-center gap-0.5">
+                        {item.label}
                       </span>
-                    )}
+                    </button>
+                  );
+                })}
 
-                    {/* NEW: Coming Soon Pill for Locked Items - CENTERED OVER ICON */}
-                    {item.isLocked && (
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-3/4 bg-black/90 backdrop-blur-md border border-white/15 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-[0_0_10px_rgba(0,0,0,0.5)] z-20 whitespace-nowrap pointer-events-none">
-                         <Lock size={8} className="text-zinc-400" />
-                         <span className="text-[8px] font-bold text-white tracking-wider">COMING SOON</span>
-                      </div>
-                    )}
-
-                    {/* icon on top */}
-                    <item.icon
-                      size={20}
-                      className={isActive ? 'stroke-[2.5px]' : 'stroke-2'}
-                    />
-
-                    {/* label below - always visible, NO LOCK ICON next to text */}
-                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest flex items-center gap-0.5">
-                      {item.label}
-                    </span>
-                  </button>
-                );
-              })}
-
-              {/* Logout button */}
-              <button
-                onClick={handleLogout}
-                className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
-              >
-                <LogOut size={20} strokeWidth={2} />
-                <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
-                  LOGOUT
-                </span>
-              </button>
-            </div>
-          </nav>
-        )}
+                {/* Logout button */}
+                <button
+                  onClick={handleLogout}
+                  className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
+                >
+                  <LogOut size={20} strokeWidth={2} />
+                  <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
+                    LOGOUT
+                  </span>
+                </button>
+              </div>
+            </nav>
+          )}
       </div>
     );
   }

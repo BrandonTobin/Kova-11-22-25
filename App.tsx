@@ -1114,7 +1114,7 @@ function App() {
         {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room & Payment Success */}
         {currentView !== ViewState.VIDEO_ROOM &&
           currentView !== ViewState.PAYMENT_SUCCESS && (
-            <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-safe shrink-0 z-50 transition-colors duration-300">
+            <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0 z-50 transition-colors duration-300">
               <div className="flex justify-between md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
                 {navItems.map((item: any) => {
                   const count = !item.isLocked

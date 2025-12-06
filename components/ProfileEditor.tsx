@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Match, SubscriptionTier } from '../types';
 import { 
@@ -66,7 +67,7 @@ const TagInput = ({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
-            className="w-full bg-background border border-white/10 rounded-lg px-4 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all"
+            className="w-full bg-background border border-white/10 rounded-lg px-4 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all"
           />
           <button 
             onClick={() => { if(input.trim()) { onAdd(input.trim()); setInput(''); } }}
@@ -267,7 +268,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                         name="name" 
                         value={formData.name} 
                         onChange={handleChange} 
-                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-text-main focus:outline-none focus:border-gold/50" 
+                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50" 
                         placeholder="Full Name"
                       />
                    </div>
@@ -278,7 +279,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                         name="role" 
                         value={formData.role} 
                         onChange={handleChange} 
-                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-text-main focus:outline-none focus:border-gold/50" 
+                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50" 
                         placeholder="Title / Role"
                       />
                    </div>
@@ -306,7 +307,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 mt-2 md:mt-0 md:self-start">
+          <div className="flex gap-3 mt-2 md:mt-0 md:self-start w-full md:w-auto justify-center md:justify-end">
              {!isEditing ? (
                 <button 
                   onClick={() => setIsEditing(true)}
@@ -318,13 +319,13 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                 <>
                   <button 
                     onClick={handleCancel}
-                    className="px-5 py-2.5 border border-white/10 rounded-xl text-text-muted hover:bg-white/5 transition-colors font-medium"
+                    className="px-5 py-2.5 border border-white/10 rounded-xl text-text-muted hover:bg-white/5 transition-colors font-medium flex-1 md:flex-none"
                   >
                     Cancel
                   </button>
                   <button 
                     onClick={handleSave}
-                    className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-bold shadow-lg flex items-center gap-2"
+                    className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-hover transition-colors font-bold shadow-lg flex items-center gap-2 flex-1 md:flex-none justify-center"
                   >
                     <Save size={18} /> Save Changes
                   </button>
@@ -496,7 +497,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1.5 flex items-center gap-1.5"><Globe size={14} /> Industry</label>
                 {isEditing ? (
-                  <input type="text" name="industry" value={formData.industry} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all" />
+                  <input type="text" name="industry" value={formData.industry} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all" />
                 ) : (
                   <p className="text-text-main">{formData.industry}</p>
                 )}
@@ -506,7 +507,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1.5">Stage</label>
                 {isEditing ? (
-                  <select name="stage" value={formData.stage} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all">
+                  <select name="stage" value={formData.stage} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all">
                     {['Idea', 'Early', 'Growing', 'Scaling'].map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 ) : (
@@ -518,7 +519,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
               <div>
                 <label className="block text-sm font-medium text-text-muted mb-1.5">Experience Level</label>
                 {isEditing ? (
-                  <select name="experienceLevel" value={formData.experienceLevel || ''} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all">
+                  <select name="experienceLevel" value={formData.experienceLevel || ''} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all">
                     <option value="">Select...</option>
                     {['Beginner', 'Junior', 'Mid-Level', 'Senior', 'Expert', 'Executive'].map(l => <option key={l} value={l}>{l}</option>)}
                   </select>
@@ -532,8 +533,8 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                 <label className="block text-sm font-medium text-text-muted mb-1.5 flex items-center gap-1.5"><MapPin size={14} /> Location</label>
                 {isEditing ? (
                   <div className="flex gap-2">
-                    <input type="text" name="city" placeholder="City" value={formData.location.city} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all" />
-                    <input type="text" name="state" placeholder="State" value={formData.location.state} onChange={handleChange} className="w-20 bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all" />
+                    <input type="text" name="city" placeholder="City" value={formData.location.city} onChange={handleChange} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all" />
+                    <input type="text" name="state" placeholder="State" value={formData.location.state} onChange={handleChange} className="w-20 bg-background border border-white/10 rounded-lg px-3 py-2.5 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all" />
                   </div>
                 ) : (
                   <p className="text-text-main">
@@ -562,7 +563,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                   )}
                 </div>
                 {isEditing ? (
-                  <textarea name="bio" value={formData.bio} onChange={handleChange} rows={4} className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-text-main focus:outline-none focus:border-gold/50 transition-all leading-relaxed" />
+                  <textarea name="bio" value={formData.bio} onChange={handleChange} rows={4} className="w-full bg-background border border-white/10 rounded-lg px-4 py-3 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all leading-relaxed" />
                 ) : (
                   <p className="text-text-main leading-relaxed whitespace-pre-wrap">{formData.bio || "No bio yet."}</p>
                 )}
@@ -584,7 +585,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                           newGoals[idx] = e.target.value;
                           setFormData(prev => ({ ...prev, goalsList: newGoals }));
                         }} 
-                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all" 
+                        className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all" 
                       />
                     ))}
                   </div>
@@ -611,7 +612,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                     name="communicationStyle" 
                     value={formData.communicationStyle || ''} 
                     onChange={handleChange} 
-                    className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-text-main focus:outline-none focus:border-gold/50 transition-all"
+                    className="w-full bg-background border border-white/10 rounded-lg px-3 py-2.5 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-all"
                   >
                     <option value="">Select...</option>
                     <option value="Async only">Async only (Text/Email)</option>
@@ -685,10 +686,10 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                 <label className="block text-sm font-medium text-text-muted mb-3 flex items-center gap-1.5"><LinkIcon size={14} /> Links</label>
                 {isEditing ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input type="text" placeholder="LinkedIn URL" name="links.linkedin" value={formData.links?.linkedin || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50" />
-                    <input type="text" placeholder="Twitter / X URL" name="links.twitter" value={formData.links?.twitter || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50" />
-                    <input type="text" placeholder="Website URL" name="links.website" value={formData.links?.website || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50" />
-                    <input type="text" placeholder="Portfolio URL" name="links.portfolio" value={formData.links?.portfolio || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50" />
+                    <input type="text" placeholder="LinkedIn URL" name="links.linkedin" value={formData.links?.linkedin || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50" />
+                    <input type="text" placeholder="Twitter / X URL" name="links.twitter" value={formData.links?.twitter || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50" />
+                    <input type="text" placeholder="Website URL" name="links.website" value={formData.links?.website || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50" />
+                    <input type="text" placeholder="Portfolio URL" name="links.portfolio" value={formData.links?.portfolio || ''} onChange={handleChange} className="bg-background border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50" />
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-3">

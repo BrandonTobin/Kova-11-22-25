@@ -275,7 +275,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
       {/* MATCH POPUP OVERLAY */}
       {showMatchPopup && matchedUser && (
         <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface border border-gold/30 rounded-3xl shadow-2xl max-w-sm w-full p-6 relative text-center">
+          <div className="bg-surface border border-gold/30 rounded-3xl shadow-2xl w-[calc(100%-2rem)] max-w-sm p-6 relative text-center">
             <button
               type="button"
               className="absolute top-3 right-3 text-text-muted hover:text-white transition-colors"

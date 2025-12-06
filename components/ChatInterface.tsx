@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
@@ -1518,7 +1519,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 placeholder="e.g. KVA-8F2X9A"
                 value={searchId}
                 onChange={(e) => setSearchId(e.target.value)}
-                className="flex-1 bg-background border border-white/10 rounded-lg px-4 py-2 text-text-main focus:border-gold/50 outline-none"
+                className="flex-1 bg-background border border-white/10 rounded-lg px-4 py-2 text-base md:text-sm text-text-main focus:border-gold/50 outline-none"
               />
               <button
                 onClick={handleSearchUser}
@@ -1580,7 +1581,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Profile modal (mobile/desktop) */}
       {showProfileModal && selectedMatch && (
         <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-[85vh] flex flex-col.relative animate-in fade-in zoom-in.duration-200">
+          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col.relative animate-in fade-in zoom-in.duration-200">
             <button
               onClick={() => setShowProfileModal(false)}
               className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text-white hover:bg-black/60 transition-colors"
@@ -1618,7 +1619,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search connections..."
-                className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70"
+                className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70"
               />
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
@@ -1747,8 +1748,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   onError={(e) => {
                     e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
                   }}
+                  onClick={() => setShowProfileModal(true)}
                 />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setShowProfileModal(true)}>
                   <h3 className="font-bold text-text-main truncate">
                     {getDisplayName(selectedMatch.user.name)}
                   </h3>
@@ -1915,7 +1917,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                               : 'bg-surface border border-white/5 text-text-main rounded-tl-sm'
                           }`}
                         >
-                          <p className="text-sm md:text-base leading-relaxed">
+                          <p className="text-base md:text-base leading-relaxed">
                             {msg.text}
                           </p>
 
@@ -2016,7 +2018,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         e.key === 'Enter' && handleSendMessage()
                       }
                       placeholder="Type a message..."
-                      className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600"
+                      className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm"
                     />
 
                     {/* Emoji Picker */}

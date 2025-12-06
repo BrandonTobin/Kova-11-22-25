@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
 import { supabase } from '../supabaseClient';
@@ -224,7 +225,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
 
   return (
     <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-surface w-full max-w-md rounded-3xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in duration-200" onClick={e => e.stopPropagation()}>
+      <div className="bg-surface w-full max-w-md mx-4 rounded-3xl border border-white/10 shadow-2xl p-6 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-text-main">Schedule Session</h3>
           <button onClick={onClose} className="text-text-muted hover:text-white">
@@ -247,7 +248,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
                 placeholder="Search matches..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+                className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-base md:text-sm text-text-main focus:border-gold/50 outline-none"
               />
             </div>
 
@@ -290,7 +291,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
                 type="date"
                 value={date}
                 onChange={e => setDate(e.target.value)}
-                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-base md:text-sm text-text-main focus:border-gold/50 outline-none"
               />
             </div>
             <div>
@@ -301,7 +302,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
                 type="time"
                 value={time}
                 onChange={e => setTime(e.target.value)}
-                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-sm text-text-main focus:border-gold/50 outline-none"
+                className="w-full bg-background border border-white/10 rounded-xl px-3 py-3 text-base md:text-sm text-text-main focus:border-gold/50 outline-none"
               />
             </div>
           </div>
@@ -315,7 +316,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
               <select
                 value={recurrence}
                 onChange={e => setRecurrence(e.target.value as any)}
-                className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none appearance-none"
+                className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-base md:text-sm text-text-main focus:border-gold/50 outline-none appearance-none"
               >
                 <option value="none">Just Once</option>
                 <option value="daily">Daily (Next 5 Days)</option>
@@ -849,7 +850,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
           onClick={() => setShowBadgesModal(false)}
         >
           <div
-            className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh]"
+            className="bg-surface w-full max-w-3xl rounded-3xl border border-white/10 shadow-2xl p-8 overflow-y-auto max-h-[90vh] mx-4"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-8">
@@ -889,8 +890,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
         </div>
       )}
 
-      <header className="mb-8 pr-16">
-        <h1 className="text-3xl font-bold text-text-main mb-2">
+      <header className="mb-8 md:pr-16">
+        <h1 className="text-2xl md:text-3xl font-bold text-text-main mb-2">
           Welcome back, {getDisplayName(user.name).split(' ')[0]}
         </h1>
         <p className="text-text-muted">Here's your growth overview.</p>
@@ -1031,13 +1032,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* 3. Consistency Heatmap - Takes 3/4 width */}
           <div className="lg:col-span-3 bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
               <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
                 <Zap size={18} className="text-gold" /> Consistency Heatmap
               </h3>
 
-              <div className="flex items-center gap-3">
-                <div className="inline-flex items-center rounded-full bg-background/60 border border-white/5 text-[11px] overflow-hidden">
+              <div className="flex items-center gap-3 overflow-x-auto no-scrollbar max-w-full">
+                <div className="inline-flex items-center rounded-full bg-background/60 border border-white/5 text-[11px] overflow-hidden shrink-0">
                   {[
                     { key: 'productivity', label: 'Productivity', locked: false },
                     { key: 'consistency', label: 'Consistency', locked: !isPro },
@@ -1048,7 +1049,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
                       type="button"
                       onClick={() => handleHeatmapModeChange(mode.key as any)}
                       className={
-                        'px-3 py-1.5 transition-colors flex items-center gap-1 ' +
+                        'px-3 py-1.5 transition-colors flex items-center gap-1 whitespace-nowrap ' +
                         (heatmapMode === mode.key
                           ? 'bg-primary text-white'
                           : 'text-text-muted hover:bg-background')
@@ -1059,12 +1060,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
                     </button>
                   ))}
                 </div>
-                <span className="text-xs text-text-muted">{new Date().getFullYear()}</span>
+                <span className="text-xs text-text-muted shrink-0">{new Date().getFullYear()}</span>
               </div>
             </div>
 
             {/* Heatmap Container */}
-            <div className="w-full pb-2 overflow-hidden relative flex justify-center">
+            <div className="w-full pb-2 overflow-x-auto overflow-y-hidden relative flex justify-center">
               {/* Overlay for locked modes */}
               {isLockedHeatmap && (
                 <div 
@@ -1080,7 +1081,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
                 </div>
               )}
 
-              <div className={`origin-top scale-[0.5] sm:scale-[0.6] md:scale-[0.7] lg:scale-[0.75] xl:scale-[0.9] 2xl:scale-100 ${isLockedHeatmap ? 'pointer-events-none' : ''}`}>
+              <div className={`origin-top-left sm:origin-top scale-[0.5] sm:scale-[0.6] md:scale-[0.7] lg:scale-[0.75] xl:scale-[0.9] 2xl:scale-100 ${isLockedHeatmap ? 'pointer-events-none' : ''}`}>
                 <div className="flex items-start gap-4 w-full justify-center min-w-max">
                   {/* Y-axis labels */}
                   <div

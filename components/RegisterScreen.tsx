@@ -186,377 +186,237 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     switch (step) {
       case 0: // Account & Security
         return (
-          <div className="space-y-5 animate-in fade-in slide-in-from-right duration-300">
-             <div>
+          <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
+            <div>
               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Full Name</label>
-              <div className="relative group">
-                 <input 
-                  autoFocus
-                  required 
-                  type="text" 
-                  value={formData.fullName} 
-                  onChange={e => setFormData({...formData, fullName: e.target.value})} 
-                  className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 focus:ring-1 focus:ring-gold/50 outline-none transition-all placeholder-gray-500/50" 
-                  placeholder="Brian O'Conner" 
-                />
-              </div>
+              <input type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none" placeholder="e.g. John Doe" />
             </div>
-
+            
             <div>
-               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Email</label>
-               <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
-                    <Mail size={18} />
-                  </div>
-                  <input 
-                    required 
-                    type="email" 
-                    value={formData.email} 
-                    onChange={e => {
-                      setFormData({...formData, email: e.target.value});
-                      if (errors.email) setErrors({...errors, email: undefined});
-                    }}
-                    className={`w-full bg-background border ${errors.email ? 'border-red-500' : 'border-white/10'} rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none transition-all placeholder-gray-500/50`} 
-                    placeholder="you@startup.com" 
-                  />
-               </div>
-               {errors.email && <p className="text-red-400 text-xs mt-1 ml-1">{errors.email}</p>}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                 <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Password</label>
-                 <div className="relative">
-                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
-                      <Lock size={18} />
-                   </div>
-                   <input 
-                     required 
-                     type="password" 
-                     value={formData.password} 
-                     onChange={e => setFormData({...formData, password: e.target.value})} 
-                     className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none transition-all placeholder-gray-500/50" 
-                     placeholder="••••••••" 
-                   />
-                 </div>
-                 {errors.password && <p className="text-red-400 text-xs mt-1 ml-1">{errors.password}</p>}
+              <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none" placeholder="founder@example.com" />
               </div>
-              
-              <div>
-                 <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Confirm Password</label>
-                 <div className="relative">
-                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
-                      <Lock size={18} />
-                   </div>
-                   <input 
-                     required 
-                     type="password" 
-                     value={formData.confirmPassword} 
-                     onChange={e => setFormData({...formData, confirmPassword: e.target.value})} 
-                     className={`w-full bg-background border ${errors.confirmPassword ? 'border-red-500' : 'border-white/10'} rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none transition-all placeholder-gray-500/50`}
-                     placeholder="••••••••" 
-                   />
-                 </div>
-                 {errors.confirmPassword && <p className="text-red-400 text-xs mt-1 ml-1">{errors.confirmPassword}</p>}
-              </div>
-            </div>
-
-            <div className="pt-2">
-               <div className="flex items-center gap-1.5 mb-1.5 ml-1">
-                 <ShieldCheck size={14} className="text-gold" />
-                 <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Security Question</label>
-               </div>
-               <div className="space-y-3">
-                 <div className="relative">
-                    <select 
-                      value={formData.securityQuestion} 
-                      onChange={e => setFormData({...formData, securityQuestion: e.target.value})} 
-                      className="w-full bg-background border border-white/10 rounded-xl pl-4 pr-10 py-3 text-sm text-text-main focus:border-gold/50 outline-none appearance-none transition-all"
-                    >
-                        {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
-                      <ChevronDown size={16} />
-                    </div>
-                 </div>
-                 <input 
-                   required 
-                   type="text" 
-                   value={formData.securityAnswer} 
-                   onChange={e => setFormData({...formData, securityAnswer: e.target.value})} 
-                   className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-sm text-text-main focus:border-gold/50 outline-none transition-all" 
-                   placeholder="Your answer" 
-                 />
-               </div>
-            </div>
-          </div>
-        );
-      case 1: // Founder & Venture
-        return (
-          <div className="space-y-5 animate-in fade-in slide-in-from-right duration-300">
-            <div>
-               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Date of Birth</label>
-               <div className="relative group">
-                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
-                    <Calendar size={18} />
-                 </div>
-                 <input 
-                   required 
-                   type="date" 
-                   value={formData.dob} 
-                   onChange={e => setFormData({...formData, dob: e.target.value})} 
-                   className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none transition-all" 
-                 />
-               </div>
-               <p className="text-[10px] text-text-muted ml-1 mt-1">Must be 16+ to join.</p>
+              {errors.email && <p className="text-red-400 text-xs mt-1">{errors.email}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-               <div>
-                  <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Title</label>
-                  <div className="relative">
-                    <select 
-                      value={formData.title} 
-                      onChange={e => setFormData({...formData, title: e.target.value})} 
-                      className="w-full bg-background border border-white/10 rounded-xl pl-3 pr-10 py-3 text-text-main focus:border-gold/50 outline-none appearance-none transition-all"
-                    >
-                      {TITLES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
-                      <ChevronDown size={16} />
-                    </div>
-                  </div>
-               </div>
-               <div>
-                  <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Stage</label>
-                  <div className="relative">
-                    <select 
-                      value={formData.stage} 
-                      onChange={e => setFormData({...formData, stage: e.target.value})} 
-                      className="w-full bg-background border border-white/10 rounded-xl pl-3 pr-10 py-3 text-text-main focus:border-gold/50 outline-none appearance-none transition-all"
-                    >
-                      {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
-                      <ChevronDown size={16} />
-                    </div>
-                  </div>
-               </div>
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                  <input type="password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none" placeholder="Min 6 chars" />
+                </div>
+                {errors.password && <p className="text-red-400 text-xs mt-1">{errors.password}</p>}
+              </div>
+              <div>
+                <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Confirm</label>
+                <input type="password" value={formData.confirmPassword} onChange={e => setFormData({...formData, confirmPassword: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none" placeholder="Repeat password" />
+                {errors.confirmPassword && <p className="text-red-400 text-xs mt-1">{errors.confirmPassword}</p>}
+              </div>
             </div>
 
-            <div>
-               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Gender</label>
-               <div className="relative">
-                 <select 
-                   value={formData.gender} 
-                   onChange={e => setFormData({...formData, gender: e.target.value as 'Male' | 'Female'})} 
-                   className="w-full bg-background border border-white/10 rounded-xl pl-4 pr-10 py-3 text-text-main focus:border-gold/50 outline-none appearance-none transition-all"
-                 >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                 </select>
-                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
-                    <ChevronDown size={16} />
-                 </div>
-               </div>
-            </div>
-
-            <div>
-               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Location</label>
-               <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
-                      <MapPin size={18} />
+            <div className="bg-surface border border-white/10 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-3">
+                 <ShieldCheck className="text-gold" size={18} />
+                 <span className="text-sm font-bold text-text-main">Account Recovery</span>
+              </div>
+              <div className="space-y-3">
+                 <div>
+                    <label className="block text-xs text-text-muted mb-1">Security Question</label>
+                    <div className="relative">
+                      <select value={formData.securityQuestion} onChange={e => setFormData({...formData, securityQuestion: e.target.value})} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main appearance-none focus:border-gold/50 outline-none">
+                        {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={14} />
                     </div>
-                    <input 
-                      required 
-                      type="text" 
-                      value={formData.city} 
-                      onChange={e => setFormData({...formData, city: e.target.value})} 
-                      className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none transition-all" 
-                      placeholder="City" 
-                    />
-                  </div>
-                  <div className="relative w-1/3">
-                    <select 
-                      required 
-                      value={formData.state} 
-                      onChange={e => setFormData({...formData, state: e.target.value})} 
-                      className="w-full bg-background border border-white/10 rounded-xl pl-2 pr-8 py-3 text-text-main focus:border-gold/50 outline-none appearance-none transition-all text-sm"
-                    >
-                      <option value="">State</option>
-                      {US_STATES.map(st => <option key={st} value={st}>{st}</option>)}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-text-muted">
-                      <ChevronDown size={16} />
-                    </div>
-                  </div>
-               </div>
-            </div>
-
-            <div>
-               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Main Goal</label>
-               <div className="relative">
-                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-muted">
-                    <Flag size={18} />
                  </div>
-                 <select 
-                   value={formData.mainGoal} 
-                   onChange={e => setFormData({...formData, mainGoal: e.target.value})} 
-                   className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-10 py-3 text-text-main focus:border-gold/50 outline-none appearance-none transition-all"
-                 >
-                   {GOALS.map(g => <option key={g} value={g}>{g}</option>)}
-                 </select>
-                 <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-text-muted">
-                    <ChevronDown size={16} />
+                 <div>
+                    <label className="block text-xs text-text-muted mb-1">Answer</label>
+                    <input type="text" value={formData.securityAnswer} onChange={e => setFormData({...formData, securityAnswer: e.target.value})} className="w-full bg-background border border-white/10 rounded-lg px-3 py-2 text-sm text-text-main focus:border-gold/50 outline-none" placeholder="Your answer" />
                  </div>
-               </div>
+              </div>
             </div>
-            
-            {formData.mainGoal === 'Other' && (
-               <div>
-                  <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Specific Goal</label>
-                  <input 
-                      type="text" 
-                      value={formData.customGoal} 
-                      onChange={e => setFormData({...formData, customGoal: e.target.value})} 
-                      className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none transition-all" 
-                      placeholder="e.g. Find Beta Users" 
-                  />
-               </div>
-            )}
           </div>
         );
-      case 2: // Profile Picture (Upload)
+      case 1: // Founder Profile
         return (
-          <div className="space-y-5 animate-in fade-in slide-in-from-right duration-300">
-             <div>
-               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Profile Picture</label>
-               <div 
-                 onClick={() => fileInputRef.current?.click()}
-                 className="w-full border border-dashed border-white/20 rounded-xl bg-background/50 hover:bg-white/5 transition-colors cursor-pointer p-8 flex flex-col items-center justify-center gap-4 group relative overflow-hidden min-h-[250px]"
-               >
-                 {formData.imagePreview ? (
-                    <>
-                       <div className="w-32 h-32 rounded-full border-4 border-gold shadow-lg overflow-hidden relative z-10">
-                          <img 
-                            src={formData.imagePreview} 
-                            alt="Preview" 
-                            className="w-full h-full object-cover"
-                          />
-                       </div>
-                       <span className="text-sm text-text-main font-medium z-10 flex items-center gap-2">
-                         <Check size={16} className="text-green-500" /> Photo Selected
-                       </span>
-                    </>
-                 ) : (
-                    <>
-                      <div className="w-20 h-20 bg-background rounded-full flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform shadow-lg">
-                        <Upload size={32} className="text-text-muted group-hover:text-gold transition-colors" />
-                      </div>
-                      <span className="text-sm text-text-muted group-hover:text-text-main transition-colors text-center">
-                         Tap to upload a photo<br/>
-                         <span className="text-xs opacity-60">or skip to use a default avatar</span>
-                      </span>
-                    </>
-                 )}
-                 <input 
-                   type="file" 
-                   ref={fileInputRef} 
-                   className="hidden" 
-                   accept="image/*" 
-                   onChange={handleImageChange} 
-                 />
+          <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
+             <div className="grid grid-cols-2 gap-4">
+               <div>
+                  <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Date of Birth</label>
+                  <div className="relative">
+                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                     <input type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none" />
+                  </div>
                </div>
-               <p className="text-center text-xs text-text-muted mt-4">You can change this later in your profile.</p>
-            </div>
+               <div>
+                  <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Gender</label>
+                  <div className="relative">
+                    <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value as any})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main appearance-none focus:border-gold/50 outline-none">
+                       <option value="Male">Male</option>
+                       <option value="Female">Female</option>
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={18} />
+                  </div>
+               </div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-4">
+                <div>
+                   <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Title</label>
+                   <div className="relative">
+                      <select value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main appearance-none focus:border-gold/50 outline-none text-sm">
+                        {TITLES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={18} />
+                   </div>
+                   {formData.title === 'Other' && (
+                     <input type="text" value={formData.customTitle} onChange={e => setFormData({...formData, customTitle: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-2 mt-2 text-text-main focus:border-gold/50 outline-none text-sm" placeholder="Enter Title" />
+                   )}
+                </div>
+                <div>
+                   <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Stage</label>
+                   <div className="relative">
+                      <select value={formData.stage} onChange={e => setFormData({...formData, stage: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main appearance-none focus:border-gold/50 outline-none text-sm">
+                        {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <Flag className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={18} />
+                   </div>
+                </div>
+             </div>
+
+             <div>
+                <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Location</label>
+                <div className="grid grid-cols-2 gap-2">
+                   <input type="text" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} className="bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none" placeholder="City" />
+                   <div className="relative">
+                      <select value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main appearance-none focus:border-gold/50 outline-none text-sm">
+                         <option value="">Select State</option>
+                         {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={18} />
+                   </div>
+                </div>
+             </div>
+
+             <div>
+                <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Main Goal</label>
+                <div className="relative">
+                    <select value={formData.mainGoal} onChange={e => setFormData({...formData, mainGoal: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main appearance-none focus:border-gold/50 outline-none text-sm">
+                       {GOALS.map(g => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={18} />
+                </div>
+                {formData.mainGoal === 'Other' && (
+                     <input type="text" value={formData.customGoal} onChange={e => setFormData({...formData, customGoal: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-2 mt-2 text-text-main focus:border-gold/50 outline-none text-sm" placeholder="What is your goal?" />
+                )}
+             </div>
           </div>
         );
-      default:
-        return null;
-    }
-  };
-
-  const getStepTitle = () => {
-    switch(step) {
-      case 0: return "Account & Security";
-      case 1: return "Founder & Venture";
-      case 2: return "Profile Picture";
-      default: return "";
+      case 2: // Profile Image
+        return (
+          <div className="flex flex-col items-center justify-center space-y-6 animate-in fade-in zoom-in duration-300 py-4">
+             <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                <div className="w-40 h-40 rounded-full border-4 border-dashed border-white/20 flex items-center justify-center bg-background hover:bg-white/5 transition-colors overflow-hidden">
+                   {formData.imagePreview ? (
+                     <img src={formData.imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                   ) : (
+                     <div className="text-center text-text-muted">
+                        <Upload size={32} className="mx-auto mb-2 opacity-50" />
+                        <span className="text-xs uppercase tracking-wide">Upload Photo</span>
+                     </div>
+                   )}
+                </div>
+                {formData.imagePreview && (
+                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                     <span className="text-white text-xs font-bold uppercase">Change</span>
+                  </div>
+                )}
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*"
+                  onChange={handleImageChange}
+                />
+             </div>
+             <p className="text-sm text-text-muted text-center max-w-xs">
+                {formData.imagePreview ? "Looks great! You can proceed." : "A professional photo increases engagement by 40%."}
+             </p>
+          </div>
+        );
+      default: return null;
     }
   };
 
   return (
-    <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-[5%] left-[15%] w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[15%] right-[10%] w-80 h-80 bg-gold/5 rounded-full blur-[100px]" />
+    <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-6 relative">
+       {/* Background */}
+       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute top-[5%] right-[15%] w-96 h-96 bg-primary/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[10%] left-[10%] w-80 h-80 bg-gold/5 rounded-full blur-[100px]" />
       </div>
 
-      <div className="w-full max-w-md bg-surface/90 backdrop-blur-xl rounded-3xl border border-white/5 shadow-2xl flex flex-col h-[650px] relative z-10 animate-in fade-in zoom-in duration-300">
-        
-        {/* Header Section */}
-        <div className="p-8 pb-4 text-center shrink-0 relative">
-          <button 
-            onClick={handleBack}
-            className="absolute top-8 left-8 p-2 rounded-full hover:bg-white/5 text-text-muted hover:text-white transition-colors"
-            title="Back"
-          >
-            <ArrowLeft size={20} />
-          </button>
-
-          <div className="flex flex-col items-center">
-            <h1 className="text-xl font-bold text-text-main tracking-tight mb-1">Create Account</h1>
-            <p className="text-xs text-text-muted uppercase tracking-widest font-bold mb-4">Step {step + 1} of {TOTAL_STEPS}</p>
-            
-            {/* Progress Bar */}
-            <div className="w-full max-w-[200px] h-1.5 bg-white/5 rounded-full overflow-hidden flex mb-2">
-              <div className={`h-full bg-gold transition-all duration-500 ease-out`} style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }}></div>
+      <div className="max-w-md w-full bg-surface/90 backdrop-blur-xl rounded-3xl border border-white/5 shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh]">
+         {/* Header */}
+         <div className="p-6 border-b border-white/5 bg-black/20 shrink-0">
+            <div className="flex items-center justify-between mb-4">
+               <button onClick={handleBack} className="text-text-muted hover:text-white transition-colors">
+                  <ArrowLeft size={20} />
+               </button>
+               <span className="text-xs font-bold text-gold uppercase tracking-widest">
+                  Step {step + 1} of {TOTAL_STEPS}
+               </span>
+               <div className="w-5"></div> {/* Spacer */}
             </div>
-            <p className="text-lg font-medium text-white">{getStepTitle()}</p>
-          </div>
-        </div>
+            <h2 className="text-2xl font-bold text-text-main text-center">
+               {step === 0 && "Create Account"}
+               {step === 1 && "Founder Profile"}
+               {step === 2 && "Profile Photo"}
+            </h2>
+         </div>
 
-        {/* Content Section */}
-        <div className="flex-1 overflow-y-auto px-8 pb-4 no-scrollbar">
-          {/* Prevent implicit submit on Enter by handling onSubmit manually */}
-          <form onSubmit={(e) => { e.preventDefault(); handleNext(); }} className="h-full flex flex-col">
-            <div className="flex-1">
-              {renderStepContent()}
-            </div>
-
-            {/* Error Display */}
-            {(errors.general || error) && (
-              <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
-                 <AlertCircle size={16} className="shrink-0" /> 
-                 <span>{errors.general || error}</span>
+         {/* Content */}
+         <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+            {error && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-start gap-2 text-red-400 text-sm">
+                 <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                 <span>{error}</span>
               </div>
             )}
             
-            {/* Action Buttons */}
-            <div className="pt-6 pb-4 mt-auto">
-              {step < TOTAL_STEPS - 1 ? (
-                <button 
-                  type="button" 
-                  onClick={handleNext}
-                  className="w-full bg-surface border border-white/10 hover:bg-white/5 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2"
-                >
-                  Continue <ArrowRight size={18} />
-                </button>
-              ) : (
-                <button 
-                  type="button" 
-                  onClick={handleSubmit} // Explicitly call handleSubmit on last step
-                  disabled={isLoading}
-                  className="w-full bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white font-bold py-4 rounded-xl shadow-lg shadow-primary/20 transition-all border border-white/5 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? <Loader2 size={20} className="animate-spin"/> : "Complete Registration"}
-                </button>
-              )}
-            </div>
-          </form>
-        </div>
+            {errors.general && (
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm text-center">
+                 {errors.general}
+              </div>
+            )}
+
+            <form onSubmit={handleNext}>
+              {renderStepContent()}
+              
+              {/* Fake submit button to handle Enter key */}
+              <button type="submit" className="hidden" />
+            </form>
+         </div>
+
+         {/* Footer */}
+         <div className="p-6 border-t border-white/5 bg-surface shrink-0">
+            <button 
+              onClick={handleNext}
+              disabled={isLoading}
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-primary-hover text-white font-bold shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed group"
+            >
+               {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
+                 step === TOTAL_STEPS - 1 ? (
+                   <>Complete Registration <Check size={20} /></>
+                 ) : (
+                   <>Next Step <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" /></>
+                 )
+               )}
+            </button>
+         </div>
       </div>
     </div>
   );

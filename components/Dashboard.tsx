@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
 import { supabase } from '../supabaseClient';
@@ -839,8 +840,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
           {!isPro && (
             <button
-              onClick={() => onUpgrade('kova_pro')}
-              className="ml-3 inline-flex items-center whitespace-nowrap rounded-xl border border-gold/40 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-gold hover:bg-gold/10 transition-colors"
+              className="ml-3 inline-flex items-center whitespace-nowrap rounded-xl border border-gold/40 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-gold hover:bg-gold/10 transition-colors pointer-events-none"
             >
               <Crown size={12} className="mr-1" />
               Upgrade

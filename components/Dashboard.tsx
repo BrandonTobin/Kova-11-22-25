@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
 import { supabase } from '../supabaseClient';
@@ -1194,7 +1192,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           {/* Kova Pro Goal Intelligence (Roadmap + Predictions) */}
           <div
             className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${
-              !isPro ? 'cursor-not-allowed' : ''
+              !isPro ? 'pointer-events-none select-none' : ''
             }`}
           >
             {/* Wrapper to disable interactions */}
@@ -1290,7 +1288,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       </div>
 
                       <button
-                        onClick={() => onUpgrade('kova_pro')}
                         disabled
                         className="mt-2 px-6 py-3 rounded-xl bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold shadow-xl border border-gold/70 transition-all flex items-center gap-2 opacity-60 cursor-not-allowed"
                       >
@@ -1304,8 +1301,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
             {/* NEW COMING SOON OVERLAY */}
             <div 
-               className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
-               onClick={() => onUpgrade('kova_pro')}
+               className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
             >
                 <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
                   <Lock size={12} className="text-zinc-400" />
@@ -1319,7 +1315,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           {/* Kova Pro Insights (Locked/Unlocked) */}
           <div
             className={`bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col relative overflow-hidden ${
-              !isPro ? 'cursor-not-allowed' : ''
+              !isPro ? 'pointer-events-none select-none' : ''
             }`}
           >
             <div className="pointer-events-none h-full flex flex-col relative">
@@ -1400,7 +1396,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       </div>
 
                       <button
-                        onClick={() => onUpgrade('kova_pro')}
                         disabled
                         className="mt-2 px-6 py-3 bg-gradient-to-r from-gold to-amber-500 text-surface text-sm font-semibold rounded-xl shadow-xl border border-gold/70 transition-all flex items-center gap-2 opacity-60 cursor-not-allowed"
                       >
@@ -1414,8 +1409,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
             {/* NEW COMING SOON OVERLAY */}
             <div 
-              className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm cursor-pointer"
-              onClick={() => onUpgrade('kova_pro')}
+              className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
             >
               <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
                  <Lock size={12} className="text-zinc-400" />

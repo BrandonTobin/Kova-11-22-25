@@ -33,7 +33,8 @@ const RTC_CONFIG = {
 
 const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, onEndCall, onReturnToDashboard }) => {
   // Call State
-  // Start with empty participants so we only see ourselves initially
+  // participants list tracks active remote connections.
+  // If empty, we show "Waiting..." placeholder.
   const [participants, setParticipants] = useState<Match[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -75,6 +76,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
   // --- 1. Initialize Session & Media ---
   useEffect(() => {
+    // Start backend session tracking
     if (!sessionId && currentUser && match?.user) {
       startSession(currentUser.id, match.user.id).then((id) => {
         if (id) setSessionId(id);
@@ -107,10 +109,11 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         timestamp: new Date()
     }]);
 
+    // Cleanup on unmount
     return () => {
       cleanupCall();
     };
-  }, []);
+  }, []); // Run once on mount
 
   // --- 2. Attach Local Stream to Video Element ---
   useEffect(() => {
@@ -138,7 +141,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     // Determine initiator based on ID comparison (lower ID initiates)
     // This prevents glare (both calling each other at same time)
     isInitiator.current = currentUser.id < match.user.id;
-    console.log(`[WebRTC] Initializing. Am I initiator? ${isInitiator.current}`);
+    console.log(`[WebRTC] Initializing. Am I initiator? ${isInitiator.current}. Room ID: video-signaling:${match.id}`);
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnection.current = pc;
@@ -163,14 +166,17 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     pc.ontrack = (event) => {
       console.log("[WebRTC] Remote track received", event.streams[0]);
       setRemoteStream(event.streams[0]);
+      // Ensure participant is in list when we get a track
+      setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
     };
 
     // Handle Connection State
     pc.oniceconnectionstatechange = () => {
       console.log(`[WebRTC] ICE State: ${pc.iceConnectionState}`);
       if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
+        console.log("[WebRTC] Peer disconnected");
         setRemoteStream(null);
-        // Remove participant if connection dies
+        // Remove participant to show "Waiting..." UI
         setParticipants(prev => prev.filter(p => p.id !== match.id));
       }
     };
@@ -193,7 +199,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         if (!peerConnection.current) return;
         console.log("[WebRTC] Received offer");
 
-        // Ensure partner is visible
+        // Received offer implies peer is present
         setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
 
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
@@ -217,7 +223,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         if (!peerConnection.current) return;
         console.log("[WebRTC] Received answer");
 
-        // Ensure partner is visible
+        // Received answer implies peer is present
         setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
 
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
@@ -228,26 +234,39 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
             if(c) await peerConnection.current.addIceCandidate(new RTCIceCandidate(c));
         }
       })
+      // SIGNAL: 'join' -> Peer entering the room
       .on('broadcast', { event: 'join' }, () => {
-        console.log("[WebRTC] Peer joined");
+        console.log("[WebRTC] Peer joined (received 'join' signal)");
         
-        // Partner joined, show them in UI
+        // Add to UI
         setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
 
-        // If peer joins and I am the initiator, start the call
+        // Reply with 'ack' so they know I'm here (in case they missed my join)
+        channel.send({ type: 'broadcast', event: 'ack', payload: {} });
+
+        // If I am initiator and room is stable, initiate call
+        if (isInitiator.current) {
+            createAndSendOffer();
+        }
+      })
+      // SIGNAL: 'ack' -> Peer confirming they are already in the room
+      .on('broadcast', { event: 'ack' }, () => {
+        console.log("[WebRTC] Peer ack received");
+        setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
+        
         if (isInitiator.current) {
             createAndSendOffer();
         }
       })
       .on('broadcast', { event: 'leave' }, () => {
-        console.log("[WebRTC] Peer left");
+        console.log("[WebRTC] Peer left (received 'leave' signal)");
         setRemoteStream(null);
         setParticipants(prev => prev.filter(p => p.id !== match.id));
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log("[WebRTC] Channel subscribed. Sending join signal.");
-          // Announce presence
+          // Announce presence to anyone already there
           channel.send({ type: 'broadcast', event: 'join', payload: {} });
         }
       });
@@ -257,8 +276,11 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     const pc = peerConnection.current;
     if (!pc) return;
     
-    // Prevent creating multiple offers if already connecting
-    if (pc.signalingState !== "stable") return;
+    // Prevent creating multiple offers if already connecting or connected
+    if (pc.signalingState !== "stable") {
+        console.log("[WebRTC] Skipping offer creation, signaling state is:", pc.signalingState);
+        return;
+    }
 
     console.log("[WebRTC] Creating offer...");
     const offer = await pc.createOffer();
@@ -430,13 +452,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     setShowInviteModal(false);
   };
 
-  const totalPeople = participants.length + 1;
+  // Determine grid layout based on number of visible tiles
+  const isPeerConnected = participants.some(p => p.id === match.id);
+  const totalVisible = 1 + (participants.length > 0 ? participants.length : 1); // Me + (Remote or Placeholder)
   const getGridClass = () => {
-    if (totalPeople === 1) return 'grid-cols-1';
-    if (totalPeople === 2) return 'grid-cols-1 md:grid-cols-2';
-    if (totalPeople <= 4) return 'grid-cols-2';
-    if (totalPeople <= 6) return 'grid-cols-3';
-    return 'grid-cols-3 md:grid-cols-4';
+    if (totalVisible === 1) return 'grid-cols-1';
+    if (totalVisible === 2) return 'grid-cols-1 md:grid-cols-2';
+    return 'grid-cols-2';
   };
 
   return (
@@ -579,45 +601,57 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
             )}
           </div>
 
-          {/* 2. Remote Participants */}
-          {participants.map((participant) => (
-            <div key={participant.id} className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[180px]">
-              {participant.id === match.id && remoteStream ? (
-                <video 
-                  ref={remoteVideoRef}
-                  autoPlay 
-                  playsInline 
-                  className="w-full h-full object-cover"
+          {/* 2. Remote Participant (Partner) */}
+          {/* Always render a slot for the match partner: either video or waiting state */}
+          <div className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[180px]">
+            {isPeerConnected && remoteStream ? (
+              <video 
+                ref={remoteVideoRef}
+                autoPlay 
+                playsInline 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <>
+                <img 
+                  src={match.user.imageUrl} 
+                  alt={match.user.name} 
+                  className="w-full h-full object-cover filter blur-sm opacity-50" 
+                  onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                 />
-              ) : (
-                <>
-                  <img 
-                    src={participant.user.imageUrl} 
-                    alt={participant.user.name} 
-                    className="w-full h-full object-cover filter blur-sm opacity-50" 
-                    onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-                  />
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                     <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-white/10 mb-3 shadow-xl">
-                        <img src={participant.user.imageUrl} className="w-full h-full object-cover" />
-                     </div>
-                     <p className="text-white font-bold text-lg drop-shadow-md text-center px-4">
-                       Waiting for {getDisplayName(participant.user.name)} to join...
-                     </p>
-                  </div>
-                </>
-              )}
-              
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                   <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-white/10 mb-3 shadow-xl">
+                      <img src={match.user.imageUrl} className="w-full h-full object-cover" />
+                   </div>
+                   <p className="text-white font-bold text-lg drop-shadow-md text-center px-4">
+                     Waiting for {getDisplayName(match.user.name)} to join...
+                   </p>
+                </div>
+              </>
+            )}
+            
+            {isPeerConnected && (
               <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded-lg text-sm font-medium backdrop-blur-sm text-white flex items-center gap-2">
-                {getDisplayName(participant.user.name)}
+                {getDisplayName(match.user.name)}
                 <span className={`w-2 h-2 rounded-full ${remoteStream ? 'bg-green-500' : 'bg-yellow-500'} animate-pulse`}></span>
               </div>
-              
-              <div className="absolute top-4 right-4 bg-primary/80 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
-                {participant.user.role}
-              </div>
+            )}
+            
+            <div className="absolute top-4 right-4 bg-primary/80 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+              {match.user.role}
+            </div>
+          </div>
+
+          {/* 3. Extra Invited Participants (if any) */}
+          {participants.filter(p => p.id !== match.id).map((participant) => (
+            <div key={participant.id} className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[180px]">
+                {/* For invited guests, similar logic could apply if they have streams, but focusing on primary match first */}
+                <div className="absolute inset-0 flex items-center justify-center bg-background">
+                   <p className="text-text-muted">Guest: {getDisplayName(participant.user.name)}</p>
+                </div>
             </div>
           ))}
+
         </div>
 
         {/* Controls Bar */}

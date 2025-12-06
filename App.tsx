@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -1080,6 +1081,10 @@ function App() {
               user={user}
               matches={matches}
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
+              onJoinSession={(match) => {
+                setActiveVideoMatch(match);
+                setCurrentView(ViewState.VIDEO_ROOM);
+              }}
             />
           )}
 

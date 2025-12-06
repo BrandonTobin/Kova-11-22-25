@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
 import { supabase } from '../supabaseClient';
@@ -23,7 +22,9 @@ import {
   Crown,
   Search,
   Check,
-  ChevronDown
+  ChevronDown,
+  Video,
+  Trash2
 } from 'lucide-react';
 import { ALL_BADGES } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
@@ -32,6 +33,7 @@ interface DashboardProps {
   user: User;
   matches: Match[];
   onUpgrade: (tier: SubscriptionTier) => void;
+  onJoinSession: (match: Match) => void;
 }
 
 interface CalendarDay {
@@ -64,6 +66,7 @@ interface ScheduledSession {
   title: string;
   scheduled_at: string;
   partner_email?: string;
+  user_id: string; // Creator ID
 }
 
 // Kova Color Palette
@@ -180,6 +183,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
         ? `Co-working with ${getDisplayName(selectedMatch.user.name)}`
         : 'Solo Focus Session';
 
+      // Ensure we use the partner's email if a match is selected
       const partnerEmail = selectedMatch?.user.email || null;
 
       // Generate occurrences based on recurrence
@@ -195,9 +199,10 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
         if (recurrence === 'weekly') sessionDate.setDate(sessionDate.getDate() + i * 7);
         if (recurrence === 'monthly') sessionDate.setMonth(sessionDate.getMonth() + i);
 
+        // --- VERIFIED INSERT PAYLOAD ---
         sessionsToCreate.push({
-          user_id: userId,
-          partner_email: partnerEmail,
+          user_id: userId,          // Host ID
+          partner_email: partnerEmail, // Partner Email
           title: title,
           scheduled_at: sessionDate.toISOString()
         });
@@ -336,7 +341,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, onJoinSession }) => {
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -345,11 +350,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   const [heatmapMode, setHeatmapMode] = useState<'productivity' | 'consistency' | 'goals'>('productivity');
   const [refreshKey, setRefreshKey] = useState(0);
   
+  // Local state to hide cancelled or joined sessions immediately
+  const [localHiddenSessionIds, setLocalHiddenSessionIds] = useState<Set<string>>(new Set());
+
   // Use new helper for specific feature access
   const isPro = hasProAccess(user);
 
   // Heatmap constants - Adjusted for better fit
-  const CELL_SIZE = 15;
+  const CELL_SIZE = 16;
   const CELL_GAP = 4;
   const GRID_OFFSET = CELL_SIZE + CELL_GAP;
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -363,6 +371,72 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
     setRefreshKey(prev => prev + 1);
   };
 
+  const handleCancelSession = async (sessionId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm('Are you sure you want to cancel this session?')) return;
+    
+    // Optimistic Update: Hide it immediately
+    setLocalHiddenSessionIds(prev => new Set(prev).add(sessionId));
+
+    try {
+      const { error } = await supabase
+        .from("scheduled_sessions")
+        .delete()
+        .eq("id", sessionId);
+
+      if (error) throw error;
+      setRefreshKey(prev => prev + 1);
+    } catch (err) {
+      console.error('Failed to cancel session:', err);
+      alert('Failed to cancel session');
+      // Revert if failed
+      setLocalHiddenSessionIds(prev => {
+        const next = new Set(prev);
+        next.delete(sessionId);
+        return next;
+      });
+    }
+  };
+
+  const handleJoinClick = (session: ScheduledSession) => {
+    const sessionDate = new Date(session.scheduled_at);
+    const today = new Date();
+    const isToday = 
+      sessionDate.getDate() === today.getDate() &&
+      sessionDate.getMonth() === today.getMonth() &&
+      sessionDate.getFullYear() === today.getFullYear();
+
+    if (isToday) {
+      // Mark as joined in local storage so it persists until midnight
+      const joinedIds = JSON.parse(localStorage.getItem('kova_joined_sessions') || '[]');
+      if (!joinedIds.includes(session.id)) {
+        joinedIds.push(session.id);
+        localStorage.setItem('kova_joined_sessions', JSON.stringify(joinedIds));
+      }
+      // Hide locally
+      setLocalHiddenSessionIds(prev => new Set(prev).add(session.id));
+
+      let match: Match | undefined;
+
+      // Logic to find the match object based on who is viewing the dashboard
+      if (session.user_id === user.id) {
+         // I am the host (creator), so I need to find the partner using the partner_email
+         if (session.partner_email) {
+            match = matches.find(m => m.user.email === session.partner_email);
+         }
+      } else {
+         // I am the partner (invitee), so I need to find the host using session.user_id
+         match = matches.find(m => m.user.id === session.user_id);
+      }
+
+      if (match) {
+        onJoinSession(match);
+      } else {
+        console.warn("Could not find match object for session");
+      }
+    }
+  };
+
   useEffect(() => {
     const loadDashboardData = async () => {
       setIsLoading(true);
@@ -370,6 +444,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
 
       // Skip data loading for the mock user used in onboarding
       if (user.id === '00000000-0000-0000-0000-000000000000') {
+        // ... (Mock Data Logic remains same)
         const fakeCalendarDays: CalendarDay[] = [];
         const now = new Date();
         const currentYear = now.getFullYear();
@@ -627,13 +702,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
         const calendarDaysGoals = buildCalendarDays(goalCounts);
 
         // --- 5. Upcoming Sessions ---
+        // Fetch sessions from start of TODAY (00:00:00) so they don't disappear
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
         const { data: scheduled } = await supabase
           .from('scheduled_sessions')
           .select('*')
-          .eq('user_id', user.id)
-          .gte('scheduled_at', now.toISOString())
+          // --- VERIFIED SELECT LOGIC ---
+          // Fetch if user is creator OR partner (via partner_email)
+          .or(`user_id.eq.${user.id},partner_email.eq.${user.email}`)
+          .gte('scheduled_at', startOfDay.toISOString())
           .order('scheduled_at', { ascending: true })
-          .limit(5);
+          .limit(50);
+
+        // Filter out joined sessions from localStorage
+        const joinedSessionIds = JSON.parse(localStorage.getItem('kova_joined_sessions') || '[]');
+        const visibleScheduled = (scheduled || []).filter((s: ScheduledSession) => !joinedSessionIds.includes(s.id));
 
         setMetrics({
           totalHours,
@@ -645,7 +730,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           calendarDaysProductivity,
           calendarDaysConsistency,
           calendarDaysGoals,
-          scheduledSessions: scheduled || [],
+          scheduledSessions: visibleScheduled || [],
           weeklyFocusHours,
           weeklySessionsCount: thisWeekSessionsCount,
           weeklyActiveDays,
@@ -685,6 +770,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
       }
     });
   }
+  
+  // Filter scheduled sessions based on hidden state (from cancel/join)
+  const displaySessions = metrics?.scheduledSessions.filter(s => !localHiddenSessionIds.has(s.id)) || [];
 
   if (isLoading) {
     return (
@@ -1129,48 +1217,95 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
               <h3 className="text-lg font-semibold text-text-main">Upcoming Sessions</h3>
               <Calendar size={18} className="text-text-muted" />
             </div>
-            <div className="space-y-4 flex-1">
-              {metrics.scheduledSessions.length > 0 ? (
-                metrics.scheduledSessions.map(session => (
-                  <div
-                    key={session.id}
-                    className="group p-3 rounded-xl bg-background/50 border border-white/5 hover:bg-background hover:border-gold/30 transition-all cursor-pointer"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
-                          {new Date(session.scheduled_at).toLocaleDateString([], {
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </span>
-                        <span className="text-xs font-bold text-text-main">
-                          {new Date(session.scheduled_at).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </span>
-                      </div>
-                      <ArrowRight
-                        size={14}
-                        className="text-text-muted group-hover:text-gold transition-colors transform group-hover:translate-x-1"
-                      />
-                    </div>
-                    <div>
-                      <h4 className="font-medium text-sm text-text-main group-hover:text-gold transition-colors truncate">
-                        {session.title}
-                      </h4>
-                      <div className="flex items-center gap-2 mt-1">
-                        <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center text-[8px] text-white font-bold border border-primary-hover shrink-0">
-                          P
+            {/* Added maxHeight to ensure scrolling happens before row grows too large relative to heatmap */}
+            <div className="space-y-4 flex-1 overflow-y-auto min-h-0 custom-scrollbar pr-2" style={{ maxHeight: '200px' }}>
+              {displaySessions.length > 0 ? (
+                displaySessions.map(session => {
+                  const sessionDate = new Date(session.scheduled_at);
+                  const today = new Date();
+                  const isToday = 
+                    sessionDate.getDate() === today.getDate() &&
+                    sessionDate.getMonth() === today.getMonth() &&
+                    sessionDate.getFullYear() === today.getFullYear();
+                  
+                  // Allow joining if it is today and I am a participant (implied by query) and it is not a solo session without partner
+                  const isJoinable = isToday && !!session.partner_email;
+
+                  // --- IMPROVED NAME DISPLAY LOGIC ---
+                  let partnerDisplay = 'Solo Session';
+                  if (session.partner_email) {
+                    if (session.user_id === user.id) {
+                      // I am the host, find the partner name
+                      const match = matches.find(m => m.user.email === session.partner_email);
+                      partnerDisplay = match ? `with ${getDisplayName(match.user.name)}` : `with ${session.partner_email}`;
+                    } else {
+                      // I am the partner, find the host name
+                      // 'matches' contains the *other* user. So find the match where other user ID is session.user_id
+                      const match = matches.find(m => m.user.id === session.user_id);
+                      partnerDisplay = match ? `Hosted by ${getDisplayName(match.user.name)}` : 'Hosted by Kova User';
+                    }
+                  }
+
+                  return (
+                    <div
+                      key={session.id}
+                      onClick={() => isJoinable && handleJoinClick(session)}
+                      className={`group p-3 rounded-xl border transition-all relative ${
+                        isJoinable 
+                          ? 'bg-background/50 border-white/5 hover:bg-background hover:border-gold/30 cursor-pointer' 
+                          : 'bg-background/30 border-transparent opacity-70 cursor-default'
+                      }`}
+                    >
+                      <button
+                        onClick={(e) => handleCancelSession(session.id, e)}
+                        className="absolute top-2 right-2 text-text-muted hover:text-red-400 p-1 rounded-full transition-colors z-10"
+                        title="Cancel Session"
+                      >
+                         <Trash2 size={14} />
+                      </button>
+
+                      <div className="flex justify-between items-start mb-2 pr-6">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
+                            isToday ? 'bg-gold/20 text-gold' : 'bg-white/5 text-text-muted'
+                          }`}>
+                            {sessionDate.toLocaleDateString([], {
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </span>
+                          <span className="text-xs font-bold text-text-main">
+                            {sessionDate.toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
                         </div>
-                        <p className="text-xs text-text-muted truncate">
-                          {session.partner_email ? `with ${session.partner_email}` : 'Solo Session'}
-                        </p>
                       </div>
+                      <div>
+                        <h4 className={`font-medium text-sm transition-colors truncate ${
+                           isJoinable ? 'text-text-main group-hover:text-gold' : 'text-text-muted'
+                        }`}>
+                          {session.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center text-[8px] text-white font-bold border border-primary-hover shrink-0">
+                            P
+                          </div>
+                          <p className="text-xs text-text-muted truncate">
+                            {partnerDisplay}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {isJoinable && (
+                        <div className="flex items-center gap-1 text-xs text-gold font-bold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span>Join</span> <ArrowRight size={12} />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="text-sm text-text-muted text-center py-4">No upcoming sessions scheduled.</div>
               )}

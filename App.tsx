@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -218,9 +217,15 @@ function App() {
     }
   }, [user?.id]);
 
+  // Use a ref to track current view in realtime callback without re-subscribing
+  const currentViewRef = useRef(currentView);
+  useEffect(() => {
+    currentViewRef.current = currentView;
+  }, [currentView]);
+
   // 🔔 Realtime listener for unread message notifications
   useEffect(() => {
-    if (!user || matches.length === 0) return;
+    if (!user) return;
 
     const channel = supabase
       .channel(`message_notifications:${user.id}`)
@@ -235,17 +240,32 @@ function App() {
           const newMsg = payload.new;
           if (!newMsg) return;
 
-          // Ignore messages we sent ourselves
+          // Update matches state: Update last message & Move conversation to top
+          setMatches((prevMatches) => {
+            const matchIndex = prevMatches.findIndex((m) => m.id === newMsg.match_id);
+            if (matchIndex === -1) return prevMatches;
+
+            // Clone the match and update its message info
+            const updatedMatch = {
+              ...prevMatches[matchIndex],
+              lastMessageText: newMsg.text,
+              lastMessageAt: newMsg.created_at || new Date().toISOString()
+            };
+
+            // Remove the match from its current position
+            const otherMatches = prevMatches.filter((_, idx) => idx !== matchIndex);
+
+            // Prepend updated match to the top
+            return [updatedMatch, ...otherMatches];
+          });
+
+          // Notification Logic (only for received messages)
           if (newMsg.sender_id === user.id) return;
 
-          // Only care if the message belongs to one of this user's matches
-          const isForMyMatch = matches.some((m) => m.id === newMsg.match_id);
-          if (!isForMyMatch) return;
+          // Don't badge if user is already on the MATCHES tab
+          if (currentViewRef.current === ViewState.MATCHES) return;
 
-          // 👇 NEW: don't badge while user is already on MATCHES view
-          if (currentView === ViewState.MATCHES) return;
-
-          // 🔔 Bump MATCHES tab (badge only, sound handled in ChatInterface)
+          // 🔔 Bump MATCHES tab badge
           addTabNotification([ViewState.MATCHES]);
         }
       )
@@ -254,7 +274,7 @@ function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id, matches.map((m) => m.id).join(','), currentView]); // 👈 added currentView here
+  }, [user?.id]);
 
   // -----------------------------
   // Auth + Profile
@@ -443,6 +463,14 @@ function App() {
       const validMatches = formattedMatchesResults.filter(
         (m): m is Match => m !== null
       );
+
+      // Sort matches by last message time (descending) so most recent is top
+      validMatches.sort((a, b) => {
+        const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+        const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+        return timeB - timeA;
+      });
+
       setMatches(validMatches);
     }
   };

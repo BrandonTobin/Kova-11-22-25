@@ -79,6 +79,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(
     matches[0]?.id || null
   );
+  // Keep a ref to selectedMatchId for use in global subscriptions
+  const selectedMatchIdRef = useRef(selectedMatchId);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -87,6 +90,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [liveMessageUpdates, setLiveMessageUpdates] = useState<
     Record<string, { text: string; timestamp: Date }>
   >({});
+
+  // Local state for "NEW" badges on conversations (for new incoming messages)
+  const [unreadConversationIds, setUnreadConversationIds] = useState<Set<string>>(new Set());
 
   // Chats the current user has "deleted" (hidden) this session
   const [clearedChats, setClearedChats] = useState<Record<string, boolean>>({});
@@ -213,6 +219,74 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     };
   }, []);
+
+  // Update ref whenever selectedMatchId changes
+  useEffect(() => {
+    selectedMatchIdRef.current = selectedMatchId;
+    
+    // Clear "NEW" badge for the selected conversation
+    if (selectedMatchId) {
+      setUnreadConversationIds(prev => {
+        if (prev.has(selectedMatchId)) {
+          const next = new Set(prev);
+          next.delete(selectedMatchId);
+          return next;
+        }
+        return prev;
+      });
+    }
+  }, [selectedMatchId]);
+
+  // GLOBAL Subscription: Listen to ALL new messages to sort the list & show badges
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const channel = supabase
+      .channel(`chat_list_global:${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          // RLS ensures we only receive messages we are part of
+        },
+        (payload) => {
+          const newMsg = payload.new as any;
+          const msgMatchId = newMsg.match_id;
+          const msgSenderId = newMsg.sender_id;
+          const msgText = newMsg.text;
+          const msgCreatedAt = newMsg.created_at;
+
+          // 1. Update content & sort order via liveMessageUpdates
+          setLiveMessageUpdates((prev) => ({
+            ...prev,
+            [msgMatchId]: {
+              text: msgText,
+              timestamp: parseSupabaseTimestamp(msgCreatedAt),
+            },
+          }));
+
+          // 2. Handle "NEW" badge logic
+          // Only if message is incoming AND we are not currently viewing that chat
+          if (msgSenderId !== currentUser.id) {
+             if (selectedMatchIdRef.current !== msgMatchId) {
+               setUnreadConversationIds(prev => {
+                 const next = new Set(prev);
+                 next.add(msgMatchId);
+                 return next;
+               });
+             }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser.id]);
+
 
   // Merge live updates into matches
   const mergedMatches = useMemo(() => {
@@ -481,6 +555,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     loadMessages();
 
+    // Local subscription for the ACTIVE conversation (sound + update local message list)
     const messageChannel = supabase
       .channel(`match_messages:${selectedMatchId}`)
       .on(
@@ -522,6 +597,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             return [...prev, newMsg];
           });
 
+          // NOTE: liveMessageUpdates for sorting is now also handled by the GLOBAL subscription below,
+          // but updating here ensures immediate feedback for the active chat too.
           setLiveMessageUpdates((prev) => ({
             ...prev,
             [newRow.match_id]: {
@@ -1663,14 +1740,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   ? 'bg-amber-500'
                   : 'bg-gray-500';
 
-              const isNew = newMatchIds.includes(match.id);
+              const isNewMatch = newMatchIds.includes(match.id);
+              const hasUnread = unreadConversationIds.has(match.id);
+              const showNewBadge = isNewMatch || hasUnread;
 
               return (
                 <div
                   key={match.id}
                   onClick={() => {
                     setSelectedMatchId(match.id);
-                    if (isNew && onMatchSeen) onMatchSeen(match.id);
+                    if (isNewMatch && onMatchSeen) onMatchSeen(match.id);
                   }}
                   className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${
                     selectedMatchId === match.id
@@ -1703,7 +1782,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         >
                           {getDisplayName(match.user.name)}
                         </h3>
-                        {isNew && (
+                        {showNewBadge && (
                           <span className="text-[9px] font-bold text-gold bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded-full shrink-0">
                             NEW
                           </span>

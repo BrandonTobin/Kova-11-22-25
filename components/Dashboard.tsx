@@ -348,9 +348,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
   // Use new helper for specific feature access
   const isPro = hasProAccess(user);
 
-  // Heatmap constants
+  // Heatmap constants - Adjusted for better fit
   const CELL_SIZE = 15;
-  const CELL_GAP = 3;
+  const CELL_GAP = 4;
   const GRID_OFFSET = CELL_SIZE + CELL_GAP;
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -939,10 +939,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
           </div>
         </div>
 
-        {/* Bottom Row: Heatmap & Upcoming Sessions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* 3. Consistency Heatmap */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col overflow-hidden">
+        {/* Bottom Row: Heatmap & Upcoming Sessions - UPDATED LAYOUT */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* 3. Consistency Heatmap - Takes 3/4 width */}
+          <div className="lg:col-span-3 bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main flex items-center gap-2">
                 <Zap size={18} className="text-gold" /> Consistency Heatmap
@@ -976,7 +976,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             </div>
 
             {/* Heatmap Container */}
-            <div className="w-full pb-2 overflow-hidden relative">
+            <div className="w-full pb-2 overflow-hidden relative flex justify-center">
               {/* Overlay for locked modes */}
               {isLockedHeatmap && (
                 <div 
@@ -992,11 +992,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                 </div>
               )}
 
-              <div className={`origin-top-left scale-[0.45] lg:scale-[0.5] xl:scale-[0.65] 2xl:scale-[0.8] min-[1900px]:scale-100 ${isLockedHeatmap ? 'pointer-events-none' : ''}`}>
+              <div className={`origin-top scale-[0.5] sm:scale-[0.6] md:scale-[0.7] lg:scale-[0.75] xl:scale-[0.9] 2xl:scale-100 ${isLockedHeatmap ? 'pointer-events-none' : ''}`}>
                 <div className="flex items-start gap-4 w-full justify-center min-w-max">
                   {/* Y-axis labels */}
                   <div
-                    className="relative shrink-0 text-[10px] text-text-muted font-medium w-8 text-right mr-2 pt-[20px]"
+                    className="relative shrink-0 text-xs text-text-muted font-medium w-8 text-right mr-2 pt-[20px]"
                     style={{ height: GRID_HEIGHT + 20 }}
                   >
                     {[
@@ -1024,7 +1024,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                       {monthLabels.map(item => (
                         <span
                           key={item.month}
-                          className="absolute text-[10px] text-text-muted -translate-x-1/2"
+                          className="absolute text-xs text-text-muted -translate-x-1/2"
                           style={{
                             left: item.colIndex * GRID_OFFSET + CELL_SIZE / 2,
                             top: 0,
@@ -1061,7 +1061,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                           >
                             <div
                               className={`
-                              w-full h-full rounded-[3px]
+                              w-full h-full rounded-[4px]
                               transition-transform transition-shadow duration-150 ease-out
                               ${day.isInCurrentYear ? getHeatmapColor(day.intensity) : 'bg-transparent border border-transparent'}
                               ${day.count > 0 ? 'shadow-[0_0_4px_rgba(214,167,86,0.35)]' : ''}
@@ -1105,26 +1105,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
             <div className="flex items-center justify-center gap-4 mt-4 text-xs text-text-muted w-full">
               <span className="mr-1">Less</span>
               <div className="flex items-center gap-1">
-                <div className="w-[15px] h-[15px] rounded-[2px] bg-surface border border-white/5"></div>
+                <div className="w-[18px] h-[18px] rounded-[4px] bg-surface border border-white/5"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[15px] h-[15px] rounded-[2px] bg-secondary border border-secondary/50"></div>
+                <div className="w-[18px] h-[18px] rounded-[4px] bg-secondary border border-secondary/50"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[15px] h-[15px] rounded-[2px] bg-primary border border-primary-hover"></div>
+                <div className="w-[18px] h-[18px] rounded-[4px] bg-primary border border-primary-hover"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[15px] h-[15px] rounded-[2px] bg-primary/40 border border-primary/20"></div>
+                <div className="w-[18px] h-[18px] rounded-[4px] bg-primary/40 border border-primary/20"></div>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-[15px] h-[15px] rounded-[2px] bg-gold border border-gold/50 shadow-[0_0_8px_rgba(214,167,86,0.25)]"></div>
+                <div className="w-[18px] h-[18px] rounded-[4px] bg-gold border border-gold/50 shadow-[0_0_8px_rgba(214,167,86,0.25)]"></div>
               </div>
               <span className="ml-1">More</span>
             </div>
           </div>
 
-          {/* 4. Upcoming Sessions */}
-          <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
+          {/* 4. Upcoming Sessions - Takes 1/4 width */}
+          <div className="lg:col-span-1 bg-surface p-6 rounded-2xl border border-white/5 shadow-lg h-full flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-text-main">Upcoming Sessions</h3>
               <Calendar size={18} className="text-text-muted" />
@@ -1138,13 +1138,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
+                        <span className="text-[10px] font-bold bg-gold/10 text-gold px-2 py-0.5 rounded uppercase">
                           {new Date(session.scheduled_at).toLocaleDateString([], {
                             month: 'short',
                             day: 'numeric'
                           })}
                         </span>
-                        <span className="text-sm font-bold text-text-main">
+                        <span className="text-xs font-bold text-text-main">
                           {new Date(session.scheduled_at).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit'
@@ -1152,19 +1152,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade }) 
                         </span>
                       </div>
                       <ArrowRight
-                        size={16}
+                        size={14}
                         className="text-text-muted group-hover:text-gold transition-colors transform group-hover:translate-x-1"
                       />
                     </div>
                     <div>
-                      <h4 className="font-medium text-text-main group-hover:text-gold transition-colors">
+                      <h4 className="font-medium text-sm text-text-main group-hover:text-gold transition-colors truncate">
                         {session.title}
                       </h4>
                       <div className="flex items-center gap-2 mt-1">
-                        <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold border border-primary-hover">
+                        <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center text-[8px] text-white font-bold border border-primary-hover shrink-0">
                           P
                         </div>
-                        <p className="text-xs text-text-muted">
+                        <p className="text-xs text-text-muted truncate">
                           {session.partner_email ? `with ${session.partner_email}` : 'Solo Session'}
                         </p>
                       </div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
 import { supabase } from '../supabaseClient';
@@ -184,7 +183,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
         ? `Co-working with ${getDisplayName(selectedMatch.user.name)}`
         : 'Solo Focus Session';
 
-      // Ensure we use the partner's email if a match is selected
+      // IMPORTANT: Use partner email for linking guest access via RLS
       const partnerEmail = selectedMatch?.user.email || null;
 
       // Generate occurrences based on recurrence
@@ -200,24 +199,39 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
         if (recurrence === 'weekly') sessionDate.setDate(sessionDate.getDate() + i * 7);
         if (recurrence === 'monthly') sessionDate.setMonth(sessionDate.getMonth() + i);
 
-        // --- VERIFIED INSERT PAYLOAD ---
         sessionsToCreate.push({
           user_id: userId,          // Host ID
-          partner_email: partnerEmail, // Partner Email
+          partner_email: partnerEmail, // Partner Email (Main link for guests)
           title: title,
           scheduled_at: sessionDate.toISOString()
         });
       }
 
+      // NOTE: If you receive error 42501, it means RLS policies on 'scheduled_sessions' 
+      // need to be updated to allow inserts for authenticated users.
       const { error } = await supabase.from('scheduled_sessions').insert(sessionsToCreate);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase scheduling error:', error);
+        
+        // Handle RLS error specifically
+        if (error.code === '42501') {
+           alert(
+             'Unable to schedule this session because of a Supabase row-level security rule.\n' +
+             'The frontend is working, but the RLS policy on the "scheduled_sessions" table needs to allow inserts for the current user.'
+           );
+        } else {
+           alert(`Scheduling failed: ${error.message}`);
+        }
+        setIsSubmitting(false);
+        return;
+      }
 
       onSchedule();
       onClose();
     } catch (err) {
       console.error('Scheduling failed:', err);
-      alert('Failed to schedule session.');
+      alert('Failed to schedule session. Please check your connection.');
     } finally {
       setIsSubmitting(false);
     }
@@ -706,16 +720,29 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
         // Fetch sessions from start of TODAY (00:00:00) so they don't disappear
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
+        
+        const userEmail = user.email;
 
-        const { data: scheduled } = await supabase
+        // Query sessions where I am the creator (user_id) OR the invitee (partner_email)
+        // This ensures both sides see the scheduled session.
+        let sessionQuery = supabase
           .from('scheduled_sessions')
           .select('*')
-          // --- VERIFIED SELECT LOGIC ---
-          // Fetch if user is creator OR partner (via partner_email)
-          .or(`user_id.eq.${user.id},partner_email.eq.${user.email}`)
           .gte('scheduled_at', startOfDay.toISOString())
           .order('scheduled_at', { ascending: true })
           .limit(50);
+
+        if (userEmail) {
+           sessionQuery = sessionQuery.or(`user_id.eq.${user.id},partner_email.eq.${userEmail}`);
+        } else {
+           sessionQuery = sessionQuery.eq('user_id', user.id);
+        }
+
+        const { data: scheduled, error: fetchError } = await sessionQuery;
+        
+        if (fetchError) {
+          console.error('Error fetching upcoming sessions:', fetchError);
+        }
 
         // Filter out joined sessions from localStorage
         const joinedSessionIds = JSON.parse(localStorage.getItem('kova_joined_sessions') || '[]');
@@ -1229,16 +1256,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
                     sessionDate.getMonth() === today.getMonth() &&
                     sessionDate.getFullYear() === today.getFullYear();
                   
-                  // Allow joining if it is today and I am a participant (implied by query) and it is not a solo session without partner
-                  const isJoinable = isToday && !!session.partner_email;
+                  // Allow joining if it is today and I am a participant
+                  // If I'm the host (user_id matches), I can always join.
+                  // If I'm the guest, I must match partner_email (which is implicit if I see this).
+                  const isJoinable = isToday;
 
                   // --- IMPROVED NAME DISPLAY LOGIC ---
                   let partnerDisplay = 'Solo Session';
-                  if (session.partner_email) {
+                  const hasPartner = !!session.partner_email;
+
+                  if (hasPartner) {
                     if (session.user_id === user.id) {
                       // I am the host, find the partner name
-                      const match = matches.find(m => m.user.email === session.partner_email);
-                      partnerDisplay = match ? `with ${getDisplayName(match.user.name)}` : `with ${session.partner_email}`;
+                      let match = undefined;
+                      if (!match && session.partner_email) match = matches.find(m => m.user.email === session.partner_email);
+                      
+                      partnerDisplay = match 
+                        ? `with ${getDisplayName(match.user.name)}` 
+                        : (session.partner_email ? `with ${session.partner_email}` : 'with connection');
                     } else {
                       // I am the partner, find the host name
                       // 'matches' contains the *other* user. So find the match where other user ID is session.user_id

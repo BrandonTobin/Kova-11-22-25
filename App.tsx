@@ -924,7 +924,7 @@ function App() {
   // -----------------------------
   // Subscription Upgrading
   // -----------------------------
-  const handleUpgradeSubscription = (tier: SubscriptionTier) => {
+  const handleUpgradeSubscription = async (tier: SubscriptionTier) => {
     if (!user) return;
 
     if (tier === 'kova_pro') {
@@ -934,8 +934,38 @@ function App() {
 
     if (tier === 'kova_plus') {
       setIsProcessingPayment(true);
-      // Redirect to Stripe Checkout Link
-      window.location.href = 'https://buy.stripe.com/test_eVq4gzbOJaJL9PS7Xn5AQ00';
+      try {
+        // Use backend to create a Checkout Session with the live key
+        // Assuming the backend is served at the same origin or configured via proxy/env
+        // We use the relative path /api which should map to the backend server
+        const response = await fetch('/api/stripe/create-checkout-session', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                plan: tier,
+                userId: user.id,
+            }),
+        });
+        
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.error || 'Payment initiation failed');
+        }
+
+        const { url } = await response.json();
+        if (url) {
+            // Redirect to the Stripe Checkout page
+            window.location.href = url;
+        } else {
+             throw new Error('No payment URL returned');
+        }
+      } catch (error: any) {
+        console.error('Payment Error:', error);
+        alert('Failed to start payment. Please try again later.');
+        setIsProcessingPayment(false);
+      }
     }
   };
 

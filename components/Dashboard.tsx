@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
 import { supabase } from '../supabaseClient';
@@ -28,6 +30,7 @@ import {
 } from 'lucide-react';
 import { ALL_BADGES } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
+import LegalFooter from './LegalFooter';
 
 interface DashboardProps {
   user: User;
@@ -859,7 +862,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
   const isLockedHeatmap = !isPro && (heatmapMode === 'consistency' || heatmapMode === 'goals');
 
   return (
-    <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative">
+    <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative flex flex-col">
       {/* Schedule Modal */}
       {showScheduleModal && (
         <ScheduleModal
@@ -1022,7 +1025,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
       </div>
 
       {/* 2. Charts & Sessions Grid */}
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 mb-8">
         {/* This Week Summary Card */}
         <div className="bg-surface p-6 rounded-2xl border border-white/5 shadow-lg">
           <div className="flex items-center justify-between mb-4">
@@ -1592,6 +1595,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
           </div>
         </div>
       </div>
+      <LegalFooter />
     </div>
   );
 };

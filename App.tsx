@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -11,6 +13,12 @@ import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import Notes from './components/Notes';
 import PaymentSuccess from './components/PaymentSuccess';
+// Import Legal Page Components
+import PrivacyPolicy from './components/legal/PrivacyPolicy';
+import TermsOfService from './components/legal/TermsOfService';
+import RefundPolicy from './components/legal/RefundPolicy';
+import ContactPage from './components/legal/ContactPage';
+
 import { User, Match, ViewState, SubscriptionTier } from './types';
 import {
   LayoutGrid,
@@ -82,10 +90,13 @@ function App() {
   // Set default view to DISCOVER (always valid on first render)
   const [currentView, setCurrentView] = useState<ViewState>(() => {
     if (typeof window !== 'undefined') {
-      // Check if we are on the payment success page via URL path
-      if (window.location.pathname === '/payment-success') {
-        return ViewState.PAYMENT_SUCCESS;
-      }
+      const path = window.location.pathname;
+      // Priority check for URL routing
+      if (path === '/privacy') return ViewState.PRIVACY;
+      if (path === '/terms') return ViewState.TERMS;
+      if (path === '/refunds') return ViewState.REFUND;
+      if (path === '/contact') return ViewState.CONTACT;
+      if (path === '/payment-success') return ViewState.PAYMENT_SUCCESS;
 
       const stored = localStorage.getItem('kova_current_view') as ViewState;
       // Only restore main navigable views to avoid stuck states (like Video Room without a match)
@@ -905,6 +916,13 @@ function App() {
   ];
 
   const handleNavClick = (view: ViewState) => {
+    // If routing to a legal page, update URL history so back button works correctly
+    if ([ViewState.PRIVACY, ViewState.TERMS, ViewState.REFUND, ViewState.CONTACT].includes(view)) {
+       // Just update view for SPA feel
+    } else {
+       // Clear URL when going back to app flow if needed, or rely on state. 
+       // For this simple implementation we just rely on state.
+    }
     setCurrentView(view);
     clearTabNotification(view);
   };
@@ -913,7 +931,8 @@ function App() {
   useEffect(() => {
     if (!user) return;
     try {
-      if (currentView !== ViewState.PAYMENT_SUCCESS) {
+      if (currentView !== ViewState.PAYMENT_SUCCESS && 
+          ![ViewState.PRIVACY, ViewState.TERMS, ViewState.REFUND, ViewState.CONTACT].includes(currentView)) {
         localStorage.setItem('kova_current_view', currentView);
       }
     } catch (e) {
@@ -983,6 +1002,73 @@ function App() {
   // -----------------------------
   // Render
   // -----------------------------
+  
+  // High-priority legal views render regardless of auth state
+  if (currentView === ViewState.PRIVACY) {
+    return (
+      <>
+        <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+      >
+        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+        <PrivacyPolicy onBack={() => {
+           window.history.replaceState({}, document.title, '/');
+           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+        }} />
+      </>
+    );
+  }
+  if (currentView === ViewState.TERMS) {
+    return (
+      <>
+        <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+      >
+        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+        <TermsOfService onBack={() => {
+           window.history.replaceState({}, document.title, '/');
+           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+        }} />
+      </>
+    );
+  }
+  if (currentView === ViewState.REFUND) {
+    return (
+      <>
+        <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+      >
+        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+        <RefundPolicy onBack={() => {
+           window.history.replaceState({}, document.title, '/');
+           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+        }} />
+      </>
+    );
+  }
+  if (currentView === ViewState.CONTACT) {
+    return (
+      <>
+        <button
+        onClick={toggleTheme}
+        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+      >
+        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+        <ContactPage onBack={() => {
+           window.history.replaceState({}, document.title, '/');
+           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+        }} />
+      </>
+    );
+  }
+
   let content;
 
   if (isLoading && !user) {
@@ -1047,7 +1133,7 @@ function App() {
           />
         )}
 
-        {upgradeTargetTier && upgradeModalContent && (
+                {upgradeTargetTier && upgradeModalContent && (
           <div
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => !isProcessingPayment && setUpgradeTargetTier(null)}
@@ -1063,27 +1149,78 @@ function App() {
               >
                 <X />
               </button>
+
               <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
                 <Crown size={32} fill="currentColor" />
               </div>
+
               <h2 className="text-2xl font-bold text-text-main mb-2">
                 Upgrade to {upgradeModalContent.name}
               </h2>
+
               <p className="text-text-muted mb-6">
                 {upgradeModalContent.description}
               </p>
+
               <button
                 onClick={() => handleUpgradeSubscription(upgradeTargetTier)}
                 disabled={isProcessingPayment}
-                className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mb-4"
               >
-                {isProcessingPayment ? <Loader2 className="animate-spin" size={20} /> : null}
+                {isProcessingPayment ? (
+                  <Loader2 className="animate-spin" size={20} />
+                ) : null}
                 Get {upgradeModalContent.name.replace('Kova ', '')} for{' '}
                 {upgradeModalContent.price}
               </button>
+
+              {/* Legal Text */}
+              <div className="text-[10px] text-text-muted space-y-1">
+                <p>
+                  No refunds. See our{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUpgradeTargetTier(null);
+                      setCurrentView(ViewState.REFUND);
+                    }}
+                    className="text-primary hover:underline"
+                  >
+                    Refund Policy
+                  </button>{' '}
+                  for details.
+                </p>
+
+                <p>
+                  By subscribing you agree to our{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUpgradeTargetTier(null);
+                      setCurrentView(ViewState.TERMS);
+                    }}
+                    className="text-primary hover:underline"
+                  >
+                    Terms of Service
+                  </button>{' '}
+                  and{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUpgradeTargetTier(null);
+                      setCurrentView(ViewState.PRIVACY);
+                    }}
+                    className="text-primary hover:underline"
+                  >
+                    Privacy Policy
+                  </button>
+                  .
+                </p>
+              </div>
             </div>
           </div>
         )}
+
 
         {/* Main Content Area */}
         <main className="flex-1 relative overflow-hidden">

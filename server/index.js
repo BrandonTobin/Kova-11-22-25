@@ -3,6 +3,7 @@ const cors = require('cors');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
+
 // Initialize Stripe with the Secret Key from environment variables
 // LIVE MODE REQUIREMENT: Ensure STRIPE_SECRET_KEY is set to sk_live_...
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -24,6 +25,9 @@ app.use((req, res, next) => {
     express.json()(req, res, next);
   }
 });
+
+// Serve legal documents
+app.use('/legal', express.static(path.join(__dirname, 'legal')));
 
 // Serve static files from the React app build directory
 // This ensures that the Express server handles both API requests and frontend assets

@@ -1,7 +1,9 @@
+
 import React, { useState, useRef } from 'react';
 import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check } from 'lucide-react';
 import { User } from '../types';
 import { SECURITY_QUESTIONS } from '../constants';
+import LegalFooter from './LegalFooter';
 
 interface RegisterScreenProps {
   onRegister: (user: User, imageFile?: File) => void;
@@ -111,7 +113,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
         newErrors.general = "Please enter your date of birth.";
         isValid = false;
       } else if (calculateAge(formData.dob) < 16) {
-        newErrors.general = "You must be at least 16 years old.";
+        newErrors.general = "You must be at least 16 years old to join Kova.";
         isValid = false;
       }
       if (!formData.city.trim() || !formData.state) {
@@ -416,7 +418,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                  )
                )}
             </button>
+            {step === TOTAL_STEPS - 1 && (
+               <p className="text-[10px] text-text-muted text-center mt-3 leading-tight">
+                 By creating an account, you confirm that you are at least 16 years old and agree to our <a href="/terms" className="text-primary hover:underline">Terms of Service</a> and <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>.
+               </p>
+            )}
          </div>
+         <LegalFooter />
       </div>
     </div>
   );

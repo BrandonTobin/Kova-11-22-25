@@ -9,7 +9,12 @@ export enum ViewState {
   REGISTER = 'REGISTER',
   LOGIN = 'LOGIN',
   VIDEO_ROOM = 'VIDEO_ROOM',
-  PAYMENT_SUCCESS = 'PAYMENT_SUCCESS'
+  PAYMENT_SUCCESS = 'PAYMENT_SUCCESS',
+  // Legal Pages
+  PRIVACY = 'PRIVACY',
+  TERMS = 'TERMS',
+  REFUND = 'REFUND',
+  CONTACT = 'CONTACT'
 }
 
 export type SubscriptionTier = 'free' | 'kova_plus' | 'kova_pro';

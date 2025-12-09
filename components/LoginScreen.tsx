@@ -1,6 +1,8 @@
 
+
 import React, { useState } from 'react';
 import { ArrowRight, UserPlus, Mail, Lock, KeyRound, ArrowLeft, CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
+import LegalFooter from './LegalFooter';
 
 interface LoginScreenProps {
   onLogin: (email: string, pass: string) => void;
@@ -184,6 +186,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
       >
         <UserPlus size={18} /> Create an Account
       </button>
+      
+      <div className="mt-8">
+        <LegalFooter />
+      </div>
     </div>
   );
 
@@ -228,6 +234,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
           {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Next Step"}
         </button>
       </form>
+      <div className="mt-8">
+        <LegalFooter />
+      </div>
     </div>
   );
 
@@ -299,6 +308,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
           {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Reset Password"}
         </button>
       </form>
+      <div className="mt-8">
+        <LegalFooter />
+      </div>
     </div>
   );
 
@@ -323,6 +335,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
        >
          Back to Login
        </button>
+       <div className="mt-8">
+         <LegalFooter />
+       </div>
     </div>
   );
 

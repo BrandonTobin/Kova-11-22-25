@@ -400,13 +400,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
               
               {/* Fake submit button to handle Enter key */}
               <button type="submit" className="hidden" />
-
-              {/* Legal Consent Line inside form to appear above 'Next' visually if needed, but we place it in footer */}
-              {step === 0 && (
-                 <p className="text-[10px] text-text-muted text-center leading-tight mt-4">
-                  By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
-                </p>
-              )}
             </form>
          </div>
 
@@ -426,16 +419,16 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                )}
             </button>
             
-            {step === TOTAL_STEPS - 1 && (
-               <div className="mt-3 text-center">
+            <div className="mt-3 text-center">
                  <p className="text-[10px] text-text-muted leading-tight">
                     By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
                  </p>
-                 <p className="text-[10px] text-text-muted mt-1">
-                    You must be at least 16 years old to use Kova.
-                 </p>
-               </div>
-            )}
+                 {step === TOTAL_STEPS - 1 && (
+                     <p className="text-[10px] text-text-muted mt-1">
+                        You must be at least 16 years old to use Kova.
+                     </p>
+                 )}
+            </div>
          </div>
          <LegalFooter onNavigateLegal={onNavigateLegal} />
       </div>

@@ -172,12 +172,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
              <>Sign In <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" /></>
           )}
         </button>
-
-        {/* Legal Consent Line */}
-        <p className="text-[10px] text-text-muted text-center leading-tight">
-          By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
-        </p>
-
       </form>
 
       <div className="mt-8 text-center relative">
@@ -192,6 +186,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
       >
         <UserPlus size={18} /> Create an Account
       </button>
+
+      {/* Legal Consent Line */}
+      <p className="text-[10px] text-text-muted text-center leading-tight mt-4">
+        By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
+      </p>
       
       <div className="mt-8">
         <LegalFooter onNavigateLegal={onNavigateLegal} />

@@ -430,7 +430,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                  )}
             </div>
          </div>
-         <LegalFooter onNavigateLegal={onNavigateLegal} />
+         <LegalFooter onNavigateLegal={onNavigateLegal} className="!mt-2 pb-4" />
       </div>
     </div>
   );

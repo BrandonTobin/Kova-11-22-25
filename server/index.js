@@ -148,6 +148,39 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   res.status(200).send('Received');
 });
 
+// --- POST: Delete Account ---
+app.post('/api/delete-account', async (req, res) => {
+  const { userId } = req.body;
+  
+  if (!userId) {
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
+  try {
+    console.log(`Deleting account for user: ${userId}`);
+
+    // 1. Delete from Supabase Auth (admin)
+    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+    if (authError) {
+      console.error('Auth deletion failed:', authError);
+      throw authError;
+    }
+
+    // 2. Delete from public users table (if cascade is not enabled)
+    // Note: If you have cascade set up in Postgres, this might be redundant but safe.
+    const { error: dbError } = await supabase.from('users').delete().eq('id', userId);
+    if (dbError) {
+      console.error('DB deletion failed:', dbError);
+      // We continue since auth deletion succeeded
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    return res.status(500).json({ error: error.message || 'Failed to delete account' });
+  }
+});
+
 // The "catchall" handler: for any request that doesn't
 // match one above, send back React's index.html file.
 app.get('*', (req, res) => {

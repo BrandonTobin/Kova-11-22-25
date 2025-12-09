@@ -1,10 +1,9 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Match, SubscriptionTier } from '../types';
 import { 
   Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, 
   Crown, MapPin, Link as LinkIcon, Briefcase, 
-  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check, Lock
+  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check, Lock, Trash2, AlertTriangle
 } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
 import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from '../constants';
@@ -15,6 +14,7 @@ interface ProfileEditorProps {
   onSave: (updatedUser: User, imageFile?: File) => void;
   onUpgrade: (tier: SubscriptionTier) => void;
   matches?: Match[];
+  onDeleteAccount?: () => void;
 }
 
 // Helper component for tag inputs
@@ -81,7 +81,7 @@ const TagInput = ({
   );
 };
 
-const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, matches = [] }) => {
+const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, matches = [], onDeleteAccount }) => {
   // Initialize form data with defaults for new fields to avoid undefined errors
   const [formData, setFormData] = useState<User>({
     ...user,
@@ -104,6 +104,9 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
 
   // Connections modal state
   const [showConnectionsModal, setShowConnectionsModal] = useState(false);
+
+  // Delete Modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Derive connections from matches
   const connections = useMemo(() => {
@@ -227,7 +230,6 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
     <div className="max-w-6xl mx-auto pb-12 px-4 md:px-6">
       
       {/* 1. TOP HEADER: Identity & Actions */}
-      {/* Changed to lg:ml-6 to align left edge with the left column below */}
       <div className="bg-surface border border-white/10 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center md:items-start gap-6 relative shadow-lg lg:ml-6">
           {/* Avatar Section */}
           <div className="relative group shrink-0">
@@ -703,6 +705,25 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
               </div>
             </div>
           </div>
+          
+          {/* Account Management */}
+          {onDeleteAccount && (
+            <div className="bg-surface border border-red-500/20 rounded-2xl p-6 shadow-sm">
+               <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-4 pb-2 border-b border-red-500/10">Danger Zone</h3>
+               <div className="flex items-center justify-between">
+                  <div>
+                     <h4 className="text-sm font-bold text-text-main">Delete Account</h4>
+                     <p className="text-xs text-text-muted mt-1">Permanently delete your account and all data.</p>
+                  </div>
+                  <button 
+                    onClick={() => setShowDeleteModal(true)}
+                    className="px-4 py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-lg text-xs font-bold transition-colors border border-red-500/20"
+                  >
+                    Delete Account
+                  </button>
+               </div>
+            </div>
+          )}
 
         </div>
       </div>
@@ -759,6 +780,46 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && onDeleteAccount && (
+        <div 
+          className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div 
+            className="bg-surface w-full max-w-md rounded-2xl border border-red-500/30 shadow-2xl p-6 animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+             <div className="flex items-center gap-3 mb-4 text-red-500">
+                <AlertTriangle size={24} />
+                <h3 className="text-xl font-bold">Delete Account?</h3>
+             </div>
+             
+             <p className="text-text-muted mb-6 leading-relaxed">
+                Are you sure? This permanently deletes your account and all data, including matches, messages, and notes. This action cannot be undone.
+             </p>
+
+             <div className="flex gap-3 justify-end">
+                <button 
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2 rounded-xl border border-white/10 text-text-main hover:bg-white/5 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    onDeleteAccount();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg flex items-center gap-2"
+                >
+                  <Trash2 size={16} /> Confirm Delete
+                </button>
+             </div>
           </div>
         </div>
       )}

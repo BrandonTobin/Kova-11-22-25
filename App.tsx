@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -659,6 +657,40 @@ function App() {
     setCurrentView(ViewState.LOGIN);
   };
 
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    setIsLoading(true);
+
+    try {
+      // Use our backend endpoint to securely delete the user via admin API
+      const response = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete account');
+      }
+
+      // Cleanup local state
+      localStorage.removeItem('kova_current_user_id');
+      localStorage.removeItem('kova_current_view');
+      localStorage.removeItem('kova_seen_onboarding');
+      
+      setUser(null);
+      setCurrentView(ViewState.LOGIN);
+    } catch (err) {
+      console.error('Delete account error:', err);
+      alert('Failed to delete account. Please try again or contact support.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // -----------------------------
   // Swipes / Matches
   // -----------------------------
@@ -927,6 +959,10 @@ function App() {
     clearTabNotification(view);
   };
 
+  const handleNavigateLegal = (view: ViewState) => {
+    setCurrentView(view);
+  };
+
   // Persist currentView to localStorage whenever it changes
   useEffect(() => {
     if (!user) return;
@@ -1096,6 +1132,7 @@ function App() {
           isLoading={isLoading}
           error={authError}
           onClearError={() => setAuthError('')}
+          onNavigateLegal={handleNavigateLegal}
         />
       );
     } else {
@@ -1105,6 +1142,7 @@ function App() {
           onRegisterClick={() => setShowRegister(true)}
           error={authError}
           isLoading={isLoading}
+          onNavigateLegal={handleNavigateLegal}
         />
       );
     }
@@ -1292,6 +1330,7 @@ function App() {
                 onSave={handleUpdateProfile}
                 onUpgrade={(tier) => setUpgradeTargetTier(tier)}
                 matches={matches}
+                onDeleteAccount={handleDeleteAccount}
               />
             </div>
           )}

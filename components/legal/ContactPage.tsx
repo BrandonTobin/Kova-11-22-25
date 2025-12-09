@@ -49,7 +49,8 @@ const ContactPage: React.FC<ContactPageProps> = ({ onBack }) => {
           </a>
         </div>
 
-        <h1 className="text-3xl md:text-4xl font-bold mb-8">Contact Us</h1>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2">Contact Us</h1>
+        <p className="text-xs text-text-muted italic mb-6">Last Updated: December 2025</p>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           <div className="space-y-8 text-sm md:text-base leading-relaxed text-text-muted">

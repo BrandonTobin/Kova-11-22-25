@@ -27,12 +27,13 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
           </a>
         </div>
 
-        <h1 className="text-3xl md:text-4xl font-bold mb-8">Terms of Service</h1>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2">Terms of Service</h1>
+        <p className="text-xs text-text-muted italic mb-6">Last Updated: December 2025</p>
         
         <div className="space-y-8 text-sm md:text-base leading-relaxed text-text-muted">
           <section>
             <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – TERMS OF SERVICE</h2>
-            <p><strong>Effective Date:</strong> Today</p>
+            <p><strong>Effective Date:</strong> December 2025</p>
           </section>
 
           <section>
@@ -42,7 +43,7 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
 
           <section>
             <h3 className="text-lg font-bold text-text-main mb-2">Eligibility</h3>
-            <p>Users must be 16 years of age or older.</p>
+            <p>You must be at least 16 years old to use Kova.</p>
           </section>
 
           <section>

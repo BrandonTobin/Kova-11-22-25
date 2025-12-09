@@ -28,12 +28,13 @@ const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ onBack }) => {
 
         </div>
 
-        <h1 className="text-3xl md:text-4xl font-bold mb-8">Privacy Policy</h1>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2">Privacy Policy</h1>
+        <p className="text-xs text-text-muted italic mb-6">Last Updated: December 2025</p>
         
         <div className="space-y-8 text-sm md:text-base leading-relaxed text-text-muted">
           <section>
             <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – PRIVACY POLICY</h2>
-            <p><strong>Effective Date:</strong> Today</p>
+            <p><strong>Effective Date:</strong> December 2025</p>
             <p><strong>Website:</strong> https://kovamatch.com</p>
           </section>
 
@@ -64,6 +65,15 @@ const PrivacyPolicy: React.FC<PrivacyPolicyProps> = ({ onBack }) => {
               <li>Improve services and security</li>
               <li>Process payments</li>
               <li>Communicate updates</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3 className="text-lg font-bold text-text-main mb-2">Analytics & Local Storage</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Kova uses localStorage to store theme, onboarding status, and navigation state.</li>
+              <li>Kova does not sell or share user data with third parties.</li>
+              <li>Kova may collect basic usage analytics (page views, interactions) for improving the platform.</li>
             </ul>
           </section>
 

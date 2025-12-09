@@ -1,7 +1,6 @@
-
 import React, { useState, useRef } from 'react';
 import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check } from 'lucide-react';
-import { User } from '../types';
+import { User, ViewState } from '../types';
 import { SECURITY_QUESTIONS } from '../constants';
 import LegalFooter from './LegalFooter';
 
@@ -11,6 +10,7 @@ interface RegisterScreenProps {
   isLoading?: boolean;
   error?: string;
   onClearError?: () => void;
+  onNavigateLegal?: (view: ViewState) => void;
 }
 
 const TITLES = ['Founder', 'Co-Founder', 'Investor', 'CEO', 'CTO', 'COO', 'CMO', 'Freelancer', 'Solo Founder', 'Entrepreneur', 'Student', 'Other'];
@@ -25,7 +25,7 @@ const US_STATES = [
   "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
 ];
 
-const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isLoading = false, error, onClearError }) => {
+const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isLoading = false, error, onClearError, onNavigateLegal }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 0-based index for steps: 0, 1, 2
@@ -113,7 +113,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
         newErrors.general = "Please enter your date of birth.";
         isValid = false;
       } else if (calculateAge(formData.dob) < 16) {
-        newErrors.general = "You must be at least 16 years old to join Kova.";
+        newErrors.general = "You must be at least 16 years old to use Kova.";
         isValid = false;
       }
       if (!formData.city.trim() || !formData.state) {
@@ -400,6 +400,13 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
               
               {/* Fake submit button to handle Enter key */}
               <button type="submit" className="hidden" />
+
+              {/* Legal Consent Line inside form to appear above 'Next' visually if needed, but we place it in footer */}
+              {step === 0 && (
+                 <p className="text-[10px] text-text-muted text-center leading-tight mt-4">
+                  By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
+                </p>
+              )}
             </form>
          </div>
 
@@ -418,13 +425,19 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                  )
                )}
             </button>
+            
             {step === TOTAL_STEPS - 1 && (
-               <p className="text-[10px] text-text-muted text-center mt-3 leading-tight">
-                 By creating an account, you confirm that you are at least 16 years old and agree to our <a href="/terms" className="text-primary hover:underline">Terms of Service</a> and <a href="/privacy" className="text-primary hover:underline">Privacy Policy</a>.
-               </p>
+               <div className="mt-3 text-center">
+                 <p className="text-[10px] text-text-muted leading-tight">
+                    By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
+                 </p>
+                 <p className="text-[10px] text-text-muted mt-1">
+                    You must be at least 16 years old to use Kova.
+                 </p>
+               </div>
             )}
          </div>
-         <LegalFooter />
+         <LegalFooter onNavigateLegal={onNavigateLegal} />
       </div>
     </div>
   );

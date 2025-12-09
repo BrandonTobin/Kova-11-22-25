@@ -1,8 +1,7 @@
-
-
 import React, { useState } from 'react';
 import { ArrowRight, UserPlus, Mail, Lock, KeyRound, ArrowLeft, CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 import LegalFooter from './LegalFooter';
+import { ViewState } from '../types';
 
 interface LoginScreenProps {
   onLogin: (email: string, pass: string) => void;
@@ -11,9 +10,10 @@ interface LoginScreenProps {
   isLoading?: boolean;
   onGetSecurityQuestion?: (email: string) => Promise<string | null>;
   onVerifyAndReset?: (email: string, answer: string, newPass: string) => Promise<{ success: boolean; message: string }>;
+  onNavigateLegal?: (view: ViewState) => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, error, isLoading = false, onGetSecurityQuestion, onVerifyAndReset }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, error, isLoading = false, onGetSecurityQuestion, onVerifyAndReset, onNavigateLegal }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
@@ -172,6 +172,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
              <>Sign In <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" /></>
           )}
         </button>
+
+        {/* Legal Consent Line */}
+        <p className="text-[10px] text-text-muted text-center leading-tight">
+          By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
+        </p>
+
       </form>
 
       <div className="mt-8 text-center relative">
@@ -188,7 +194,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
       </button>
       
       <div className="mt-8">
-        <LegalFooter />
+        <LegalFooter onNavigateLegal={onNavigateLegal} />
       </div>
     </div>
   );
@@ -235,7 +241,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
         </button>
       </form>
       <div className="mt-8">
-        <LegalFooter />
+        <LegalFooter onNavigateLegal={onNavigateLegal} />
       </div>
     </div>
   );
@@ -309,7 +315,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
         </button>
       </form>
       <div className="mt-8">
-        <LegalFooter />
+        <LegalFooter onNavigateLegal={onNavigateLegal} />
       </div>
     </div>
   );
@@ -336,7 +342,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
          Back to Login
        </button>
        <div className="mt-8">
-         <LegalFooter />
+         <LegalFooter onNavigateLegal={onNavigateLegal} />
        </div>
     </div>
   );

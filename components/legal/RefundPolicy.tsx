@@ -27,7 +27,8 @@ const RefundPolicy: React.FC<RefundPolicyProps> = ({ onBack }) => {
           </a>
         </div>
 
-        <h1 className="text-3xl md:text-4xl font-bold mb-8">Refund Policy</h1>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2">Refund Policy</h1>
+        <p className="text-xs text-text-muted italic mb-6">Last Updated: December 2025</p>
         
         <div className="space-y-8 text-sm md:text-base leading-relaxed text-text-muted">
           <section>

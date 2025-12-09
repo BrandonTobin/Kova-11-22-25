@@ -32,36 +32,44 @@ const RefundPolicy: React.FC<RefundPolicyProps> = ({ onBack }) => {
         
         <div className="space-y-8 text-sm md:text-base leading-relaxed text-text-muted">
           <section>
-            <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – REFUND & CANCELLATION POLICY</h2>
+            <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – Refund & Cancellation Policy</h2>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Refunds</h3>
-            <p>Kova LLC does NOT offer refunds for:</p>
+            <h3 className="text-lg font-bold text-text-main mb-2">No Refunds</h3>
+            <p>
+              Kova LLC adheres to a strict no-refund policy. We do NOT offer refunds for:
+            </p>
             <ul className="list-disc pl-5 space-y-1 mt-2">
-              <li>Monthly subscription fees</li>
-              <li>Renewals</li>
-              <li>Early cancellations</li>
-              <li>Accidental purchases</li>
+              <li>Monthly subscription fees once processed.</li>
+              <li>Subscription renewals (it is your responsibility to cancel before the renewal date).</li>
+              <li>Early cancellations of a billing cycle.</li>
+              <li>Accidental purchases or "change of mind."</li>
             </ul>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Refund Exceptions</h3>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Duplicate charges</li>
-              <li>Verified technical billing errors</li>
+            <h3 className="text-lg font-bold text-text-main mb-2">Exceptions</h3>
+            <p>We may consider refunds only in the following specific circumstances:</p>
+            <ul className="list-disc pl-5 space-y-1 mt-2">
+              <li><strong>Duplicate Charges:</strong> If you were billed multiple times for the same period due to a technical error.</li>
+              <li><strong>Verified Technical Errors:</strong> If a billing error occurred on our end that resulted in an incorrect charge.</li>
             </ul>
           </section>
 
           <section>
             <h3 className="text-lg font-bold text-text-main mb-2">Cancellations</h3>
-            <p>Users may cancel anytime; cancellations prevent future charges but do not refund past payments.</p>
+            <p>
+              You may cancel your subscription at any time via your account settings. Cancellation will prevent future charges, but you will retain access to premium features until the end of your current billing period. No prorated refunds are issued for partial months.
+            </p>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Contact</h3>
-            <p>Email: <a href="mailto:kova.app.team@gmail.com" className="text-primary hover:underline">kova.app.team@gmail.com</a></p>
+            <h3 className="text-lg font-bold text-text-main mb-2">How to Request Help</h3>
+            <p>
+              If you believe a billing error has occurred, please contact our support team immediately.
+            </p>
+            <p className="mt-2"><strong>Email:</strong> <a href="mailto:kova.app.team@gmail.com" className="text-primary hover:underline">kova.app.team@gmail.com</a></p>
             <p className="mt-2 text-xs italic">Kova LLC — Mailing address: business address coming soon</p>
           </section>
         </div>

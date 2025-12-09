@@ -32,64 +32,80 @@ const TermsOfService: React.FC<TermsOfServiceProps> = ({ onBack }) => {
         
         <div className="space-y-8 text-sm md:text-base leading-relaxed text-text-muted">
           <section>
-            <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – TERMS OF SERVICE</h2>
+            <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – Terms of Service</h2>
             <p><strong>Effective Date:</strong> December 2025</p>
-          </section>
-
-          <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Agreement</h3>
-            <p>These Terms govern your use of Kova’s platform.</p>
+            <p className="mt-2">
+              Welcome to Kova! By accessing or using our website and application (the “Platform”), you agree to be bound by these Terms of Service (“Terms”). If you do not agree, please do not use the Platform.
+            </p>
           </section>
 
           <section>
             <h3 className="text-lg font-bold text-text-main mb-2">Eligibility</h3>
-            <p>You must be at least 16 years old to use Kova.</p>
+            <p>
+              You must be at least <strong>16 years old</strong> to use Kova. By creating an account, you represent and warrant that you are 16 years of age or older and meet all eligibility requirements.
+            </p>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Accounts</h3>
-            <p>You are responsible for accurate information and account security.</p>
+            <h3 className="text-lg font-bold text-text-main mb-2">Accounts & Security</h3>
+            <p>
+              You are responsible for maintaining the confidentiality of your login credentials and for all activities that occur under your account. You agree to provide accurate and current information during registration.
+            </p>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Acceptable Use – You agree NOT to:</h3>
-            <ul className="list-disc pl-5 space-y-1">
-              <li>Harass or abuse other users</li>
-              <li>Misrepresent your identity or business</li>
-              <li>Upload harmful, illegal, or inappropriate content</li>
-              <li>Reverse engineer the platform</li>
-              <li>Use Kova for illegal activity</li>
+            <h3 className="text-lg font-bold text-text-main mb-2">Acceptable Use</h3>
+            <p>You agree NOT to:</p>
+            <ul className="list-disc pl-5 space-y-1 mt-2">
+              <li>Harass, abuse, or threaten other users.</li>
+              <li>Misrepresent your identity, professional status, or business.</li>
+              <li>Upload harmful, illegal, or inappropriate content.</li>
+              <li>Attempt to scrape, reverse engineer, or disrupt the Platform.</li>
+              <li>Use Kova for any illegal activity.</li>
             </ul>
           </section>
 
           <section>
             <h3 className="text-lg font-bold text-text-main mb-2">Subscriptions & Billing</h3>
-            <p>Recurring billing is handled through Stripe. You authorize automatic charges until cancellation.</p>
+            <p>
+              Premium features (Kova Plus, Kova Pro) are billed on a subscription basis. Payments are processed securely via Stripe. Subscriptions automatically renew monthly unless canceled by you before the renewal date.
+            </p>
           </section>
 
           <section>
             <h3 className="text-lg font-bold text-text-main mb-2">No Refunds</h3>
-            <p>Kova does not offer refunds for subscription payments, except in rare cases of duplicate charges or verified billing errors.</p>
+            <p>
+              Kova does not offer refunds for subscription payments, including renewals, except in rare cases of duplicate charges or verified billing errors. Please see our Refund Policy for details.
+            </p>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Account Termination</h3>
-            <p>You may delete your account anytime. Kova may terminate accounts for Terms violations.</p>
+            <h3 className="text-lg font-bold text-text-main mb-2">Termination</h3>
+            <p>
+              You may delete your account at any time via the Profile settings. Kova LLC reserves the right to suspend or terminate accounts that violate these Terms or for any other reason at our sole discretion.
+            </p>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Liability</h3>
-            <p>Kova LLC is not liable for data loss, downtime, user interactions, or business outcomes.</p>
+            <h3 className="text-lg font-bold text-text-main mb-2">Disclaimers & Limitation of Liability</h3>
+            <p>
+              The Platform is provided “as is” without warranties of any kind. Kova LLC is not liable for data loss, service downtime, user interactions, or business outcomes resulting from the use of our service. You use the Platform at your own risk.
+            </p>
           </section>
 
           <section>
             <h3 className="text-lg font-bold text-text-main mb-2">Governing Law</h3>
-            <p>Florida law governs these Terms.</p>
+            <p>
+              These Terms shall be governed by and construed in accordance with the laws of the State of Florida, without regard to its conflict of law provisions.
+            </p>
           </section>
 
           <section>
-            <h3 className="text-lg font-bold text-text-main mb-2">Contact</h3>
-            <p>Email: <a href="mailto:kova.app.team@gmail.com" className="text-primary hover:underline">kova.app.team@gmail.com</a></p>
+            <h3 className="text-lg font-bold text-text-main mb-2">Contact Us</h3>
+            <p>
+              If you have any questions regarding these Terms, please contact us:
+            </p>
+            <p className="mt-2"><strong>Email:</strong> <a href="mailto:kova.app.team@gmail.com" className="text-primary hover:underline">kova.app.team@gmail.com</a></p>
             <p className="mt-2 text-xs italic">Kova LLC — Mailing address: business address coming soon</p>
           </section>
         </div>

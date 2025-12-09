@@ -55,8 +55,8 @@ const ContactPage: React.FC<ContactPageProps> = ({ onBack }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
           <div className="space-y-8 text-sm md:text-base leading-relaxed text-text-muted">
             <section>
-              <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – CONTACT INFORMATION</h2>
-              <p>For support or inquiries:</p>
+              <h2 className="text-xl font-bold text-text-main mb-2">KOVA LLC – Contact Information</h2>
+              <p>For support, billing inquiries, or general questions, please reach out to us:</p>
             </section>
 
             <section>

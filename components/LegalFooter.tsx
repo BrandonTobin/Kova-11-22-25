@@ -12,11 +12,6 @@ const CONTACT_URL =
 
 interface LegalFooterProps {
   className?: string;
-  /**
-   * Optional: if provided, clicking a link will keep the user
-   * inside the app and switch to that legal view instead of
-   * opening the PDF directly.
-   */
   onNavigateLegal?: (view: ViewState) => void;
 }
 
@@ -29,7 +24,7 @@ const LegalFooter: React.FC<LegalFooterProps> = ({
     view: ViewState
   ) => {
     if (!onNavigateLegal) {
-      // No callback wired → fall back to normal link behavior (PDF)
+      // No callback provided → fall back to normal link behavior (opens PDF)
       return;
     }
     e.preventDefault();
@@ -42,6 +37,8 @@ const LegalFooter: React.FC<LegalFooterProps> = ({
     >
       <a
         href={PRIVACY_URL}
+        target="_blank"
+        rel="noopener noreferrer"
         onClick={(e) => handleClick(e, ViewState.PRIVACY)}
         className="hover:text-primary underline-offset-2 hover:underline"
       >
@@ -50,6 +47,8 @@ const LegalFooter: React.FC<LegalFooterProps> = ({
       <span>•</span>
       <a
         href={TERMS_URL}
+        target="_blank"
+        rel="noopener noreferrer"
         onClick={(e) => handleClick(e, ViewState.TERMS)}
         className="hover:text-primary underline-offset-2 hover:underline"
       >
@@ -58,6 +57,8 @@ const LegalFooter: React.FC<LegalFooterProps> = ({
       <span>•</span>
       <a
         href={REFUND_URL}
+        target="_blank"
+        rel="noopener noreferrer"
         onClick={(e) => handleClick(e, ViewState.REFUND)}
         className="hover:text-primary underline-offset-2 hover:underline"
       >
@@ -66,6 +67,8 @@ const LegalFooter: React.FC<LegalFooterProps> = ({
       <span>•</span>
       <a
         href={CONTACT_URL}
+        target="_blank"
+        rel="noopener noreferrer"
         onClick={(e) => handleClick(e, ViewState.CONTACT)}
         className="hover:text-primary underline-offset-2 hover:underline"
       >

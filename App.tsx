@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -1318,6 +1320,7 @@ function App() {
                 setActiveVideoMatch(match);
                 setCurrentView(ViewState.VIDEO_ROOM);
               }}
+              onNavigateLegal={handleNavigateLegal}
             />
           )}
 

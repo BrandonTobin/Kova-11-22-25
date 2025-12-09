@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier } from '../types';
+import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier, ViewState } from '../types';
 import { supabase } from '../supabaseClient';
 import {
   TrendingUp,
@@ -37,6 +37,7 @@ interface DashboardProps {
   matches: Match[];
   onUpgrade: (tier: SubscriptionTier) => void;
   onJoinSession: (match: Match) => void;
+  onNavigateLegal?: (view: ViewState) => void;
 }
 
 interface CalendarDay {
@@ -359,7 +360,7 @@ const ScheduleModal: React.FC<{ matches: Match[]; onClose: () => void; onSchedul
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, onJoinSession }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, onJoinSession, onNavigateLegal }) => {
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
@@ -1595,7 +1596,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
           </div>
         </div>
       </div>
-      <LegalFooter />
+      <LegalFooter onNavigateLegal={onNavigateLegal} />
     </div>
   );
 };

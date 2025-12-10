@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -63,6 +64,16 @@ const encodeTierForDb = (tier: SubscriptionTier): string => {
   if (tier === 'kova_pro') return 'pro';
   return 'free';
 };
+
+// Helper to shuffle array (Fisher-Yates)
+function shuffleArray<T>(array: T[]): T[] {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+}
 
 function App() {
   // --- State: Auth & User ---
@@ -355,6 +366,7 @@ function App() {
   const fetchUsersToSwipe = async () => {
     if (!user) return;
 
+    // 1. Get IDs already swiped
     const { data: swipes } = await supabase
       .from('swipes')
       .select('swiped_id')
@@ -363,7 +375,7 @@ function App() {
     const swipedIds = new Set<string>(
       (swipes?.map((s: any) => s.swiped_id) as string[]) || []
     );
-    swipedIds.add(user.id);
+    swipedIds.add(user.id); // Always exclude self
     setSwipedUserIds(swipedIds);
 
     const today = new Date();
@@ -376,14 +388,24 @@ function App() {
 
     setDailySwipes(count || 0);
 
+    // 2. Fetch candidates (exclude self in query to save bandwidth)
     const { data: candidates } = await supabase
       .from('users')
       .select('*')
+      .neq('id', user.id)
       .limit(50);
 
     if (candidates) {
+      // 3. Filter out swiped & deduplicate
+      const seenIds = new Set<string>();
+      
       const filtered = candidates
-        .filter((c: any) => !swipedIds.has(c.id))
+        .filter((c: any) => {
+          if (seenIds.has(c.id)) return false; // Dedupe within batch
+          if (swipedIds.has(c.id)) return false; // Remove swiped
+          seenIds.add(c.id);
+          return true;
+        })
         .map((c: any) => ({
           ...c,
           imageUrl: c.image_url || DEFAULT_PROFILE_IMAGE,
@@ -399,9 +421,18 @@ function App() {
           availability: c.availability,
           goalsList: c.goals_list,
           links: c.links,
-          lastSeenAt: c.last_seen_at
-        }));
-      setUsersToSwipe(filtered);
+          lastSeenAt: c.last_seen_at,
+          // Explicitly set missing properties to satisfy User type
+          badges: c.badges || [],
+          tags: c.tags || [],
+          password: '',
+          securityQuestion: '',
+          securityAnswer: ''
+        })) as User[];
+
+      // 4. Randomize the order
+      const shuffled = shuffleArray(filtered);
+      setUsersToSwipe(shuffled);
     }
   };
 
@@ -447,7 +478,13 @@ function App() {
             availability: otherUserRaw.availability,
             goalsList: otherUserRaw.goals_list,
             links: otherUserRaw.links,
-            lastSeenAt: otherUserRaw.last_seen_at
+            lastSeenAt: otherUserRaw.last_seen_at,
+            // Explicitly set missing properties to satisfy User type
+            badges: otherUserRaw.badges || [],
+            tags: otherUserRaw.tags || [],
+            password: '',
+            securityQuestion: '',
+            securityAnswer: ''
           };
 
           let lastMessageText = null;
@@ -710,6 +747,13 @@ function App() {
     if (direction === 'right') {
       setDailySwipes((prev) => prev + 1);
     }
+
+    // Update local set immediately to prevent seeing this user again if state reloads
+    setSwipedUserIds(prev => {
+        const next = new Set(prev);
+        next.add(swipedUser.id);
+        return next;
+    });
 
     const { error: swipeError } = await supabase.from('swipes').insert([
       {

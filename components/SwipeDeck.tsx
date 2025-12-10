@@ -1,8 +1,15 @@
 
-import React, { useState } from 'react';
-import { motion, AnimatePresence, PanInfo, useMotionValue, useTransform } from 'framer-motion';
+import React, { useState, useMemo, useEffect } from 'react';
+import { 
+  motion, 
+  useMotionValue, 
+  useTransform, 
+  useAnimation, 
+  PanInfo, 
+  AnimatePresence 
+} from 'framer-motion';
 import { User, SubscriptionTier } from '../types';
-import { X, Check, Briefcase, Tag, MapPin, Star, Lock, Crown } from 'lucide-react';
+import { X, Check, Briefcase, Tag, MapPin, Star, Lock, Crown, Gem, Sparkles, Zap } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 
@@ -14,73 +21,159 @@ interface SwipeDeckProps {
   onUpgrade?: (tier: SubscriptionTier) => void;
 }
 
+// Helper to determine sort weight
+const getTierWeight = (tier: SubscriptionTier): number => {
+  switch (tier) {
+    case 'kova_pro': return 3;
+    case 'kova_plus': return 2;
+    default: return 1;
+  }
+};
+
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, userTier = 'free', onUpgrade }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [exitX, setExitX] = useState<number | null>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const controls = useAnimation();
 
-  // NEW: state for match popup
-  const [showMatchPopup, setShowMatchPopup] = useState(false);
-  const [matchedUser, setMatchedUser] = useState<User | null>(null);
+  // Sort users: Pro > Plus > Free
+  const sortedUsers = useMemo(() => {
+    return [...users].sort((a, b) => {
+      const weightA = getTierWeight(a.subscriptionTier);
+      const weightB = getTierWeight(b.subscriptionTier);
+      return weightB - weightA;
+    });
+  }, [users]);
 
-  const activeUser = users[currentIndex];
-  const nextUser = users[currentIndex + 1];
+  const activeUser = sortedUsers[currentIndex];
+  const nextUser = sortedUsers[currentIndex + 1];
 
+  // Motion Values
   const x = useMotionValue(0);
+  const y = useMotionValue(0);
   const rotate = useTransform(x, [-200, 200], [-15, 15]);
-  const opacityLike = useTransform(x, [50, 150], [0, 1]);
-  const opacityNope = useTransform(x, [-50, -150], [0, 1]);
+  
+  // Opacity for overlays
+  const likeOpacity = useTransform(x, [20, 150], [0, 1]);
+  const nopeOpacity = useTransform(x, [-20, -150], [0, 1]);
 
   const isLikesExhausted = userTier === 'free' && remainingLikes !== null && remainingLikes <= 0;
 
-  const onDragEnd = (_e: any, info: PanInfo) => {
+  const handleDragEnd = async (_: any, info: PanInfo) => {
     const threshold = 100;
-    if (info.offset.x > threshold) {
+    const velocityThreshold = 500;
+    const offset = info.offset.x;
+    const velocity = info.velocity.x;
+
+    if (offset > threshold || velocity > velocityThreshold) {
+      // SWIPE RIGHT (LIKE)
       if (isLikesExhausted) {
-        // If out of likes, snap back and show upgrade to Plus
-        x.set(0);
-        onUpgrade?.('kova_plus');
+        // Snap back and show limit modal
+        await controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
+        setShowLimitModal(true);
       } else {
-        setExitX(1000);
-        setTimeout(() => handleSwipe('right'), 200);
+        // Animate out right
+        await controls.start({ x: 500, opacity: 0, transition: { duration: 0.2 } });
+        triggerSwipe('right');
       }
-    } else if (info.offset.x < -threshold) {
-      setExitX(-1000);
-      setTimeout(() => handleSwipe('left'), 200);
-    }
-  };
-
-  const handleSwipe = (direction: 'left' | 'right') => {
-    const userSwiped = activeUser;
-    if (!userSwiped) return;
-
-    // call the provided onSwipe, but allow it to optionally return match info
-    const result = (onSwipe as any)(direction, userSwiped);
-
-    // Only care about potential matches on right swipes
-    const handlePossibleMatch = (res: any) => {
-      if (direction !== 'right' || !res) return;
-      if (res.isMatch) {
-        const targetUser: User = res.matchedUser || userSwiped;
-        setMatchedUser(targetUser);
-        setShowMatchPopup(true);
-      }
-    };
-
-    // support both sync and async onSwipe implementations
-    if (result && typeof result.then === 'function') {
-      (result as Promise<any>).then(handlePossibleMatch).catch(() => {
-        /* ignore errors for popup purposes */
-      });
+    } else if (offset < -threshold || velocity < -velocityThreshold) {
+      // SWIPE LEFT (NOPE)
+      // Animate out left
+      await controls.start({ x: -500, opacity: 0, transition: { duration: 0.2 } });
+      triggerSwipe('left');
     } else {
-      handlePossibleMatch(result);
+      // Snap back
+      controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 500, damping: 30 } });
     }
-
-    setCurrentIndex((prev) => prev + 1);
-    setExitX(null);
-    x.set(0);
   };
 
-  if (currentIndex >= users.length) {
+  const triggerSwipe = (direction: 'left' | 'right') => {
+    if (!activeUser) return;
+    onSwipe(direction, activeUser);
+    
+    // Reset position instantly for next card, but index update will trigger re-render
+    x.set(0);
+    y.set(0);
+    setCurrentIndex(prev => prev + 1);
+    controls.set({ x: 0, y: 0, opacity: 1 });
+  };
+
+  // Button handlers
+  const handleButtonSwipe = async (direction: 'left' | 'right') => {
+    if (direction === 'right' && isLikesExhausted) {
+      setShowLimitModal(true);
+      return;
+    }
+
+    const targetX = direction === 'right' ? 500 : -500;
+    await controls.start({ x: targetX, opacity: 0, transition: { duration: 0.3 } });
+    triggerSwipe(direction);
+  };
+
+  // --- Styles helper ---
+  const getCardStyles = (tier: SubscriptionTier) => {
+    if (tier === 'kova_pro') {
+      return {
+        container: 'border-2 border-gold shadow-[0_0_25px_rgba(214,167,86,0.4)]',
+        badge: 'bg-gradient-to-r from-gold to-amber-500 text-white',
+        icon: <Crown size={14} className="text-white fill-white/20" />,
+        label: 'Kova Pro User',
+        glow: true
+      };
+    }
+    if (tier === 'kova_plus') {
+      return {
+        container: 'border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]',
+        badge: 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white',
+        icon: <Gem size={14} className="text-white fill-white/20" />,
+        label: 'Kova Plus User',
+        glow: true
+      };
+    }
+    return {
+      container: 'border border-white/10 shadow-xl',
+      badge: '',
+      icon: null,
+      label: '',
+      glow: false
+    };
+  };
+
+  // Render "Out of Swipes" Modal
+  if (showLimitModal) {
+    return (
+      <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+        <div className="bg-surface border border-gold/30 rounded-3xl p-8 max-w-sm text-center shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-gold to-transparent opacity-50"></div>
+          
+          <div className="w-16 h-16 bg-gradient-to-br from-gold/20 to-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-gold/30">
+             <Lock size={32} className="text-gold" />
+          </div>
+          
+          <h2 className="text-2xl font-bold text-text-main mb-3">You're Out of Swipes</h2>
+          <p className="text-text-muted text-sm mb-8 leading-relaxed">
+            You've hit your daily limit of 30 swipes. Upgrade to Kova Plus for unlimited connections and premium visibility.
+          </p>
+
+          <button 
+            onClick={() => { setShowLimitModal(false); onUpgrade?.('kova_plus'); }}
+            className="w-full py-4 bg-gradient-to-r from-gold to-amber-600 text-white font-bold rounded-xl shadow-lg hover:shadow-gold/20 transition-all flex items-center justify-center gap-2 mb-3"
+          >
+            <Gem size={18} /> Upgrade to Unlimited
+          </button>
+          
+          <button 
+            onClick={() => setShowLimitModal(false)}
+            className="w-full py-3 text-text-muted hover:text-white font-medium transition-colors"
+          >
+            Not Now
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // End of Deck
+  if (currentIndex >= sortedUsers.length) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in">
         <div className="w-24 h-24 bg-surface rounded-full flex items-center justify-center mb-6 animate-pulse border border-white/5 shadow-xl">
@@ -88,235 +181,176 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         </div>
         <h2 className="text-3xl font-bold text-text-main mb-3">That's everyone!</h2>
         <p className="text-text-muted max-w-md text-lg leading-relaxed mb-6">
-          You've seen all active entrepreneurs in your area. Check back later for more potential matches.
+          You've seen all active entrepreneurs in your area. Check back later for more matches.
         </p>
       </div>
     );
   }
 
-  return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8">
-      
-      {/* Likes Counter / Tier Badge */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border border-white/10 flex items-center gap-2 shadow-lg">
-         {userTier === 'kova_pro' ? (
-           <>
-             <Crown size={14} className="text-gold fill-gold" />
-             <span className="text-xs font-bold text-white uppercase tracking-wider">Kova Pro</span>
-           </>
-         ) : userTier === 'kova_plus' ? (
-           <>
-             <Crown size={14} className="text-white fill-white/50" />
-             <span className="text-xs font-bold text-white uppercase tracking-wider">Kova Plus</span>
-           </>
-         ) : (
-           <>
-             <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
-             <span className={`text-xs font-bold ${isLikesExhausted ? 'text-red-400' : 'text-white'}`}>
-                {remainingLikes ?? '--'} / 30
-             </span>
-           </>
-         )}
-      </div>
+  const styles = getCardStyles(activeUser.subscriptionTier);
 
-      {/* Next Card (Background Stack) */}
+  return (
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000">
+      
+      {/* Daily Limit Counter (if free) */}
+      {userTier === 'free' && (
+        <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isLikesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
+          <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
+          <span className={`text-xs font-bold ${isLikesExhausted ? 'text-red-400' : 'text-white'}`}>
+            {remainingLikes ?? 0} / 30
+          </span>
+        </div>
+      )}
+
+      {/* Background Card (Next User) */}
       {nextUser && (
-        <div className="absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl border border-white/5 shadow-xl overflow-hidden transform scale-95 translate-y-4 -z-10 opacity-60 filter grayscale-[0.5]">
+        <div className="absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl border border-white/5 shadow-xl overflow-hidden transform scale-95 translate-y-4 -z-10 opacity-40 filter blur-[1px]">
           <img
             src={nextUser.imageUrl || DEFAULT_PROFILE_IMAGE}
-            alt={nextUser.name}
-            className="w-full h-3/5 object-cover"
-            onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+            alt="Next"
+            className="w-full h-full object-cover"
           />
-           <div className="p-6 bg-surface h-2/5 flex flex-col">
-             <h2 className="text-2xl font-bold text-text-main mb-1">{getDisplayName(nextUser.name)}</h2>
-             <p className="text-secondary text-sm">{nextUser.role}</p>
-           </div>
         </div>
       )}
 
       {/* Active Card */}
-      <AnimatePresence>
-        <motion.div
-          key={activeUser.id}
-          style={{ x, rotate, cursor: 'grab' }}
-          initial={{ scale: 0.95, opacity: 0, y: 20 }}
-          animate={exitX ? { x: exitX, opacity: 0 } : { scale: 1, opacity: 1, y: 0, x: 0 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-          drag="x"
-          dragConstraints={{ left: 0, right: 0 }}
-          onDragEnd={onDragEnd}
-          whileTap={{ cursor: 'grabbing' }}
-          className="absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl shadow-2xl border border-white/10 flex flex-col overflow-hidden z-10"
+      <motion.div
+        key={activeUser.id}
+        style={{ x, y, rotate }}
+        animate={controls}
+        drag
+        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+        dragElastic={0.6}
+        onDragEnd={handleDragEnd}
+        whileTap={{ cursor: 'grabbing', scale: 1.02 }}
+        className={`absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}
+      >
+        {/* Premium Banner */}
+        {styles.label && (
+           <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg flex items-center gap-1.5 ${styles.badge}`}>
+             {styles.icon}
+             {styles.label}
+           </div>
+        )}
+
+        {/* Premium Glow Effect */}
+        {styles.glow && (
+           <div className="absolute inset-0 z-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none animate-pulse" />
+        )}
+
+        {/* Swipe Indicators */}
+        <motion.div 
+          style={{ opacity: likeOpacity }}
+          className="absolute top-12 left-8 z-30 border-4 border-emerald-500 rounded-xl px-4 py-2 transform -rotate-12 bg-black/20 backdrop-blur-sm"
         >
-          {/* Swipe Indicators */}
-          <motion.div 
-            style={{ opacity: opacityLike }}
-            className="absolute top-8 left-8 z-20 border-4 border-green-500 rounded-lg px-4 py-2 transform -rotate-12"
-          >
-            <span className="text-3xl font-bold text-green-500 uppercase tracking-widest">Connect</span>
-          </motion.div>
-          
-          <motion.div 
-             style={{ opacity: opacityNope }}
-             className="absolute top-8 right-8 z-20 border-4 border-red-500 rounded-lg px-4 py-2 transform rotate-12"
-          >
-            <span className="text-3xl font-bold text-red-500 uppercase tracking-widest">Skip</span>
-          </motion.div>
-
-          {/* Image Section */}
-          <div className="relative h-[60%] w-full bg-gray-900">
-            <img
-              src={activeUser.imageUrl || DEFAULT_PROFILE_IMAGE}
-              alt={activeUser.name}
-              className="w-full h-full object-cover pointer-events-none"
-              onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
-            
-            {/* Limit Reached Overlay */}
-            {isLikesExhausted && (
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-30 flex flex-col items-center justify-center text-center p-6">
-                    <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4 border border-white/20">
-                       <Lock size={32} className="text-white" />
-                    </div>
-                    <h3 className="text-2xl font-bold text-white mb-2">Daily Limit Reached</h3>
-                    <p className="text-white/70 mb-6">Upgrade to Kova Plus for unlimited swipes.</p>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); onUpgrade?.('kova_plus'); }}
-                      className="bg-gradient-to-r from-gold to-amber-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg transform hover:scale-105 transition-all"
-                    >
-                        Unlock Unlimited
-                    </button>
-                </div>
-            )}
-            
-            {/* Badges Overlay */}
-            <div className="absolute top-4 right-4 flex flex-wrap justify-end gap-2 max-w-[80%]">
-              {activeUser.badges.slice(0, 3).map((badge) => (
-                <div key={badge.id} className="bg-black/50 backdrop-blur-md px-2.5 py-1 rounded-full flex items-center gap-1.5 border border-gold/20 shadow-lg">
-                   <span className="text-xs">{badge.icon}</span>
-                   <span className="text-[10px] font-bold text-gold uppercase tracking-wide">{badge.name}</span>
-                </div>
-              ))}
-            </div>
-            
-            {/* Stage Tag */}
-            <div className="absolute bottom-4 left-4">
-                <span className="bg-primary/90 backdrop-blur text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg border border-primary-hover">
-                    {activeUser.stage} Stage
-                </span>
-            </div>
-          </div>
-
-          {/* Info Section */}
-          <div className="flex-1 p-6 flex flex-col bg-surface relative">
-            <div>
-              <div className="flex justify-between items-start mb-1">
-                <h2 className="text-3xl font-bold text-text-main tracking-tight">{getDisplayName(activeUser.name)}, {activeUser.age}</h2>
-                <div className="flex items-center gap-1 text-gold bg-gold/10 px-2 py-1 rounded-lg border border-gold/20">
-                   <Star size={12} fill="currentColor" /> 
-                   <span className="text-xs font-bold">{activeUser.badges.length}</span>
-                </div>
-              </div>
-              
-              <p className="text-gold font-medium text-sm uppercase tracking-wide mb-2 flex items-center gap-2">
-                <Briefcase size={14} /> {activeUser.role}
-              </p>
-              
-              {activeUser.location && (
-                <p className="text-text-muted text-xs flex items-center gap-1.5 mb-4">
-                   <MapPin size={12} /> {activeUser.location.city}, {activeUser.location.state}
-                </p>
-              )}
-
-              <p className="text-text-muted text-sm leading-relaxed line-clamp-3 opacity-90">
-                {activeUser.bio}
-              </p>
-            </div>
-
-            <div className="mt-auto pt-4">
-              <div className="flex flex-wrap gap-2">
-                {activeUser.tags.slice(0, 4).map((tag) => (
-                  <span key={tag} className="px-2.5 py-1 bg-background border border-white/10 text-text-muted rounded-md text-[10px] font-medium uppercase tracking-wide flex items-center gap-1">
-                    <Tag size={10} className="text-secondary" /> {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
+          <span className="text-3xl font-black text-emerald-500 uppercase tracking-widest">Connect</span>
         </motion.div>
-      </AnimatePresence>
+        
+        <motion.div 
+           style={{ opacity: nopeOpacity }}
+           className="absolute top-12 right-8 z-30 border-4 border-red-500 rounded-xl px-4 py-2 transform rotate-12 bg-black/20 backdrop-blur-sm"
+        >
+          <span className="text-3xl font-black text-red-500 uppercase tracking-widest">Skip</span>
+        </motion.div>
 
-      {/* Floating Action Buttons */}
-      <div className="absolute bottom-6 md:bottom-10 w-full flex justify-center items-center gap-6 z-20 px-4">
-          <button 
-            className="w-16 h-16 rounded-full bg-surface border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-2xl hover:scale-110 hover:border-red-500 group"
-            onClick={() => { setExitX(-1000); setTimeout(() => handleSwipe('left'), 200); }}
-          >
-            <X size={32} className="group-hover:scale-110 transition-transform" />
-          </button>
+        {/* Image Section */}
+        <div className="relative h-[60%] w-full bg-gray-900 overflow-hidden">
+          <img
+            src={activeUser.imageUrl || DEFAULT_PROFILE_IMAGE}
+            alt={activeUser.name}
+            className="w-full h-full object-cover pointer-events-none"
+            onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent opacity-90" />
+          
+          {/* Shimmer for Pro Users */}
+          {activeUser.subscriptionTier === 'kova_pro' && (
+            <div className="absolute inset-0 z-10 bg-gradient-to-tr from-transparent via-gold/10 to-transparent translate-x-[-100%] animate-[shimmer_3s_infinite]" />
+          )}
 
-          <button 
-            className={`w-16 h-16 rounded-full border flex items-center justify-center transition-all shadow-2xl group ${isLikesExhausted ? 'bg-surface border-white/10 text-text-muted cursor-not-allowed' : 'bg-surface border-green-500/30 text-green-500 hover:bg-green-500 hover:text-white hover:scale-110 hover:border-green-500'}`}
-            onClick={() => { 
-                if (isLikesExhausted) {
-                    onUpgrade?.('kova_plus');
-                } else {
-                    setExitX(1000); 
-                    setTimeout(() => handleSwipe('right'), 200); 
-                }
-            }}
-          >
-            {isLikesExhausted ? <Lock size={28} /> : <Check size={32} className="group-hover:scale-110 transition-transform" />}
-          </button>
-      </div>
-
-      {/* MATCH POPUP OVERLAY */}
-      {showMatchPopup && matchedUser && (
-        <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface border border-gold/30 rounded-3xl shadow-2xl w-[calc(100%-2rem)] max-w-sm p-6 relative text-center">
-            <button
-              type="button"
-              className="absolute top-3 right-3 text-text-muted hover:text-white transition-colors"
-              onClick={() => setShowMatchPopup(false)}
-            >
-              <X size={18} />
-            </button>
-
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-gold tracking-[0.2em] uppercase mb-1">
-                It&apos;s a Match
-              </h3>
-              <h2 className="text-2xl font-bold text-text-main">
-                You connected with {getDisplayName(matchedUser.name)}
-              </h2>
-            </div>
-
-            <div className="flex flex-col items-center mb-6">
-              <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-gold/60 shadow-lg mb-3">
-                <img
-                  src={matchedUser.imageUrl || DEFAULT_PROFILE_IMAGE}
-                  alt={matchedUser.name}
-                  className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-                />
-              </div>
-              <p className="text-text-muted text-sm">
-                Start building something big together.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowMatchPopup(false)}
-              className="w-full py-2.5 rounded-xl bg-primary text-white font-semibold hover:bg-primary-hover transition-colors shadow-md"
-            >
-              Continue Swiping
-            </button>
+          {/* Badges Overlay */}
+          <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-20 max-w-[80%]">
+             {activeUser.subscriptionTier !== 'free' && (
+               <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
+                 {activeUser.subscriptionTier === 'kova_pro' ? <Crown size={14} className="text-gold" /> : <Gem size={14} className="text-emerald-400" />}
+               </div>
+             )}
+          </div>
+          
+          {/* Stage Tag */}
+          <div className="absolute bottom-2 left-4 z-20">
+              <span className="bg-primary/90 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg border border-white/10">
+                  {activeUser.stage} Stage
+              </span>
           </div>
         </div>
-      )}
+
+        {/* Info Section */}
+        <div className="flex-1 p-6 flex flex-col bg-surface relative z-10">
+          <div>
+            <div className="flex justify-between items-start mb-1">
+              <div className="flex items-center gap-2">
+                <h2 className={`text-2xl md:text-3xl font-bold tracking-tight ${activeUser.subscriptionTier === 'kova_pro' ? 'text-transparent bg-clip-text bg-gradient-to-r from-gold to-amber-200' : 'text-text-main'}`}>
+                  {getDisplayName(activeUser.name)}
+                  <span className="text-xl ml-1 font-medium opacity-60">, {activeUser.age}</span>
+                </h2>
+                {activeUser.subscriptionTier === 'kova_pro' && <Crown size={18} className="text-gold fill-gold/20" />}
+                {activeUser.subscriptionTier === 'kova_plus' && <Gem size={18} className="text-emerald-400 fill-emerald-400/20" />}
+              </div>
+            </div>
+            
+            <p className="text-secondary font-medium text-sm uppercase tracking-wide mb-3 flex items-center gap-2">
+              <Briefcase size={14} /> {activeUser.role} <span className="text-text-muted">•</span> {activeUser.industry}
+            </p>
+            
+            <p className="text-text-muted text-sm leading-relaxed line-clamp-3 opacity-90 mb-4">
+              {activeUser.bio}
+            </p>
+          </div>
+
+          <div className="mt-auto">
+            <div className="flex flex-wrap gap-2 mb-4">
+              {activeUser.tags.slice(0, 3).map((tag) => (
+                <span key={tag} className="px-2 py-1 bg-white/5 border border-white/10 text-text-muted rounded-md text-[10px] font-medium uppercase tracking-wide">
+                  {tag}
+                </span>
+              ))}
+            </div>
+
+            {/* Free User CTA */}
+            {userTier === 'free' && (
+              <button 
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onUpgrade?.('kova_plus'); }}
+                className="w-full py-2 bg-gradient-to-r from-gold/10 to-transparent border border-gold/30 rounded-lg flex items-center justify-center gap-2 text-gold text-xs font-bold hover:bg-gold/20 transition-colors"
+              >
+                <Zap size={12} fill="currentColor" /> Upgrade to Connect Instantly
+              </button>
+            )}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Floating Action Buttons */}
+      <div className="absolute bottom-6 md:bottom-10 w-full flex justify-center items-center gap-8 z-20 px-4 pointer-events-none">
+          <button 
+            className="w-16 h-16 rounded-full bg-surface border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-2xl hover:scale-110 hover:border-red-500 pointer-events-auto backdrop-blur-sm"
+            onClick={() => handleButtonSwipe('left')}
+          >
+            <X size={32} />
+          </button>
+
+          <button 
+            className={`w-16 h-16 rounded-full border flex items-center justify-center transition-all shadow-2xl pointer-events-auto backdrop-blur-sm ${
+              isLikesExhausted 
+                ? 'bg-surface border-white/10 text-text-muted hover:bg-white/10' 
+                : 'bg-surface border-emerald-500/30 text-emerald-500 hover:bg-emerald-500 hover:text-white hover:scale-110 hover:border-emerald-500'
+            }`}
+            onClick={() => handleButtonSwipe('right')}
+          >
+            {isLikesExhausted ? <Lock size={28} /> : <Check size={32} />}
+          </button>
+      </div>
     </div>
   );
 };

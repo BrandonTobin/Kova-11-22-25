@@ -19,6 +19,7 @@ interface SwipeDeckProps {
   remainingLikes?: number | null;
   userTier?: SubscriptionTier;
   onUpgrade?: (tier: SubscriptionTier) => void;
+  onOutOfSwipes?: () => void;
 }
 
 // Helper to determine sort weight
@@ -30,9 +31,8 @@ const getTierWeight = (tier: SubscriptionTier): number => {
   }
 };
 
-const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, userTier = 'free', onUpgrade }) => {
+const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, userTier = 'free', onUpgrade, onOutOfSwipes }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [showLimitModal, setShowLimitModal] = useState(false);
   const controls = useAnimation();
 
   // Sort users: Pro > Plus > Free
@@ -74,9 +74,9 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
     if (isSwipeRight) {
       // SWIPE RIGHT (LIKE)
       if (isLikesExhausted) {
-        // Limit reached: Snap back to center
+        // Limit reached: Snap back to center & trigger external modal
         await controls.start({ x: 0, y: 0, rotate: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
-        setShowLimitModal(true);
+        onOutOfSwipes?.();
       } else {
         // Success: Animate out to the right
         await controls.start({ x: 500, opacity: 0, transition: { duration: 0.2 } });
@@ -109,7 +109,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
   // Button handlers
   const handleButtonSwipe = async (direction: 'left' | 'right') => {
     if (direction === 'right' && isLikesExhausted) {
-      setShowLimitModal(true);
+      onOutOfSwipes?.();
       return;
     }
 
@@ -143,40 +143,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
       glow: false
     };
   };
-
-  // Render "Out of Swipes" Modal
-  if (showLimitModal) {
-    return (
-      <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-        <div className="bg-surface border border-gold/30 rounded-3xl p-8 max-w-sm text-center shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-gold to-transparent opacity-50"></div>
-          
-          <div className="w-16 h-16 bg-gradient-to-br from-gold/20 to-amber-900/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-gold/30">
-             <Lock size={32} className="text-gold" />
-          </div>
-          
-          <h2 className="text-2xl font-bold text-text-main mb-3">You're Out of Swipes</h2>
-          <p className="text-text-muted text-sm mb-8 leading-relaxed">
-            You've hit your daily limit of 30 swipes. Upgrade to Kova Plus for unlimited connections and premium visibility.
-          </p>
-
-          <button 
-            onClick={() => { setShowLimitModal(false); onUpgrade?.('kova_plus'); }}
-            className="w-full py-4 bg-gradient-to-r from-gold to-amber-600 text-white font-bold rounded-xl shadow-lg hover:shadow-gold/20 transition-all flex items-center justify-center gap-2 mb-3"
-          >
-            <Gem size={18} /> Upgrade to Unlimited
-          </button>
-          
-          <button 
-            onClick={() => setShowLimitModal(false)}
-            className="w-full py-3 text-text-muted hover:text-white font-medium transition-colors"
-          >
-            Not Now
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // End of Deck
   if (currentIndex >= sortedUsers.length) {

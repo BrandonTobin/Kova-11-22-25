@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -33,10 +32,13 @@ import {
   Notebook,
   Lock,
   Sparkles,
-  Loader2
+  Loader2,
+  Check,
+  Gem
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from './constants';
 import TimerOverlay from './components/TimerOverlay';
+import { getDisplayName } from './utils/nameUtils';
 
 // ✅ Your Supabase audio URL
 const NOTIFICATION_SOUND_URL =
@@ -118,6 +120,10 @@ function App() {
   // Stores the tier we want to upsell (kova_plus or kova_pro)
   const [upgradeTargetTier, setUpgradeTargetTier] = useState<SubscriptionTier | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
+  // New Global Modals State
+  const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
+  const [showOutOfSwipesModal, setShowOutOfSwipesModal] = useState(false);
 
   // --- State: Theme ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -635,7 +641,9 @@ function App() {
       if (createdUser) {
         localStorage.setItem('kova_current_user_id', createdUser.id);
         await fetchUserProfile(createdUser.id);
-        // Force navigation to Discover screen upon successful registration
+        
+        // Show Welcome Overlay after registration
+        setShowWelcomeOverlay(true);
         setCurrentView(ViewState.DISCOVER);
       }
 
@@ -1157,6 +1165,8 @@ function App() {
     content = (
       <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
         {/* Global Modals */}
+        
+        {/* Match Popup */}
         {showMatchPopup && newMatch && (
           <MatchPopup
             matchedUser={newMatch}
@@ -1173,7 +1183,131 @@ function App() {
           />
         )}
 
-                {upgradeTargetTier && upgradeModalContent && (
+        {/* Welcome Overlay */}
+        {showWelcomeOverlay && (
+          <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-500">
+            <div className="bg-surface rounded-3xl border border-white/10 max-w-md w-full p-8 text-center shadow-2xl relative">
+              <h2 className="text-3xl font-bold text-text-main mb-4">
+                Welcome to Kova, {user.name.split(' ')[0]}! 👋
+              </h2>
+              <p className="text-text-muted text-lg mb-8 leading-relaxed">
+                You’re all set. Start swiping to find your next accountability partner, brainstorm buddy, or co-founder.
+              </p>
+              <button
+                onClick={() => setShowWelcomeOverlay(false)}
+                className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary-hover transition-all"
+              >
+                Start Swiping
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Out of Swipes Modal */}
+        {showOutOfSwipesModal && user.subscriptionTier === 'free' && (
+          <div 
+            className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300"
+            onClick={() => setShowOutOfSwipesModal(false)}
+          >
+            <div 
+              className="bg-surface rounded-3xl border border-gold/30 max-w-4xl w-full p-6 md:p-8 shadow-2xl relative overflow-y-auto max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button 
+                onClick={() => setShowOutOfSwipesModal(false)}
+                className="absolute top-4 right-4 text-text-muted hover:text-white"
+              >
+                <X size={24} />
+              </button>
+
+              <div className="text-center mb-8">
+                <h2 className="text-2xl md:text-3xl font-bold text-text-main mb-2">You're out of swipes for today</h2>
+                <p className="text-text-muted">Free accounts get 30 swipes per day. Upgrade to continue connecting.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* Free Plan */}
+                <div className="border border-white/10 bg-white/5 p-6 rounded-2xl flex flex-col relative opacity-80">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white/10 border border-white/10 text-text-muted text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                    Current Plan
+                  </div>
+                  <h3 className="text-xl font-bold text-text-main mt-2 mb-4 text-center">Free</h3>
+                  <ul className="space-y-3 mb-6 flex-1 text-sm text-text-muted">
+                    <li className="flex items-center gap-2"><Check size={14} /> 30 swipes per day</li>
+                    <li className="flex items-center gap-2"><Check size={14} /> Basic matching</li>
+                    <li className="flex items-center gap-2"><Check size={14} /> Chat & video rooms</li>
+                  </ul>
+                  <button disabled className="w-full py-3 rounded-xl border border-white/10 text-text-muted text-xs font-bold cursor-default">
+                    Active
+                  </button>
+                </div>
+
+                {/* Kova Plus (Hero) */}
+                <div className="border-2 border-emerald-500 bg-surface p-6 rounded-2xl flex flex-col relative shadow-[0_0_20px_rgba(16,185,129,0.2)] transform scale-105 z-10">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-lg">
+                    Recommended
+                  </div>
+                  <div className="text-center mb-4 mt-2">
+                    <h3 className="text-xl font-bold text-emerald-400">Kova Plus</h3>
+                    <p className="text-2xl font-bold text-text-main mt-1">$7.99<span className="text-sm font-normal text-text-muted">/mo</span></p>
+                  </div>
+                  <ul className="space-y-3 mb-6 flex-1 text-sm text-text-main">
+                    <li className="flex items-center gap-2"><Gem size={14} className="text-emerald-400" /> Unlimited Swipes</li>
+                    <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400" /> See who liked you</li>
+                    <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400" /> Daily Profile Boost</li>
+                  </ul>
+                  <button 
+                    onClick={() => {
+                      setShowOutOfSwipesModal(false);
+                      handleUpgradeSubscription('kova_plus');
+                    }}
+                    disabled={isProcessingPayment}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold shadow-lg transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isProcessingPayment ? <Loader2 className="animate-spin" size={16} /> : 'Upgrade to Plus'}
+                  </button>
+                </div>
+
+                {/* Kova Pro (Locked State) */}
+                <div className="relative border border-white/5 bg-black/20 p-6 rounded-2xl flex flex-col overflow-hidden pointer-events-none select-none">
+                   {/* Blur Overlay - Increased blur strength */}
+                   <div className="opacity-40 blur-[5px] flex flex-col h-full">
+                      <h3 className="text-xl font-bold text-gold mt-2 mb-4 text-center">Kova Pro</h3>
+                      <ul className="space-y-3 mb-6 flex-1 text-sm text-text-muted">
+                        <li className="flex items-center gap-2"><Crown size={14} className="text-gold" /> All Plus features</li>
+                        <li className="flex items-center gap-2"><Check size={14} className="text-gold" /> AI Insights</li>
+                        <li className="flex items-center gap-2"><Check size={14} className="text-gold" /> Consistency Heatmap</li>
+                      </ul>
+                      {/* Placeholder for layout */}
+                      <div className="w-full py-3 rounded-xl border border-transparent"></div>
+                   </div>
+
+                   {/* Pill Overlay */}
+                   <div className="absolute inset-0 flex items-center justify-center z-10">
+                      <div className="px-3 py-1.5 rounded-full bg-black/90 border border-white/10 flex items-center gap-2 shadow-xl">
+                         <Lock size={12} className="text-zinc-400" />
+                         <span className="text-[10px] font-bold text-white tracking-wider uppercase">
+                           Kova Pro | Coming Soon
+                         </span>
+                      </div>
+                   </div>
+                </div>
+              </div>
+
+              <div className="text-center">
+                <button 
+                  onClick={() => setShowOutOfSwipesModal(false)}
+                  className="text-sm text-text-muted hover:text-white transition-colors"
+                >
+                  Maybe later
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Existing General Upgrade Modal */}
+        {upgradeTargetTier && upgradeModalContent && !showOutOfSwipesModal && (
           <div
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
             onClick={() => !isProcessingPayment && setUpgradeTargetTier(null)}
@@ -1277,6 +1411,7 @@ function App() {
               }
               userTier={user.subscriptionTier}
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
+              onOutOfSwipes={() => setShowOutOfSwipesModal(true)}
             />
           )}
 

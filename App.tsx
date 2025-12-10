@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -65,15 +63,36 @@ const encodeTierForDb = (tier: SubscriptionTier): string => {
   return 'free';
 };
 
-// Helper to shuffle array (Fisher-Yates)
-function shuffleArray<T>(array: T[]): T[] {
-  const newArr = [...array];
-  for (let i = newArr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-  }
-  return newArr;
-}
+// Helper to compute tier weight for shuffling
+const getTierWeight = (tier: SubscriptionTier): number => {
+  if (tier === 'kova_pro') return 3;   // highest priority
+  if (tier === 'kova_plus') return 2;  // medium priority
+  return 1;                            // free
+};
+
+// Weighted shuffle helper (Efraimidis and Spirakis A-Res)
+const weightedShuffle = <T,>(
+  items: T[],
+  getWeight: (item: T) => number
+): T[] => {
+  // Create a copy so we don’t mutate the original array
+  const arr = [...items];
+
+  // Assign a random key with weight bias
+  const scored = arr.map((item) => {
+    const w = Math.max(getWeight(item), 1);
+    // randomKey = -log(random) / weight (smaller = more priority)
+    const r = Math.random();
+    const key = -Math.log(r) / w;
+    return { item, key };
+  });
+
+  // Sort ascending by key (higher weight tends to float earlier,
+  // but still looks random)
+  scored.sort((a, b) => a.key - b.key);
+
+  return scored.map((x) => x.item);
+};
 
 function App() {
   // --- State: Auth & User ---
@@ -430,9 +449,12 @@ function App() {
           securityAnswer: ''
         })) as User[];
 
-      // 4. Randomize the order
-      const shuffled = shuffleArray(filtered);
-      setUsersToSwipe(shuffled);
+      // 4. Randomize the order with weighted shuffle
+      const randomized = weightedShuffle(filtered, (user) =>
+        getTierWeight(user.subscriptionTier)
+      );
+
+      setUsersToSwipe(randomized);
     }
   };
 

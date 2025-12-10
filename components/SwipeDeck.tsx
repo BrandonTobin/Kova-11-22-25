@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   motion, 
@@ -22,27 +21,13 @@ interface SwipeDeckProps {
   onOutOfSwipes?: () => void;
 }
 
-// Helper to determine sort weight
-const getTierWeight = (tier: SubscriptionTier): number => {
-  switch (tier) {
-    case 'kova_pro': return 3;
-    case 'kova_plus': return 2;
-    default: return 1;
-  }
-};
-
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, userTier = 'free', onUpgrade, onOutOfSwipes }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const controls = useAnimation();
 
-  // Sort users: Pro > Plus > Free
-  const sortedUsers = useMemo(() => {
-    return [...users].sort((a, b) => {
-      const weightA = getTierWeight(a.subscriptionTier);
-      const weightB = getTierWeight(b.subscriptionTier);
-      return weightB - weightA;
-    });
-  }, [users]);
+  // Use the order provided by the parent (weighted shuffle)
+  // We make a shallow copy to be safe, but we do NOT re-sort.
+  const sortedUsers = useMemo(() => [...users], [users]);
 
   const activeUser = sortedUsers[currentIndex];
   const nextUser = sortedUsers[currentIndex + 1];

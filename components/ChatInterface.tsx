@@ -1346,7 +1346,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                
                {/* 2. SHARED GOALS & AI RECAP COLUMN - Flexible width */}
                <div className="flex-1 min-w-[280px] flex flex-col gap-4 h-full">
-                 {/* Shared Goals Panel */}
+                 {/* Shared Goals Panel - Takes 50% of column height */}
                  <div className="flex-1 min-h-0 relative">
                     <SharedGoalsPanel
                         isPlusOrPro={hasPlusAccess(currentUser)}
@@ -1356,9 +1356,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     />
                  </div>
                  
-                 {/* AI Accountability Recap Panel */}
-                 <div className="shrink-0">
-                    <AIRecapPanel subscriptionTier={currentUser.subscriptionTier} />
+                 {/* AI Accountability Recap Panel - Takes 50% of column height */}
+                 <div className="flex-1 min-h-0 relative">
+                    <AIRecapPanel 
+                        subscriptionTier={currentUser.subscriptionTier}
+                        onUpgrade={onUpgrade}
+                    />
                  </div>
                </div>
 

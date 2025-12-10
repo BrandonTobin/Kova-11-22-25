@@ -146,27 +146,27 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
           </div>
         ) : (
           <div className="flex flex-col justify-center h-full text-center relative rounded-2xl overflow-hidden">
+             {/* Locked Background */}
              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/20 to-background/50 pointer-events-none"></div>
              
-             <div className="relative z-10 space-y-5 px-4">
-                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10 shadow-lg">
+             <div className="relative z-10 space-y-5 px-4 flex flex-col items-center justify-center h-full">
+                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center border border-white/10 shadow-lg">
                    <Lock size={24} className="text-text-muted" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-text-main mb-1">Unlock Shared Goals</h3>
                   <p className="text-xs text-text-muted leading-relaxed max-w-[200px] mx-auto">
-                    Track milestones and tasks directly in your chat.
+                    Collaborate effectively with accountability partners.
                   </p>
                 </div>
-                <ul className="text-xs text-text-muted/80 space-y-3 text-left bg-black/20 p-4 rounded-xl border border-white/5">
+                <ul className="text-xs text-text-muted/80 space-y-3 text-left bg-black/20 p-4 rounded-xl border border-white/5 w-full max-w-[240px]">
                   <li className="flex items-center gap-2"><CheckCircle size={12} className="text-gold" /> Assign tasks to each other</li>
                   <li className="flex items-center gap-2"><CheckCircle size={12} className="text-gold" /> Track weekly progress</li>
-                  <li className="flex items-center gap-2"><CheckCircle size={12} className="text-gold" /> AI accountability summaries</li>
                 </ul>
                 <button
                   type="button"
                   onClick={() => onUpgrade('kova_plus')}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-gold to-amber-600 hover:opacity-90 text-white font-bold shadow-lg transition-all flex items-center justify-center gap-2 text-xs"
+                  className="w-full max-w-[240px] py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-700 hover:opacity-90 text-white font-bold shadow-lg transition-all flex items-center justify-center gap-2 text-xs"
                 >
                   <Lock size={14} /> Upgrade to Plus
                 </button>

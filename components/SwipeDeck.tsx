@@ -65,7 +65,12 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
     const offset = info.offset.x;
     const velocity = info.velocity.x;
 
-    if (offset > threshold || velocity > velocityThreshold) {
+    // Refined direction logic: check offset OR velocity, but ensure velocity isn't contradicting position too extremely
+    // e.g., if offset is far left (-150), a right velocity shouldn't accidentally trigger a right swipe unless it's huge
+    const isSwipeRight = offset > threshold || (velocity > velocityThreshold && offset > -50);
+    const isSwipeLeft = offset < -threshold || (velocity < -velocityThreshold && offset < 50);
+
+    if (isSwipeRight) {
       // SWIPE RIGHT (LIKE)
       if (isLikesExhausted) {
         // Snap back and show limit modal
@@ -76,13 +81,14 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         await controls.start({ x: 500, opacity: 0, transition: { duration: 0.2 } });
         triggerSwipe('right');
       }
-    } else if (offset < -threshold || velocity < -velocityThreshold) {
+    } else if (isSwipeLeft) {
       // SWIPE LEFT (NOPE)
       // Animate out left
       await controls.start({ x: -500, opacity: 0, transition: { duration: 0.2 } });
       triggerSwipe('left');
     } else {
       // Snap back to center
+      // This resets both X and Y, preventing vertical drift
       controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 500, damping: 30 } });
     }
   };
@@ -224,6 +230,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         drag // Freely drag in any direction
         dragConstraints={{ left: -200, right: 200, top: -300, bottom: 300 }}
         dragElastic={0.1}
+        dragMomentum={false} // Prevents card from drifting on release
         onDragEnd={handleDragEnd}
         whileTap={{ cursor: 'grabbing', scale: 1.02 }}
         className={`absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}

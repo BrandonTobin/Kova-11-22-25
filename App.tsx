@@ -1493,6 +1493,7 @@ function App() {
               onUnmatch={handleUnmatch}
               newMatchIds={newMatchIds}
               onMatchSeen={handleMatchSeen}
+              onUpgrade={(tier) => setUpgradeTargetTier(tier)}
             />
           )}
 

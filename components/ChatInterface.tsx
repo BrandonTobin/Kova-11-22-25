@@ -76,7 +76,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onUnmatch,
   newMatchIds = [],
   onMatchSeen,
-  onUpgrade
+  onUpgrade,
 }) => {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(
     matches[0]?.id || null
@@ -94,7 +94,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   >({});
 
   // Local state for "NEW" badges on conversations (for new incoming messages)
-  const [unreadConversationIds, setUnreadConversationIds] = useState<Set<string>>(new Set());
+  const [unreadConversationIds, setUnreadConversationIds] =
+    useState<Set<string>>(new Set());
 
   // Chats the current user has "deleted" (hidden) this session
   const [clearedChats, setClearedChats] = useState<Record<string, boolean>>({});
@@ -225,10 +226,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Update ref whenever selectedMatchId changes
   useEffect(() => {
     selectedMatchIdRef.current = selectedMatchId;
-    
+
     // Clear "NEW" badge for the selected conversation
     if (selectedMatchId) {
-      setUnreadConversationIds(prev => {
+      setUnreadConversationIds((prev) => {
         if (prev.has(selectedMatchId)) {
           const next = new Set(prev);
           next.delete(selectedMatchId);
@@ -272,13 +273,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           // 2. Handle "NEW" badge logic
           // Only if message is incoming AND we are not currently viewing that chat
           if (msgSenderId !== currentUser.id) {
-             if (selectedMatchIdRef.current !== msgMatchId) {
-               setUnreadConversationIds(prev => {
-                 const next = new Set(prev);
-                 next.add(msgMatchId);
-                 return next;
-               });
-             }
+            if (selectedMatchIdRef.current !== msgMatchId) {
+              setUnreadConversationIds((prev) => {
+                const next = new Set(prev);
+                next.add(msgMatchId);
+                return next;
+              });
+            }
           }
         }
       )
@@ -288,7 +289,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       supabase.removeChannel(channel);
     };
   }, [currentUser.id]);
-
 
   // Merge live updates into matches
   const mergedMatches = useMemo(() => {
@@ -448,8 +448,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!lastReadAt || messages.length === 0) return -1;
     const cutoff = lastReadAt.getTime();
     return messages.findIndex(
-      (m) =>
-        parseSupabaseTimestamp(m.timestamp as any).getTime() > cutoff
+      (m) => parseSupabaseTimestamp(m.timestamp as any).getTime() > cutoff
     );
   }, [messages, lastReadAt]);
 
@@ -541,9 +540,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           .maybeSingle();
 
         if (!readError && readRow?.last_read_at) {
-          setLastReadAt(
-            parseSupabaseTimestamp(readRow.last_read_at as any)
-          );
+          setLastReadAt(parseSupabaseTimestamp(readRow.last_read_at as any));
         } else {
           setLastReadAt(null);
         }
@@ -624,17 +621,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!selectedMatchId || !currentUser) return;
 
     try {
-      const { error } = await supabase
-        .from('typing_status')
-        .upsert(
-          {
-            match_id: selectedMatchId,
-            user_id: currentUser.id,
-            is_typing: isTyping,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'match_id,user_id' }
-        );
+      const { error } = await supabase.from('typing_status').upsert(
+        {
+          match_id: selectedMatchId,
+          user_id: currentUser.id,
+          is_typing: isTyping,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'match_id,user_id' }
+      );
 
       if (error) {
         console.error('Failed to update typing status:', error.message);
@@ -668,17 +663,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!selectedMatchId || !currentUser || messages.length === 0) return;
 
     try {
-      const { error } = await supabase
-        .from('message_reads')
-        .upsert(
-          {
-            match_id: selectedMatchId,
-            user_id: currentUser.id,
-            last_read_at: new Date().toISOString(),
-          },
-          { onConflict: 'match_id,user_id' }
-        );
-      
+      const { error } = await supabase.from('message_reads').upsert(
+        {
+          match_id: selectedMatchId,
+          user_id: currentUser.id,
+          last_read_at: new Date().toISOString(),
+        },
+        { onConflict: 'match_id,user_id' }
+      );
+
       if (error) {
         console.error('Failed to update read receipts:', error.message);
       }
@@ -987,7 +980,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     if (!text.trim() || !selectedMatchId || !currentUser) return;
 
     const trimmedText = text.trim();
-    const now = new Date();
+       const now = new Date();
 
     // temporary optimistic message
     const tempId = `temp-${Date.now()}`;
@@ -1176,7 +1169,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         );
 
       if (error) {
-        console.error('Error marking chat as.hidden for this user:', error.message);
+        console.error(
+          'Error marking chat as.hidden for this user:',
+          error.message
+        );
         alert('Failed to delete chat. Please try again.');
         return;
       }
@@ -1212,7 +1208,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       `)
       .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
 
-  if (error) {
+    if (error) {
       console.error('Error fetching connections:', error);
     } else if (data) {
       const connectedUsers = data.map((m: any) => {
@@ -1516,6 +1512,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden border-t border-white/5 relative">
+      {/* ... (Connections, Connect By ID, Profile Modals remain unchanged) ... */}
       {/* Connections Modal */}
       {connectionsModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1524,45 +1521,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
                 <Users size={18} className="text-gold" /> Connections
               </h3>
-              <button
-                onClick={() => setConnectionsModalOpen(false)}
-                className="text-text-muted hover:text-white"
-              >
-                <X size={20} />
-              </button>
+              <button onClick={() => setConnectionsModalOpen(false)} className="text-text-muted hover:text-white"><X size={20} /></button>
             </div>
-
-            <div className="flex-1 overflow-y-auto">
-              {isLoadingConnections ? (
-                <div className="flex justify-center p-8">
-                  <Loader2 className="animate-spin text-gold" />
-                </div>
-              ) : connectionsList.length === 0 ? (
-                <p className="text-center text-text-muted py-8 text-sm">
-                  No connections found.
-                </p>
-              ) : (
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {isLoadingConnections ? ( <div className="flex justify-center p-8"><Loader2 className="animate-spin text-gold" /></div> ) : connectionsList.length === 0 ? ( <p className="text-center text-text-muted py-8 text-sm">No connections found.</p> ) : (
                 <div className="space-y-2">
                   {connectionsList.map((u) => (
-                    <div
-                      key={u.id}
-                      className="flex items-center gap-3 p-3 bg-background/50 rounded-xl border border-white/5"
-                    >
-                      <img
-                        src={u.imageUrl}
-                        className="w-10 h-10 rounded-full object-cover border border-white/10"
-                        onError={(e) => {
-                          e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
-                        }}
-                      />
-                      <div>
-                        <p className="font-bold text-sm text-text-main">
-                          {getDisplayName(u.name)}
-                        </p>
-                        <p className="text-xs text-text-muted">
-                          {u.role} • {u.industry}
-                        </p>
-                      </div>
+                    <div key={u.id} className="flex items-center gap-3 p-3 bg-background/50 rounded-xl border border-white/5">
+                      <img src={u.imageUrl} className="w-10 h-10 rounded-full object-cover border border-white/10" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} />
+                      <div><p className="font-bold text-sm text-text-main">{getDisplayName(u.name)}</p><p className="text-xs text-text-muted">{u.role} • {u.industry}</p></div>
                     </div>
                   ))}
                 </div>
@@ -1575,84 +1542,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Connect By ID Modal */}
       {showConnectModal && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl.animate-in fade-in zoom-in.duration-200">
-            <div className="flex justify-between.items-center mb-4">
-              <h3 className="text-xl font-bold text-text-main flex items-center gap-2">
-                <UserPlus size={24} className="text-primary" /> Connect by ID
-              </h3>
-              <button
-                onClick={() => setShowConnectModal(false)}
-                className="text-text-muted hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-text-muted.text-sm mb-4">
-              Enter a unique Kova ID (e.g., KVA-123456) to connect instantly.
-            </p>
-
-            <div className="flex gap-2 mb-6">
-              <input
-                type="text"
-                placeholder="e.g. KVA-8F2X9A"
-                value={searchId}
-                onChange={(e) => setSearchId(e.target.value)}
-                className="flex-1 bg-background border border-white/10 rounded-lg px-4 py-2 text-base md:text-sm text-text-main focus:border-gold/50 outline-none"
-              />
-              <button
-                onClick={handleSearchUser}
-                disabled={isSearching}
-                className="bg-surface border border-white/10 hover:bg-white/5 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {isSearching ? (
-                  <Loader2 size={20} className="animate-spin" />
-                ) : (
-                  <Search size={20} />
-                )}
-              </button>
-            </div>
-
-            {searchError && (
-              <p className="text-red-400 text-sm mb-4">{searchError}</p>
-            )}
-
-            {foundUser && (
-              <div className="bg-background rounded-xl p-4 mb-6 border border-white/10 flex items-center gap-4">
-                <img
-                  src={foundUser.imageUrl}
-                  alt={foundUser.name}
-                  className="w-12 h-12 rounded-full object-cover"
-                  onError={(e) => {
-                    e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
-                  }}
-                />
-                <div>
-                  <p className="font-bold text-text-main">
-                    {getDisplayName(foundUser.name)}
-                  </p>
-                  <p className="text-xs text-text-muted">
-                    {foundUser.role} • {foundUser.industry}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowConnectModal(false)}
-                className="px-4 py-2 text-text-muted hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSendRequest}
-                disabled={!foundUser}
-                className="px-4 py-2 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary-hover transition-colors"
-              >
-                Send Request
-              </button>
-            </div>
+          <div className="bg-surface border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold text-text-main flex items-center gap-2"><UserPlus size={24} className="text-primary" /> Connect by ID</h3><button onClick={() => setShowConnectModal(false)} className="text-text-muted hover:text-white">✕</button></div>
+            <p className="text-text-muted text-sm mb-4">Enter a unique Kova ID (e.g., KVA-123456) to connect instantly.</p>
+            <div className="flex gap-2 mb-6"><input type="text" placeholder="e.g. KVA-8F2X9A" value={searchId} onChange={(e) => setSearchId(e.target.value)} className="flex-1 bg-background border border-white/10 rounded-lg px-4 py-2 text-base md:text-sm text-text-main focus:border-gold/50 outline-none" /><button onClick={handleSearchUser} disabled={isSearching} className="bg-surface border border-white/10 hover:bg-white/5 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50">{isSearching ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}</button></div>
+            {searchError && <p className="text-red-400 text-sm mb-4">{searchError}</p>}
+            {foundUser && (<div className="bg-background rounded-xl p-4 mb-6 border border-white/10 flex items-center gap-4"><img src={foundUser.imageUrl} alt={foundUser.name} className="w-12 h-12 rounded-full object-cover" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} /><div><p className="font-bold text-text-main">{getDisplayName(foundUser.name)}</p><p className="text-xs text-text-muted">{foundUser.role} • {foundUser.industry}</p></div></div>)}
+            <div className="flex justify-end gap-3"><button onClick={() => setShowConnectModal(false)} className="px-4 py-2 text-text-muted hover:text-white transition-colors">Cancel</button><button onClick={handleSendRequest} disabled={!foundUser} className="px-4 py-2 bg-primary text-white rounded-lg font-medium disabled:opacity-50 hover:bg-primary-hover transition-colors">Send Request</button></div>
           </div>
         </div>
       )}
@@ -1660,16 +1556,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Profile modal (mobile/desktop) */}
       {showProfileModal && selectedMatch && (
         <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col.relative animate-in fade-in zoom-in.duration-200">
-            <button
-              onClick={() => setShowProfileModal(false)}
-              className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text-white hover:bg-black/60 transition-colors"
-            >
-              <X size={20} />
-            </button>
-            <div className="flex-1 overflow-y-auto">
-              <ProfileDetailView match={selectedMatch} />
-            </div>
+          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
+            <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text-white hover:bg-black/60 transition-colors"><X size={20} /></button>
+            <div className="flex-1 overflow-y-auto custom-scrollbar"><ProfileDetailView match={selectedMatch} /></div>
           </div>
         </div>
       )}
@@ -1680,124 +1569,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           selectedMatchId ? 'hidden md:flex' : 'flex'
         }`}
       >
-        <div className="flex flex-col bg-surface border-b.border-white/5 shrink-0">
+        <div className="flex flex-col bg-surface border-b border-white/5 shrink-0">
           <div className="p-4 pb-2 flex justify-between items-center">
             <h2 className="text-xl font-bold text-text-main">Messages</h2>
-            <button
-              onClick={() => setShowConnectModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold.transition-colors rounded-lg border border-white/10"
-            >
-              <UserPlus size={14} /> Add via Kova ID
-            </button>
+            <button onClick={() => setShowConnectModal(true)} className="flex items-center gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold transition-colors rounded-lg border border-white/10"><UserPlus size={14} /> Add via Kova ID</button>
           </div>
-
-          <div className="px-4 pb-4">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search connections..."
-                className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70"
-              />
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-                size={14}
-              />
-            </div>
-          </div>
+          <div className="px-4 pb-4"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search connections..." className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} /></div></div>
         </div>
-
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
           {filteredMatches.length === 0 ? (
             matches.length === 0 ? (
-              <div className="p-8 text-center text-text-muted.flex flex-col items-center gap-4">
-                <div className="w-16 h-16 bg-background rounded-full flex items-center.justify-center border border-white/5">
-                  <Bot size={32} className="opacity-20" />
-                </div>
-                <p>No matches yet. Start swiping or add by ID!</p>
-              </div>
+              <div className="p-8 text-center text-text-muted flex flex-col items-center gap-4"><div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border border-white/5"><Bot size={32} className="opacity-20" /></div><p>No matches yet. Start swiping or add by ID!</p></div>
             ) : (
-              <p className="text-center text-text-muted p-6 text-sm">
-                No matches found.
-              </p>
+              <p className="text-center text-text-muted p-6 text-sm">No matches found.</p>
             )
           ) : (
             filteredMatches.map((match) => {
               const previewText = match.lastMessageText || 'Chat started';
-              const truncatedPreview =
-                previewText.length > 40
-                  ? previewText.slice(0, 40) + '…'
-                  : previewText;
-
-              const timeToDisplay = match.lastMessageAt
-                ? formatSidebarDate(match.lastMessageAt)
-                : formatSidebarDate(match.timestamp as any);
-
+              const truncatedPreview = previewText.length > 40 ? previewText.slice(0, 40) + '…' : previewText;
+              const timeToDisplay = match.lastMessageAt ? formatSidebarDate(match.lastMessageAt) : formatSidebarDate(match.timestamp as any);
               const status = getPresenceStatus(match.user.lastSeenAt);
-              const dotClass =
-                status === 'online'
-                  ? 'bg-green-500'
-                  : status === 'away'
-                  ? 'bg-amber-500'
-                  : 'bg-gray-500';
-
+              const dotClass = status === 'online' ? 'bg-green-500' : status === 'away' ? 'bg-amber-500' : 'bg-gray-500';
               const isNewMatch = newMatchIds.includes(match.id);
               const hasUnread = unreadConversationIds.has(match.id);
               const showNewBadge = isNewMatch || hasUnread;
 
               return (
-                <div
-                  key={match.id}
-                  onClick={() => {
-                    setSelectedMatchId(match.id);
-                    if (isNewMatch && onMatchSeen) onMatchSeen(match.id);
-                  }}
-                  className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${
-                    selectedMatchId === match.id
-                      ? 'bg-background/80 border-l-4 border-l-primary'
-                      : 'border-l-4 border-l-transparent'
-                  }`}
-                >
-                  <div className="relative">
-                    <img
-                      src={match.user.imageUrl}
-                      alt={match.user.name}
-                      className="w-12 h-12 rounded-full object-cover border border-white/10"
-                      onError={(e) => {
-                        e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
-                      }}
-                    />
-                    <div
-                      className={`absolute bottom-0 right-0 w-3 h-3 ${dotClass} rounded-full border-2 border-surface`}
-                    />
-                  </div>
-                  <div className="flex-1.min-w-0">
-                    <div className="flex justify-between items-baseline mb-1">
-                      <div className="flex items-center.gap-2 min-w-0">
-                        <h3
-                          className={`font-medium truncate ${
-                            selectedMatchId === match.id
-                              ? 'text-primary'
-                              : 'text-text-main'
-                          }`}
-                        >
-                          {getDisplayName(match.user.name)}
-                        </h3>
-                        {showNewBadge && (
-                          <span className="text-[9px] font-bold text-gold bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded-full shrink-0">
-                            NEW
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[10px] text-text-muted shrink-0 ml-2">
-                        {timeToDisplay}
-                      </span>
-                    </div>
-                    <p className="text-sm text-text-muted truncate opacity-80">
-                      {truncatedPreview}
-                    </p>
-                  </div>
+                <div key={match.id} onClick={() => { setSelectedMatchId(match.id); if (isNewMatch && onMatchSeen) onMatchSeen(match.id); }} className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${selectedMatchId === match.id ? 'bg-background/80 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}`}>
+                  <div className="relative"><img src={match.user.imageUrl} alt={match.user.name} className="w-12 h-12 rounded-full object-cover border border-white/10" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} /><div className={`absolute bottom-0 right-0 w-3 h-3 ${dotClass} rounded-full border-2 border-surface`} /></div>
+                  <div className="flex-1 min-w-0"><div className="flex justify-between items-baseline mb-1"><div className="flex items-center gap-2 min-w-0"><h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>{getDisplayName(match.user.name)}</h3>{showNewBadge && (<span className="text-[9px] font-bold text-gold bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded-full shrink-0">NEW</span>)}</div><span className="text-[10px] text-text-muted shrink-0 ml-2">{timeToDisplay}</span></div><p className="text-sm text-text-muted truncate opacity-80">{truncatedPreview}</p></div>
                 </div>
               );
             })
@@ -1805,264 +1605,65 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       </div>
 
-      {/* Column 2: main chat area */}
-      <div
-        className={`flex-1 flex flex-col min-w-0 bg-background relative ${
-          !selectedMatchId ? 'hidden md:flex' : 'flex'
-        }`}
-      >
+      {/* Main Content Area */}
+      <div className={`flex-1 flex flex-col min-w-0 bg-background relative ${!selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
         {selectedMatch ? (
-          // NEW LAYOUT WRAPPER (Full width/height, no padding)
-          <div className="flex-1 flex flex-col h-full w-full relative">
-            {/* CHAT PANE */}
-            <div className="flex-1 flex flex-col bg-surface/40 backdrop-blur-xl border-r border-white/5 relative h-full w-full">
+          // NEW LAYOUT WRAPPER (Padded with gap for bubble look)
+          <div className="flex-1 flex flex-row p-4 gap-4 h-full w-full bg-background overflow-hidden">
+            
+            {/* 1. CHAT CARD - Flex 1 to fill available space */}
+            <div className="flex-1 flex flex-col bg-surface/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-xl overflow-hidden relative min-w-0">
               
               {/* Chat header */}
               <div className="h-16 border-b border-white/5 bg-white/5 backdrop-blur-md shrink-0 flex items-center px-4 justify-between z-20">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <button
-                    onClick={() => setSelectedMatchId(null)}
-                    className="md:hidden text-text-muted hover:text-white shrink-0 p-1"
-                  >
-                    <ArrowLeft size={22} />
-                  </button>
-                  <img
-                    src={selectedMatch.user.imageUrl}
-                    alt={selectedMatch.user.name}
-                    className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0 cursor-pointer"
-                    onError={(e) => {
-                      e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
-                    }}
-                    onClick={() => setShowProfileModal(true)}
-                  />
+                  <button onClick={() => setSelectedMatchId(null)} className="md:hidden text-text-muted hover:text-white shrink-0 p-1"><ArrowLeft size={22} /></button>
+                  <img src={selectedMatch.user.imageUrl} alt={selectedMatch.user.name} className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0 cursor-pointer" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} onClick={() => setShowProfileModal(true)} />
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setShowProfileModal(true)}>
-                    <h3 className="font-bold text-text-main truncate">
-                      {getDisplayName(selectedMatch.user.name)}
-                    </h3>
+                    <h3 className="font-bold text-text-main truncate">{getDisplayName(selectedMatch.user.name)}</h3>
                     {(() => {
-                      const currentStatus = getPresenceStatus(
-                        selectedMatch.user.lastSeenAt
-                      );
-                      const statusLabel =
-                        currentStatus === 'online'
-                          ? 'Online'
-                          : currentStatus === 'away'
-                          ? 'Away'
-                          : 'Offline';
-                      const statusColor =
-                        currentStatus === 'online'
-                          ? 'text-green-500'
-                          : currentStatus === 'away'
-                          ? 'text-amber-500'
-                          : 'text-gray-500';
-
-                      return (
-                        <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
-                          <span className={statusColor}>●</span> {statusLabel}
-                          <span className="text-white/20">|</span>
-                          <span className="truncate">
-                            {selectedMatch.user.role}
-                          </span>
-                          <span className="hidden sm:inline">
-                            • {selectedMatch.user.stage}
-                          </span>
-                          <span className="hidden sm:inline">
-                            • {selectedMatch.user.industry}
-                          </span>
-                        </p>
-                      );
+                      const currentStatus = getPresenceStatus(selectedMatch.user.lastSeenAt);
+                      const statusLabel = currentStatus === 'online' ? 'Online' : currentStatus === 'away' ? 'Away' : 'Offline';
+                      const statusColor = currentStatus === 'online' ? 'text-green-500' : currentStatus === 'away' ? 'text-amber-500' : 'text-gray-500';
+                      return (<p className="text-xs text-text-muted truncate flex items-center gap-1.5"><span className={statusColor}>●</span> {statusLabel}<span className="text-white/20">|</span><span className="truncate">{selectedMatch.user.role}</span></p>);
                     })()}
                   </div>
                 </div>
-
                 <div className="flex items-center justify-center gap-2 shrink-0">
-                  <button
-                    onClick={() => onStartVideoCall(selectedMatch)}
-                    className="px-3 py-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-bold"
-                    title="Start Co-working Session"
-                  >
-                    <Video size={16} />
-                    <span className="hidden md:inline">Video Call</span>
-                  </button>
-
-                  <button
-                    onClick={handleDeleteChat}
-                    className="px-3 py-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
-                    title="Delete Chat History"
-                  >
-                    <Trash2 size={16} />
-                    <span className="hidden md:inline">Delete Chat</span>
-                  </button>
-
-                  <button
-                    onClick={handleUnmatchClick}
-                    className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
-                    title="Unmatch"
-                  >
-                    <UserMinus size={16} />
-                    <span className="hidden md:inline">Unmatch</span>
-                  </button>
+                  <button onClick={() => onStartVideoCall(selectedMatch)} className="p-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" title="Start Call"><Video size={18} /></button>
+                  <button onClick={handleDeleteChat} className="p-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center" title="Delete Chat"><Trash2 size={18} /></button>
+                  <button onClick={handleUnmatchClick} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center" title="Unmatch"><UserMinus size={18} /></button>
                 </div>
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
+              <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth custom-scrollbar">
                 <div className="w-full space-y-4">
-                  {isLoadingMessages && (
-                    <div className="flex justify-center p-4">
-                      <Loader2 className="animate-spin text-gold" />
-                    </div>
-                  )}
-
+                  {isLoadingMessages && <div className="flex justify-center p-4"><Loader2 className="animate-spin text-gold" /></div>}
                   {messages.length === 0 && !isLoadingMessages && (
                     <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
-                      <p className="mb-1">
-                        This is the start of your conversation with{' '}
-                        {getDisplayName(selectedMatch.user.name)}.
-                      </p>
+                      <p className="mb-1">This is the start of your conversation with {getDisplayName(selectedMatch.user.name)}.</p>
                       <p className="text-xs">Say hello to start collaborating!</p>
                     </div>
                   )}
-
                   {messages.map((msg, idx) => {
                     const isMe = msg.senderId === currentUser.id;
                     const prevMsg = messages[idx - 1];
                     const showDate = shouldShowDateDivider(msg, prevMsg);
-                    const showNewDivider =
-                      firstUnreadIndex !== -1 && idx === firstUnreadIndex;
-
+                    const showNewDivider = firstUnreadIndex !== -1 && idx === firstUnreadIndex;
                     const reactionsForMsg = messageReactions[msg.id] || {};
 
                     return (
                       <React.Fragment key={msg.id}>
-                        {showDate && (
-                          <div className="w-full flex justify-center my-6">
-                            <div className="flex items-center justify-center">
-                              <div className="h-px bg-white/5 w-16" />
-                              <span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">
-                                {getDateLabel(msg.timestamp as any)}
-                              </span>
-                              <div className="h-px bg-white/5 w-16" />
-                            </div>
-                          </div>
-                        )}
-
-                        {showNewDivider && (
-                          <div className="w-full flex justify-center my-3">
-                            <div className="flex items-center justify-center">
-                              <div className="h-px bg-gold/40 w-12" />
-                              <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
-                                New messages
-                              </span>
-                              <div className="h-px bg-gold/40 w-12" />
-                            </div>
-                          </div>
-                        )}
-
-                        <div
-                          className={`flex ${
-                            isMe ? 'justify-end' : 'justify-start'
-                          } group relative`}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            setActiveReactionMessageId(msg.id);
-                          }}
-                          onMouseDown={() => startLongPress(msg.id)}
-                          onMouseUp={cancelLongPress}
-                          onMouseLeave={cancelLongPress}
-                          onTouchStart={() => startLongPress(msg.id)}
-                          onTouchEnd={cancelLongPress}
-                        >
-                          {/* Reaction picker (shows on long-press / right-click) */}
-                          {activeReactionMessageId === msg.id && (
-                            <div
-                              className={`absolute -top-9 ${
-                                isMe ? 'right-0' : 'left-0'
-                              } bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}
-                            >
-                              {REACTION_EMOJIS.map((emoji) => (
-                                <button
-                                  key={emoji}
-                                  type="button"
-                                  onClick={() =>
-                                    handleToggleReaction(msg.id, emoji)
-                                  }
-                                  className="text-lg leading-none px-1 hover:scale-125 transition-transform"
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          <div
-                            className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] p-3.5 rounded-2xl shadow-sm ${
-                              isMe
-                                ? 'bg-primary text-white rounded-tr-sm'
-                                : 'bg-surface border border-white/5 text-text-main rounded-tl-sm'
-                            }`}
-                          >
-                            <p className="text-base md:text-base leading-relaxed">
-                              {msg.text}
-                            </p>
-
-                            <div
-                              className={`mt-1 space-y-1 ${
-                                isMe ? 'text-right' : 'text-left'
-                              }`}
-                            >
-                              {/* Time + Seen */}
-                              <div
-                                className={`flex items-center.gap-1 ${
-                                  isMe ? 'justify-end' : 'justify-start'
-                                }`}
-                              >
-                                <span
-                                  className={`text-[10px] ${
-                                    isMe
-                                      ? 'text-white/60'
-                                      : 'text-text-muted/60'
-                                  }`}
-                                >
-                                  {formatLocalTime(msg.timestamp as any)}
-                                </span>
-                                {isMe && msg.id === lastSeenMessageId && (
-                                  <span className="text-[10px] text-emerald-400 ml-2">
-                                    Seen
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Reactions (chips only) */}
-                              {Object.keys(reactionsForMsg).length > 0 && (
-                                <div
-                                  className={`flex items-center gap-1 flex-wrap ${
-                                    isMe ? 'justify-end' : 'justify-start'
-                                  }`}
-                                >
-                                  {Object.entries(reactionsForMsg).map(
-                                    ([emoji, info]) => (
-                                      <button
-                                        key={emoji}
-                                        type="button"
-                                        onClick={() =>
-                                          handleToggleReaction(msg.id, emoji)
-                                        }
-                                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
-                                          info.reactedByCurrentUser
-                                            ? 'bg-gold/20 border-gold/60 text-gold'
-                                            : isMe
-                                            ? 'bg-black/20 border-white/20 text-white/90'
-                                            : 'bg-black/10 border-white/10 text-text-main/90'
-                                        }`}
-                                      >
-                                        <span>{emoji}</span>
-                                        <span>{info.count}</span>
-                                      </button>
-                                    )
-                                  )}
-                                </div>
-                              )}
+                        {showDate && (<div className="w-full flex justify-center my-6"><div className="flex items-center justify-center"><div className="h-px bg-white/5 w-16" /><span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">{getDateLabel(msg.timestamp as any)}</span><div className="h-px bg-white/5 w-16" /></div></div>)}
+                        {showNewDivider && (<div className="w-full flex justify-center my-3"><div className="flex items-center justify-center"><div className="h-px bg-gold/40 w-12" /><span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">New messages</span><div className="h-px bg-gold/40 w-12" /></div></div>)}
+                        <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} group relative`} onContextMenu={(e) => { e.preventDefault(); setActiveReactionMessageId(msg.id); }} onMouseDown={() => startLongPress(msg.id)} onMouseUp={cancelLongPress} onMouseLeave={cancelLongPress} onTouchStart={() => startLongPress(msg.id)} onTouchEnd={cancelLongPress}>
+                          {activeReactionMessageId === msg.id && (<div className={`absolute -top-9 ${isMe ? 'right-0' : 'left-0'} bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}>{REACTION_EMOJIS.map((emoji) => (<button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className="text-lg leading-none px-1 hover:scale-125 transition-transform">{emoji}</button>))}</div>)}
+                          <div className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] p-3.5 rounded-2xl shadow-sm ${isMe ? 'bg-primary text-white rounded-tr-sm' : 'bg-surface border border-white/5 text-text-main rounded-tl-sm'}`}>
+                            <p className="text-base md:text-base leading-relaxed">{msg.text}</p>
+                            <div className={`mt-1 space-y-1 ${isMe ? 'text-right' : 'text-left'}`}>
+                              <div className={`flex items-center gap-1 ${isMe ? 'justify-end' : 'justify-start'}`}><span className={`text-[10px] ${isMe ? 'text-white/60' : 'text-text-muted/60'}`}>{formatLocalTime(msg.timestamp as any)}</span>{isMe && msg.id === lastSeenMessageId && (<span className="text-[10px] text-emerald-400 ml-2">Seen</span>)}</div>
+                              {Object.keys(reactionsForMsg).length > 0 && (<div className={`flex items-center gap-1 flex-wrap ${isMe ? 'justify-end' : 'justify-start'}`}>{Object.entries(reactionsForMsg).map(([emoji, info]) => (<button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors ${info.reactedByCurrentUser ? 'bg-gold/20 border-gold/60 text-gold' : isMe ? 'bg-black/20 border-white/20 text-white/90' : 'bg-black/10 border-white/10 text-text-main/90'}`}><span>{emoji}</span><span>{info.count}</span></button>))}</div>)}
                             </div>
                           </div>
                         </div>
@@ -2073,104 +1674,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               </div>
 
-              {/* Typing indicator */}
-              {isOtherTyping && (
-                <div className="absolute bottom-20 left-6 z-10 px-4 py-2 bg-surface/90 backdrop-blur border border-white/10 rounded-full text-xs text-text-muted italic shadow-lg">
-                  {getDisplayName(selectedMatch.user.name)} is typing…
-                </div>
-              )}
+              {isOtherTyping && (<div className="absolute bottom-20 left-6 z-10 px-4 py-2 bg-surface/90 backdrop-blur border border-white/10 rounded-full text-xs text-text-muted italic shadow-lg">{getDisplayName(selectedMatch.user.name)} is typing…</div>)}
 
               {/* Input area */}
               <div className="p-4 border-t border-white/5 bg-white/5 backdrop-blur-md shrink-0">
-                <div className="w-full">
-                  <div className="flex gap-2 items-end">
-                    <div className="flex-1 relative">
-                      {/* Emoji toggle button */}
-                      <button
-                        type="button"
-                        onClick={() => setShowEmojiPicker((prev) => !prev)}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
-                      >
-                        🙂
-                      </button>
-
-                      <input
-                        ref={messageInputRef}
-                        type="text"
-                        value={inputText}
-                        onChange={handleInputChange}
-                        onKeyDown={(e) =>
-                          e.key === 'Enter' && handleSendMessage()
-                        }
-                        placeholder="Type a message..."
-                        className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm"
-                      />
-
-                      {/* Emoji Picker */}
-                      {showEmojiPicker && (
-                        <div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
-                          {EMOJIS.map((e, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              onClick={() => handleEmojiClick(e)}
-                              className="hover:scale-125 transition-transform"
-                            >
-                              {e}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => handleSendMessage()}
-                      disabled={!inputText.trim()}
-                      className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
-                    >
-                      <Send size={20} />
-                    </button>
-                  </div>
-                </div>
+                <div className="w-full"><div className="flex gap-2 items-end"><div className="flex-1 relative"><button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform">🙂</button><input ref={messageInputRef} type="text" value={inputText} onChange={handleInputChange} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Type a message..." className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm" />{showEmojiPicker && (<div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">{EMOJIS.map((e, i) => (<button key={i} type="button" onClick={() => handleEmojiClick(e)} className="hover:scale-125 transition-transform">{e}</button>))}</div>)}</div><button onClick={() => handleSendMessage()} disabled={!inputText.trim()} className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"><Send size={20} /></button></div></div>
               </div>
             </div>
+
+            {/* Right Column Group: Shared Goals + Profile (Desktop Only) */}
+            <aside className="hidden xl:flex gap-4 w-[640px] shrink-0 h-full">
+               
+               {/* 2. SHARED GOALS CARD - Flexible width to fill gap */}
+               <div className="flex-1 min-w-[280px]">
+                 <SharedGoalsPanel
+                    isPlusOrPro={hasPlusAccess(currentUser)}
+                    partnerName={selectedMatch.user.name}
+                    onUpgrade={onUpgrade}
+                    matchId={selectedMatch.id}
+                 />
+               </div>
+
+               {/* 3. PROFILE CARD - Fixed width */}
+               <div className="w-[320px] bg-surface/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-xl flex flex-col shrink-0 overflow-hidden">
+                  <div className="flex-1 overflow-y-auto custom-scrollbar">
+                    <ProfileDetailView match={selectedMatch} />
+                  </div>
+               </div>
+            </aside>
+
           </div>
         ) : (
           // Empty state (desktop)
           <div className="w-full h-full hidden md:flex flex-col items-center justify-center bg-background p-8 text-center">
-            <h3 className="text-2xl font-bold text-text-main mb-3">
-              No conversation selected
-            </h3>
-            <p className="text-text-muted max-w-sm mx-auto leading-relaxed">
-              Choose a match on the left or add a fellow founder via Kova ID to
-              start collaborating.
-            </p>
-            <button
-              onClick={() => setShowConnectModal(true)}
-              className="mt-8 px-6 py-3 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-sm.font-medium transition-colors flex items-center gap-2 text-gold"
-            >
-              <UserPlus size={16} /> Connect New User
-            </button>
+            <h3 className="text-2xl font-bold text-text-main mb-3">No conversation selected</h3>
+            <p className="text-text-muted max-w-sm mx-auto leading-relaxed">Choose a match on the left or add a fellow founder via Kova ID to start collaborating.</p>
+            <button onClick={() => setShowConnectModal(true)} className="mt-8 px-6 py-3 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 text-gold"><UserPlus size={16} /> Connect New User</button>
           </div>
         )}
       </div>
-
-      {/* NEW Shared Goals Panel (Desktop) */}
-      {selectedMatch && (
-        <SharedGoalsPanel
-          isPlusOrPro={hasPlusAccess(currentUser)}
-          partnerName={selectedMatch.user.name}
-          onUpgrade={onUpgrade}
-          matchId={selectedMatch.id}
-        />
-      )}
-
-      {/* Column 3: profile context (desktop) */}
-      {selectedMatch && (
-        <div className="hidden lg:flex w-80 bg-surface/50 border-l border-white/5 flex-col shrink-0 overflow-y-auto">
-          <ProfileDetailView match={selectedMatch} />
-        </div>
-      )}
     </div>
   );
 };

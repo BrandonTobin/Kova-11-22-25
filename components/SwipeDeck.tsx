@@ -47,10 +47,11 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
   const activeUser = sortedUsers[currentIndex];
   const nextUser = sortedUsers[currentIndex + 1];
 
-  // Motion Values
+  // Motion Values - shared across renders but reset manually
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  // Subtle rotation (max 5 degrees) based on drag distance
+  
+  // Subtle rotation (max 5 degrees) based on X drag distance
   const rotate = useTransform(x, [-200, 200], [-5, 5]);
   
   // Opacity for overlays
@@ -59,37 +60,36 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
 
   const isLikesExhausted = userTier === 'free' && remainingLikes !== null && remainingLikes <= 0;
 
+  // Handle the end of a drag gesture
   const handleDragEnd = async (_: any, info: PanInfo) => {
     const threshold = 100;
     const velocityThreshold = 500;
     const offset = info.offset.x;
     const velocity = info.velocity.x;
 
-    // Refined direction logic: check offset OR velocity, but ensure velocity isn't contradicting position too extremely
-    // e.g., if offset is far left (-150), a right velocity shouldn't accidentally trigger a right swipe unless it's huge
+    // Swipe detection logic
     const isSwipeRight = offset > threshold || (velocity > velocityThreshold && offset > -50);
     const isSwipeLeft = offset < -threshold || (velocity < -velocityThreshold && offset < 50);
 
     if (isSwipeRight) {
       // SWIPE RIGHT (LIKE)
       if (isLikesExhausted) {
-        // Snap back and show limit modal
-        await controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
+        // Limit reached: Snap back to center
+        await controls.start({ x: 0, y: 0, rotate: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
         setShowLimitModal(true);
       } else {
-        // Animate out right
+        // Success: Animate out to the right
         await controls.start({ x: 500, opacity: 0, transition: { duration: 0.2 } });
         triggerSwipe('right');
       }
     } else if (isSwipeLeft) {
       // SWIPE LEFT (NOPE)
-      // Animate out left
+      // Success: Animate out to the left
       await controls.start({ x: -500, opacity: 0, transition: { duration: 0.2 } });
       triggerSwipe('left');
     } else {
-      // Snap back to center
-      // This resets both X and Y, preventing vertical drift
-      controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 500, damping: 30 } });
+      // No Swipe: Snap back to center (Reset X and Y)
+      controls.start({ x: 0, y: 0, rotate: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
     }
   };
 
@@ -97,11 +97,13 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
     if (!activeUser) return;
     onSwipe(direction, activeUser);
     
-    // Reset position instantly for next card, but index update will trigger re-render
+    // IMPORTANT: Reset motion values immediately before mounting the new card.
+    // This ensures the next card doesn't inherit the drag position of the previous one.
     x.set(0);
     y.set(0);
+    controls.set({ x: 0, y: 0, rotate: 0, opacity: 1 });
+
     setCurrentIndex(prev => prev + 1);
-    controls.set({ x: 0, y: 0, opacity: 1 });
   };
 
   // Button handlers
@@ -120,9 +122,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
   const getCardStyles = (tier: SubscriptionTier) => {
     if (tier === 'kova_pro') {
       return {
-        // Glowing gold border
         container: 'border-2 border-gold shadow-[0_0_25px_rgba(214,167,86,0.5)]',
-        // Darker gold ribbon background
         badgeBg: 'bg-[#B8860B]', 
         badgeText: '👑 KOVA PRO USER',
         glow: true
@@ -130,15 +130,12 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
     }
     if (tier === 'kova_plus') {
       return {
-        // Glowing emerald border
         container: 'border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.5)]',
-        // Darker emerald ribbon background
         badgeBg: 'bg-emerald-700',
         badgeText: '💎 KOVA PLUS USER',
         glow: true
       };
     }
-    // Free user: Standard clean look
     return {
       container: 'border border-white/10 shadow-xl',
       badgeBg: '',
@@ -227,7 +224,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         key={activeUser.id}
         style={{ x, y, rotate }}
         animate={controls}
-        drag // Freely drag in any direction
+        drag
         dragConstraints={{ left: -200, right: 200, top: -300, bottom: 300 }}
         dragElastic={0.1}
         dragMomentum={false} // Prevents card from drifting on release

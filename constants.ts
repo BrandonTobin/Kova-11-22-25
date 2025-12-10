@@ -15,16 +15,16 @@ export const SUBSCRIPTION_PLANS: Record<SubscriptionTier, PlanConfig> = {
   kova_plus: {
     id: 'kova_plus',
     name: 'Kova Plus',
-    price: '$7.99/mo',
-    priceValue: 7.99,
+    price: '$9.99/mo',
+    priceValue: 9.99,
     description: 'Unlock unlimited swipes, see who liked you, and boost your profile visibility.',
     features: ['Unlimited Swipes', 'See Who Liked You', 'Daily Profile Boost', 'Rewind Last Swipe']
   },
   kova_pro: {
     id: 'kova_pro',
     name: 'Kova Pro',
-    price: '$16.99/mo',
-    priceValue: 16.99,
+    price: '$19.99/mo',
+    priceValue: 19.99,
     description: 'Unlock Kova AI insights, deep analytics, and advanced performance tracking.',
     features: ['Everything in Kova Plus', 'Kova AI Insights', 'Consistency Heatmap', 'Deep-Work Analytics', 'Priority Support']
   }

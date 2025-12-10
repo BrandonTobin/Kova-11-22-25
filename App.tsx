@@ -1315,7 +1315,7 @@ function App() {
                   </div>
                   <div className="text-center mb-4 mt-2">
                     <h3 className="text-xl font-bold text-emerald-400">Kova Plus</h3>
-                    <p className="text-2xl font-bold text-text-main mt-1">$7.99<span className="text-sm font-normal text-text-muted">/mo</span></p>
+                    <p className="text-2xl font-bold text-text-main mt-1">$9.99<span className="text-sm font-normal text-text-muted">/mo</span></p>
                   </div>
                   <ul className="space-y-3 mb-6 flex-1 text-sm text-text-main">
                     <li className="flex items-center gap-2"><Gem size={14} className="text-emerald-400" /> Unlimited Swipes</li>

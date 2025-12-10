@@ -222,6 +222,8 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         style={{ x, y, rotate }}
         animate={controls}
         drag // Freely drag in any direction
+        dragConstraints={{ left: -200, right: 200, top: -300, bottom: 300 }}
+        dragElastic={0.1}
         onDragEnd={handleDragEnd}
         whileTap={{ cursor: 'grabbing', scale: 1.02 }}
         className={`absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}

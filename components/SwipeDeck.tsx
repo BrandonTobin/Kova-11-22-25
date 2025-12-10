@@ -50,7 +50,8 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
   // Motion Values
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const rotate = useTransform(x, [-200, 200], [-15, 15]);
+  // Subtle rotation (max 5 degrees) based on drag distance
+  const rotate = useTransform(x, [-200, 200], [-5, 5]);
   
   // Opacity for overlays
   const likeOpacity = useTransform(x, [20, 150], [0, 1]);
@@ -81,7 +82,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
       await controls.start({ x: -500, opacity: 0, transition: { duration: 0.2 } });
       triggerSwipe('left');
     } else {
-      // Snap back
+      // Snap back to center
       controls.start({ x: 0, y: 0, transition: { type: 'spring', stiffness: 500, damping: 30 } });
     }
   };
@@ -113,27 +114,29 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
   const getCardStyles = (tier: SubscriptionTier) => {
     if (tier === 'kova_pro') {
       return {
-        container: 'border-2 border-gold shadow-[0_0_25px_rgba(214,167,86,0.4)]',
-        badge: 'bg-gradient-to-r from-gold to-amber-500 text-white',
-        icon: <Crown size={14} className="text-white fill-white/20" />,
-        label: 'Kova Pro User',
+        // Glowing gold border
+        container: 'border-2 border-gold shadow-[0_0_25px_rgba(214,167,86,0.5)]',
+        // Darker gold ribbon background
+        badgeBg: 'bg-[#B8860B]', 
+        badgeText: '👑 KOVA PRO USER',
         glow: true
       };
     }
     if (tier === 'kova_plus') {
       return {
-        container: 'border-2 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]',
-        badge: 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white',
-        icon: <Gem size={14} className="text-white fill-white/20" />,
-        label: 'Kova Plus User',
+        // Glowing emerald border
+        container: 'border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.5)]',
+        // Darker emerald ribbon background
+        badgeBg: 'bg-emerald-700',
+        badgeText: '💎 KOVA PLUS USER',
         glow: true
       };
     }
+    // Free user: Standard clean look
     return {
       container: 'border border-white/10 shadow-xl',
-      badge: '',
-      icon: null,
-      label: '',
+      badgeBg: '',
+      badgeText: '',
       glow: false
     };
   };
@@ -218,18 +221,15 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         key={activeUser.id}
         style={{ x, y, rotate }}
         animate={controls}
-        drag
-        dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-        dragElastic={0.6}
+        drag // Freely drag in any direction
         onDragEnd={handleDragEnd}
         whileTap={{ cursor: 'grabbing', scale: 1.02 }}
         className={`absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}
       >
-        {/* Premium Banner */}
-        {styles.label && (
-           <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest shadow-lg flex items-center gap-1.5 ${styles.badge}`}>
-             {styles.icon}
-             {styles.label}
+        {/* Premium Banner (Top Ribbon) */}
+        {styles.badgeText && (
+           <div className={`absolute top-0 left-1/2 -translate-x-1/2 z-40 px-6 py-1.5 rounded-b-lg text-[10px] md:text-xs font-bold uppercase tracking-widest text-white shadow-lg flex items-center justify-center whitespace-nowrap ${styles.badgeBg}`}>
+             {styles.badgeText}
            </div>
         )}
 
@@ -316,17 +316,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
                 </span>
               ))}
             </div>
-
-            {/* Free User CTA */}
-            {userTier === 'free' && (
-              <button 
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => { e.stopPropagation(); onUpgrade?.('kova_plus'); }}
-                className="w-full py-2 bg-gradient-to-r from-gold/10 to-transparent border border-gold/30 rounded-lg flex items-center justify-center gap-2 text-gold text-xs font-bold hover:bg-gold/20 transition-colors"
-              >
-                <Zap size={12} fill="currentColor" /> Upgrade to Connect Instantly
-              </button>
-            )}
           </div>
         </div>
       </motion.div>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
@@ -1805,332 +1804,337 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Column 2: main chat area */}
       <div
-        className={`flex-1 flex flex-col min-w-0 bg-background.relative ${
+        className={`flex-1 flex flex-col min-w-0 bg-background relative ${
           !selectedMatchId ? 'hidden md:flex' : 'flex'
         }`}
       >
         {selectedMatch ? (
-          <>
-            {/* Chat header */}
-            <div className="h-16 border-b border-white/5 bg-surface/50 backdrop-blur-md shrink-0 sticky top-0 z-20 px-3 md:px-6 relative py-[10px]">
-              <div className="flex items-center.gap-3 min-w-0 mr-2 pr-40 h-full">
-                <button
-                  onClick={() => setSelectedMatchId(null)}
-                  className="md:hidden text-text-muted hover:text-white shrink-0 p-1"
-                >
-                  <ArrowLeft size={22} />
-                </button>
-                <img
-                  src={selectedMatch.user.imageUrl}
-                  alt={selectedMatch.user.name}
-                  className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0"
-                  onError={(e) => {
-                    e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
-                  }}
-                  onClick={() => setShowProfileModal(true)}
-                />
-                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setShowProfileModal(true)}>
-                  <h3 className="font-bold text-text-main truncate">
-                    {getDisplayName(selectedMatch.user.name)}
-                  </h3>
-                  {(() => {
-                    const currentStatus = getPresenceStatus(
-                      selectedMatch.user.lastSeenAt
-                    );
-                    const statusLabel =
-                      currentStatus === 'online'
-                        ? 'Online'
-                        : currentStatus === 'away'
-                        ? 'Away'
-                        : 'Offline';
-                    const statusColor =
-                      currentStatus === 'online'
-                        ? 'text-green-500'
-                        : currentStatus === 'away'
-                        ? 'text-amber-500'
-                        : 'text-gray-500';
+          // NEW LAYOUT WRAPPER
+          <div className="flex-1 flex flex-col items-center justify-center md:p-6 h-full w-full">
+            {/* CHAT CARD */}
+            <div className="w-full max-w-3xl h-full flex flex-col bg-surface/40 backdrop-blur-xl border-white/5 md:border md:rounded-3xl shadow-2xl overflow-hidden relative">
+              
+              {/* Chat header */}
+              <div className="h-16 border-b border-white/5 bg-white/5 backdrop-blur-md shrink-0 flex items-center px-4 justify-between z-20">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <button
+                    onClick={() => setSelectedMatchId(null)}
+                    className="md:hidden text-text-muted hover:text-white shrink-0 p-1"
+                  >
+                    <ArrowLeft size={22} />
+                  </button>
+                  <img
+                    src={selectedMatch.user.imageUrl}
+                    alt={selectedMatch.user.name}
+                    className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0 cursor-pointer"
+                    onError={(e) => {
+                      e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
+                    }}
+                    onClick={() => setShowProfileModal(true)}
+                  />
+                  <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setShowProfileModal(true)}>
+                    <h3 className="font-bold text-text-main truncate">
+                      {getDisplayName(selectedMatch.user.name)}
+                    </h3>
+                    {(() => {
+                      const currentStatus = getPresenceStatus(
+                        selectedMatch.user.lastSeenAt
+                      );
+                      const statusLabel =
+                        currentStatus === 'online'
+                          ? 'Online'
+                          : currentStatus === 'away'
+                          ? 'Away'
+                          : 'Offline';
+                      const statusColor =
+                        currentStatus === 'online'
+                          ? 'text-green-500'
+                          : currentStatus === 'away'
+                          ? 'text-amber-500'
+                          : 'text-gray-500';
 
-                    return (
-                      <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
-                        <span className={statusColor}>●</span> {statusLabel}
-                        <span className="text-white/20">|</span>
-                        <span className="truncate">
-                          {selectedMatch.user.role}
-                        </span>
-                        <span className="hidden sm:inline">
-                          • {selectedMatch.user.stage}
-                        </span>
-                        <span className="hidden sm:inline">
-                          • {selectedMatch.user.industry}
-                        </span>
-                      </p>
-                    );
-                  })()}
+                      return (
+                        <p className="text-xs text-text-muted truncate flex items-center gap-1.5">
+                          <span className={statusColor}>●</span> {statusLabel}
+                          <span className="text-white/20">|</span>
+                          <span className="truncate">
+                            {selectedMatch.user.role}
+                          </span>
+                          <span className="hidden sm:inline">
+                            • {selectedMatch.user.stage}
+                          </span>
+                          <span className="hidden sm:inline">
+                            • {selectedMatch.user.industry}
+                          </span>
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 shrink-0">
+                  <button
+                    onClick={() => onStartVideoCall(selectedMatch)}
+                    className="px-3 py-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-bold"
+                    title="Start Co-working Session"
+                  >
+                    <Video size={16} />
+                    <span className="hidden md:inline">Video Call</span>
+                  </button>
+
+                  <button
+                    onClick={handleDeleteChat}
+                    className="px-3 py-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
+                    title="Delete Chat History"
+                  >
+                    <Trash2 size={16} />
+                    <span className="hidden md:inline">Delete Chat</span>
+                  </button>
+
+                  <button
+                    onClick={handleUnmatchClick}
+                    className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
+                    title="Unmatch"
+                  >
+                    <UserMinus size={16} />
+                    <span className="hidden md:inline">Unmatch</span>
+                  </button>
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-2 shrink-0 absolute right-3 md:right-6 top-1/2 -translate-y-1/2">
-                <button
-                  onClick={() => onStartVideoCall(selectedMatch)}
-                  className="px-3 py-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-bold"
-                  title="Start Co-working Session"
-                >
-                  <Video size={16} />
-                  <span className="hidden md:inline">Video Call</span>
-                </button>
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth">
+                <div className="w-full space-y-4">
+                  {isLoadingMessages && (
+                    <div className="flex justify-center p-4">
+                      <Loader2 className="animate-spin text-gold" />
+                    </div>
+                  )}
 
-                <button
-                  onClick={handleDeleteChat}
-                  className="px-3 py-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
-                  title="Delete Chat History"
-                >
-                  <Trash2 size={16} />
-                  <span className="hidden md:inline">Delete Chat</span>
-                </button>
+                  {messages.length === 0 && !isLoadingMessages && (
+                    <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
+                      <p className="mb-1">
+                        This is the start of your conversation with{' '}
+                        {getDisplayName(selectedMatch.user.name)}.
+                      </p>
+                      <p className="text-xs">Say hello to start collaborating!</p>
+                    </div>
+                  )}
 
-                <button
-                  onClick={handleUnmatchClick}
-                  className="px-3 py-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center gap-2 [&>*]:flex [&>*]:items-center text-xs font-medium"
-                  title="Unmatch"
-                >
-                  <UserMinus size={16} />
-                  <span className="hidden md:inline">Unmatch</span>
-                </button>
-              </div>
-            </div>
+                  {messages.map((msg, idx) => {
+                    const isMe = msg.senderId === currentUser.id;
+                    const prevMsg = messages[idx - 1];
+                    const showDate = shouldShowDateDivider(msg, prevMsg);
+                    const showNewDivider =
+                      firstUnreadIndex !== -1 && idx === firstUnreadIndex;
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-background">
-              <div className="w-full space-y-4">
-                {isLoadingMessages && (
-                  <div className="flex justify-center p-4">
-                    <Loader2 className="animate-spin text-gold" />
-                  </div>
-                )}
+                    const reactionsForMsg = messageReactions[msg.id] || {};
 
-                {messages.length === 0 && !isLoadingMessages && (
-                  <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
-                    <p className="mb-1">
-                      This is the start of your conversation with{' '}
-                      {getDisplayName(selectedMatch.user.name)}.
-                    </p>
-                    <p className="text-xs">Say hello to start collaborating!</p>
-                  </div>
-                )}
-
-                {messages.map((msg, idx) => {
-                  const isMe = msg.senderId === currentUser.id;
-                  const prevMsg = messages[idx - 1];
-                  const showDate = shouldShowDateDivider(msg, prevMsg);
-                  const showNewDivider =
-                    firstUnreadIndex !== -1 && idx === firstUnreadIndex;
-
-                  const reactionsForMsg = messageReactions[msg.id] || {};
-
-                  return (
-                    <React.Fragment key={msg.id}>
-                      {showDate && (
-                        <div className="w-full flex justify-center my-6">
-                          <div className="flex items-center justify-center">
-                            <div className="h-px bg-white/5 w-16" />
-                            <span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">
-                              {getDateLabel(msg.timestamp as any)}
-                            </span>
-                            <div className="h-px bg-white/5 w-16" />
+                    return (
+                      <React.Fragment key={msg.id}>
+                        {showDate && (
+                          <div className="w-full flex justify-center my-6">
+                            <div className="flex items-center justify-center">
+                              <div className="h-px bg-white/5 w-16" />
+                              <span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">
+                                {getDateLabel(msg.timestamp as any)}
+                              </span>
+                              <div className="h-px bg-white/5 w-16" />
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {showNewDivider && (
-                        <div className="w-full flex justify-center my-3">
-                          <div className="flex items-center justify-center">
-                            <div className="h-px bg-gold/40 w-12" />
-                            <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
-                              New messages
-                            </span>
-                            <div className="h-px bg-gold/40 w-12" />
-                          </div>
-                        </div>
-                      )}
-
-                      <div
-                        className={`flex ${
-                          isMe ? 'justify-end' : 'justify-start'
-                        } group relative`}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setActiveReactionMessageId(msg.id);
-                        }}
-                        onMouseDown={() => startLongPress(msg.id)}
-                        onMouseUp={cancelLongPress}
-                        onMouseLeave={cancelLongPress}
-                        onTouchStart={() => startLongPress(msg.id)}
-                        onTouchEnd={cancelLongPress}
-                      >
-                        {/* Reaction picker (shows on long-press / right-click) */}
-                        {activeReactionMessageId === msg.id && (
-                          <div
-                            className={`absolute -top-9 ${
-                              isMe ? 'right-0' : 'left-0'
-                            } bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}
-                          >
-                            {REACTION_EMOJIS.map((emoji) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() =>
-                                  handleToggleReaction(msg.id, emoji)
-                                }
-                                className="text-lg leading-none px-1 hover:scale-125 transition-transform"
-                              >
-                                {emoji}
-                              </button>
-                            ))}
+                        {showNewDivider && (
+                          <div className="w-full flex justify-center my-3">
+                            <div className="flex items-center justify-center">
+                              <div className="h-px bg-gold/40 w-12" />
+                              <span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">
+                                New messages
+                              </span>
+                              <div className="h-px bg-gold/40 w-12" />
+                            </div>
                           </div>
                         )}
 
                         <div
-                          className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] p-3.5 rounded-2xl shadow-sm ${
-                            isMe
-                              ? 'bg-primary text-white rounded-tr-sm'
-                              : 'bg-surface border border-white/5 text-text-main rounded-tl-sm'
-                          }`}
+                          className={`flex ${
+                            isMe ? 'justify-end' : 'justify-start'
+                          } group relative`}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setActiveReactionMessageId(msg.id);
+                          }}
+                          onMouseDown={() => startLongPress(msg.id)}
+                          onMouseUp={cancelLongPress}
+                          onMouseLeave={cancelLongPress}
+                          onTouchStart={() => startLongPress(msg.id)}
+                          onTouchEnd={cancelLongPress}
                         >
-                          <p className="text-base md:text-base leading-relaxed">
-                            {msg.text}
-                          </p>
+                          {/* Reaction picker (shows on long-press / right-click) */}
+                          {activeReactionMessageId === msg.id && (
+                            <div
+                              className={`absolute -top-9 ${
+                                isMe ? 'right-0' : 'left-0'
+                              } bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}
+                            >
+                              {REACTION_EMOJIS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() =>
+                                    handleToggleReaction(msg.id, emoji)
+                                  }
+                                  className="text-lg leading-none px-1 hover:scale-125 transition-transform"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
 
                           <div
-                            className={`mt-1 space-y-1 ${
-                              isMe ? 'text-right' : 'text-left'
+                            className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] p-3.5 rounded-2xl shadow-sm ${
+                              isMe
+                                ? 'bg-primary text-white rounded-tr-sm'
+                                : 'bg-surface border border-white/5 text-text-main rounded-tl-sm'
                             }`}
                           >
-                            {/* Time + Seen */}
+                            <p className="text-base md:text-base leading-relaxed">
+                              {msg.text}
+                            </p>
+
                             <div
-                              className={`flex items-center.gap-1 ${
-                                isMe ? 'justify-end' : 'justify-start'
+                              className={`mt-1 space-y-1 ${
+                                isMe ? 'text-right' : 'text-left'
                               }`}
                             >
-                              <span
-                                className={`text-[10px] ${
-                                  isMe
-                                    ? 'text-white/60'
-                                    : 'text-text-muted/60'
-                                }`}
-                              >
-                                {formatLocalTime(msg.timestamp as any)}
-                              </span>
-                              {isMe && msg.id === lastSeenMessageId && (
-                                <span className="text-[10px] text-emerald-400 ml-2">
-                                  Seen
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Reactions (chips only) */}
-                            {Object.keys(reactionsForMsg).length > 0 && (
+                              {/* Time + Seen */}
                               <div
-                                className={`flex items-center gap-1 flex-wrap ${
+                                className={`flex items-center.gap-1 ${
                                   isMe ? 'justify-end' : 'justify-start'
                                 }`}
                               >
-                                {Object.entries(reactionsForMsg).map(
-                                  ([emoji, info]) => (
-                                    <button
-                                      key={emoji}
-                                      type="button"
-                                      onClick={() =>
-                                        handleToggleReaction(msg.id, emoji)
-                                      }
-                                      className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
-                                        info.reactedByCurrentUser
-                                          ? 'bg-gold/20 border-gold/60 text-gold'
-                                          : isMe
-                                          ? 'bg-black/20 border-white/20 text-white/90'
-                                          : 'bg-black/10 border-white/10 text-text-main/90'
-                                      }`}
-                                    >
-                                      <span>{emoji}</span>
-                                      <span>{info.count}</span>
-                                    </button>
-                                  )
+                                <span
+                                  className={`text-[10px] ${
+                                    isMe
+                                      ? 'text-white/60'
+                                      : 'text-text-muted/60'
+                                  }`}
+                                >
+                                  {formatLocalTime(msg.timestamp as any)}
+                                </span>
+                                {isMe && msg.id === lastSeenMessageId && (
+                                  <span className="text-[10px] text-emerald-400 ml-2">
+                                    Seen
+                                  </span>
                                 )}
                               </div>
-                            )}
+
+                              {/* Reactions (chips only) */}
+                              {Object.keys(reactionsForMsg).length > 0 && (
+                                <div
+                                  className={`flex items-center gap-1 flex-wrap ${
+                                    isMe ? 'justify-end' : 'justify-start'
+                                  }`}
+                                >
+                                  {Object.entries(reactionsForMsg).map(
+                                    ([emoji, info]) => (
+                                      <button
+                                        key={emoji}
+                                        type="button"
+                                        onClick={() =>
+                                          handleToggleReaction(msg.id, emoji)
+                                        }
+                                        className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
+                                          info.reactedByCurrentUser
+                                            ? 'bg-gold/20 border-gold/60 text-gold'
+                                            : isMe
+                                            ? 'bg-black/20 border-white/20 text-white/90'
+                                            : 'bg-black/10 border-white/10 text-text-main/90'
+                                        }`}
+                                      >
+                                        <span>{emoji}</span>
+                                        <span>{info.count}</span>
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </React.Fragment>
-                  );
-                })}
-                <div ref={messagesEndRef} />
+                      </React.Fragment>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
               </div>
-            </div>
 
-            {/* Typing indicator */}
-            {isOtherTyping && (
-              <div className="px-6 pb-1 text-xs text-text-muted italic">
-                {getDisplayName(selectedMatch.user.name)} is typing…
-              </div>
-            )}
+              {/* Typing indicator */}
+              {isOtherTyping && (
+                <div className="absolute bottom-20 left-6 z-10 px-4 py-2 bg-surface/90 backdrop-blur border border-white/10 rounded-full text-xs text-text-muted italic shadow-lg">
+                  {getDisplayName(selectedMatch.user.name)} is typing…
+                </div>
+              )}
 
-            {/* Input area */}
-            <div className="p-4 bg-surface border-t border-white/5 shrink-0">
-              <div className="max-w-4xl mx-auto w-full">
-                <div className="flex gap-2 items-end">
-                  <div className="flex-1 relative">
-                    {/* Emoji toggle button */}
+              {/* Input area */}
+              <div className="p-4 border-t border-white/5 bg-white/5 backdrop-blur-md shrink-0">
+                <div className="w-full">
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1 relative">
+                      {/* Emoji toggle button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
+                      >
+                        🙂
+                      </button>
+
+                      <input
+                        ref={messageInputRef}
+                        type="text"
+                        value={inputText}
+                        onChange={handleInputChange}
+                        onKeyDown={(e) =>
+                          e.key === 'Enter' && handleSendMessage()
+                        }
+                        placeholder="Type a message..."
+                        className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm"
+                      />
+
+                      {/* Emoji Picker */}
+                      {showEmojiPicker && (
+                        <div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
+                          {EMOJIS.map((e, i) => (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => handleEmojiClick(e)}
+                              className="hover:scale-125 transition-transform"
+                            >
+                              {e}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <button
-                      type="button"
-                      onClick={() => setShowEmojiPicker((prev) => !prev)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform"
+                      onClick={() => handleSendMessage()}
+                      disabled={!inputText.trim()}
+                      className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
                     >
-                      🙂
+                      <Send size={20} />
                     </button>
-
-                    <input
-                      ref={messageInputRef}
-                      type="text"
-                      value={inputText}
-                      onChange={handleInputChange}
-                      onKeyDown={(e) =>
-                        e.key === 'Enter' && handleSendMessage()
-                      }
-                      placeholder="Type a message..."
-                      className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm"
-                    />
-
-                    {/* Emoji Picker */}
-                    {showEmojiPicker && (
-                      <div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
-                        {EMOJIS.map((e, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => handleEmojiClick(e)}
-                            className="hover:scale-125 transition-transform"
-                          >
-                            {e}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
-
-                  <button
-                    onClick={() => handleSendMessage()}
-                    disabled={!inputText.trim()}
-                    className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
-                  >
-                    <Send size={20} />
-                  </button>
                 </div>
               </div>
             </div>
-          </>
+          </div>
         ) : (
           // Empty state (desktop)
-          <div className="w-full h-full.hidden md:flex flex-col items-center.justify-center bg-background p-8 text-center">
+          <div className="w-full h-full hidden md:flex flex-col items-center justify-center bg-background p-8 text-center">
             <h3 className="text-2xl font-bold text-text-main mb-3">
               No conversation selected
             </h3>

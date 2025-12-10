@@ -1271,7 +1271,7 @@ function App() {
                 {/* Kova Pro (Locked State) */}
                 <div className="relative border border-white/5 bg-black/20 p-6 rounded-2xl flex flex-col overflow-hidden pointer-events-none select-none">
                    {/* Blur Overlay - Increased blur strength */}
-                   <div className="opacity-40 blur-[5px] flex flex-col h-full">
+                   <div className="opacity-30 blur-[6px] flex flex-col h-full">
                       <h3 className="text-xl font-bold text-gold mt-2 mb-4 text-center">Kova Pro</h3>
                       <ul className="space-y-3 mb-6 flex-1 text-sm text-text-muted">
                         <li className="flex items-center gap-2"><Crown size={14} className="text-gold" /> All Plus features</li>

@@ -607,7 +607,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                     </div>
                     <div className="text-center">
                        <p className="font-bold text-text-main text-lg">{getDisplayName(match.user.name)}</p>
-                       <p className="text-xs text-text-muted">Audio Call</p>
+                       <p className="text-xs text-text-muted">Connected</p>
                     </div>
                  </div>
               )}

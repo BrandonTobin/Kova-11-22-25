@@ -292,6 +292,16 @@ function App() {
           const newSession = payload.new;
           if (!newSession) return;
 
+          // VOICE CHANNEL LOGIC: 
+          // If this is a voice channel (audio), we DO NOT show a global popup.
+          // Voice channels are drop-in/drop-out via the Chat UI.
+          if (newSession.call_type !== 'video') {
+            return;
+          }
+
+          // VIDEO CALL LOGIC:
+          // Proceed with popup only for video calls.
+
           // Only accept sessions started very recently (e.g., last 60 seconds)
           const startTime = new Date(newSession.started_at).getTime();
           const now = Date.now();
@@ -332,7 +342,7 @@ function App() {
                 securityAnswer: ''
             };
 
-            const callType = newSession.call_type === 'audio' ? 'audio' : 'video';
+            const callType = 'video'; // Explicitly set to video as we filtered out audio above
             setIncomingCall({
               sessionId: newSession.id,
               caller,
@@ -1102,9 +1112,6 @@ function App() {
 
       if (msgError) {
         console.error('[UNMATCH] Failed to delete messages for match:', msgError);
-        // we don't return here – we still attempt to delete the match row itself
-      } else {
-        console.log('[UNMATCH] Messages deleted for matchId =', matchId);
       }
 
       // 2) Delete the match row itself
@@ -1118,8 +1125,6 @@ function App() {
         alert('Failed to unmatch. Please check the console for details.');
         return;
       }
-
-      console.log('[UNMATCH] Match row deleted for matchId =', matchId);
 
       // 3) Update local React state so it disappears immediately from UI
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
@@ -1196,8 +1201,6 @@ function App() {
       setIsProcessingPayment(true);
       try {
         // Use backend to create a Checkout Session with the live key
-        // Assuming the backend is served at the same origin or configured via proxy/env
-        // We use the relative path /api which should map to the backend server
         const response = await fetch('/api/stripe/create-checkout-session', {
             method: 'POST',
             headers: {

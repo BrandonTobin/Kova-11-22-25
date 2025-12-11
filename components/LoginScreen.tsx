@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { ArrowRight, UserPlus, Mail, Lock, KeyRound, ArrowLeft, CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 import LegalFooter from './LegalFooter';
@@ -94,19 +95,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-10">
         {/* Brand Mark */}
-        <div className="flex justify-center mb-6">
-            <div className="relative w-16 h-16 rounded-full border-2 border-gold/30 flex items-center justify-center shadow-[0_0_15px_rgba(214,167,86,0.15)] bg-surface">
-              <div className="absolute inset-0 rounded-full border border-gold/10 scale-110"></div>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="ml-0.5">
-                <path d="M2 2H7V10L17 2H22L12 12L22 22H17L7 14V22H2V2Z" fill="url(#k_gradient)" />
-                <defs>
-                  <linearGradient id="k_gradient" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#D6A756"/>
-                    <stop offset="1" stopColor="#B8860B"/>
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
+        <div className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-full border border-emerald-400/40 bg-black/40 shadow-[0_0_40px_rgba(0,255,180,0.45)]">
+          <img
+            src="https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/Kova_logo_transparent.png"
+            alt="Kova Logo"
+            className="h-12 w-12 object-contain"
+          />
         </div>
         
         <h1 className="text-3xl font-bold text-text-main mb-2 tracking-tight">Welcome Back</h1>

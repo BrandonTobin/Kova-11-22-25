@@ -37,6 +37,12 @@ const getSuperLikeQuota = (tier: SubscriptionTier = 'free') => {
   return 1;
 };
 
+// Helper to get daily Rewind quota
+const getRewindQuota = (tier: SubscriptionTier = 'free') => {
+  if (tier === 'kova_pro' || tier === 'kova_plus') return 5;
+  return 0; // Free users get 0 rewinds
+};
+
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ 
   users, 
   onSwipe, 
@@ -56,41 +62,61 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   // Track refunded swipes locally to update the UI counter without touching backend
   const [refundedSwipes, setRefundedSwipes] = useState(0);
 
-  // Super Like State
+  // Quota States
   const [superLikesUsed, setSuperLikesUsed] = useState(0);
-  const [showSuperLikeToast, setShowSuperLikeToast] = useState(false);
+  const [rewindsUsed, setRewindsUsed] = useState(0);
+  
+  // Toast State
+  const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Daily Quota Logic for Superlikes
+  // Daily Quota Logic
   const superLikeQuota = getSuperLikeQuota(userTier);
+  const rewindQuota = getRewindQuota(userTier);
+  
   const superLikesLeft = Math.max(0, superLikeQuota - superLikesUsed);
+  // We track rewind usage, but for free users quota is 0.
 
-  // Initialize/Reset Superlikes from LocalStorage
+  // Initialize/Reset Quotas from LocalStorage with Daily Reset Logic
   useEffect(() => {
     if (!currentUserId) return;
     
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const key = `kova_superlikes_${currentUserId}_${today}`;
+    const superKey = `kova_superlikes_${currentUserId}_${today}`;
+    const rewindKey = `kova_rewinds_${currentUserId}_${today}`;
     
-    const stored = localStorage.getItem(key);
-    if (stored) {
-      setSuperLikesUsed(parseInt(stored, 10));
-    } else {
-      setSuperLikesUsed(0);
-    }
+    // Load Super Likes
+    const storedSuper = localStorage.getItem(superKey);
+    setSuperLikesUsed(storedSuper ? parseInt(storedSuper, 10) : 0);
+
+    // Load Rewinds
+    const storedRewind = localStorage.getItem(rewindKey);
+    setRewindsUsed(storedRewind ? parseInt(storedRewind, 10) : 0);
+
   }, [currentUserId]);
 
-  const incrementSuperLikeUsage = () => {
+  const updateUsage = (type: 'superlike' | 'rewind') => {
     if (!currentUserId) return;
     const today = new Date().toISOString().split('T')[0];
-    const key = `kova_superlikes_${currentUserId}_${today}`;
-    const newVal = superLikesUsed + 1;
-    setSuperLikesUsed(newVal);
-    localStorage.setItem(key, newVal.toString());
+    
+    if (type === 'superlike') {
+      const newVal = superLikesUsed + 1;
+      setSuperLikesUsed(newVal);
+      localStorage.setItem(`kova_superlikes_${currentUserId}_${today}`, newVal.toString());
+    } else {
+      const newVal = rewindsUsed + 1;
+      setRewindsUsed(newVal);
+      localStorage.setItem(`kova_rewinds_${currentUserId}_${today}`, newVal.toString());
+    }
+  };
+
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   // Use the order provided by the parent (weighted shuffle)
-  // We make a shallow copy to be safe, but we do NOT re-sort.
   const sortedUsers = useMemo(() => [...users], [users]);
 
   const activeUser = sortedUsers[currentIndex];
@@ -108,12 +134,13 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const nopeOpacity = useTransform(x, [-20, -150], [0, 1]);
 
   // Calculated displayed likes (props + local refunds)
-  const displayRemainingLikes = remainingLikes !== null && remainingLikes !== undefined 
+  // For Plus/Pro, effectively unlimited
+  const effectiveRemainingLikes = userTier === 'free' && remainingLikes !== null && remainingLikes !== undefined 
     ? Math.min(30, remainingLikes + refundedSwipes) 
-    : null;
+    : 9999; // Unlimited
 
   // Only free users can be exhausted of normal swipes
-  const isLikesExhausted = userTier === 'free' && displayRemainingLikes !== null && displayRemainingLikes <= 0;
+  const isLikesExhausted = userTier === 'free' && effectiveRemainingLikes <= 0;
 
   // Handle the end of a drag gesture
   const handleDragEnd = async (_: any, info: PanInfo) => {
@@ -168,13 +195,22 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   // --- Button Handlers ---
 
   const handleUndo = async () => {
-    // TIER CHECK: Free users cannot rewind
+    // TIER CHECK: Free users cannot rewind (Limit 0)
     if (userTier === 'free') {
       onUpgrade?.('kova_plus');
       return;
     }
 
+    // LIMIT CHECK: Paid users have 5 rewinds
+    if (rewindsUsed >= rewindQuota) {
+      triggerToast("Daily rewind limit reached (5/5)");
+      return;
+    }
+
     if (!history) return;
+
+    // Decrement quota / Increment usage
+    updateUsage('rewind');
 
     // Restore index
     const prevIndex = history.index;
@@ -184,7 +220,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     setHistory(null);
 
     // If it was a right swipe (that consumed a daily like), refund it visually
-    // Although Plus/Pro users have unlimited likes, we still refund it to keep state consistent if counters are used.
     if (history.direction === 'right' || history.direction === 'superlike') {
       setRefundedSwipes(prev => prev + 1);
     }
@@ -207,30 +242,27 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   };
 
   const handleSuperLike = async () => {
-    if (superLikesLeft <= 0) {
+    // 1. Check Super Like Quota
+    if (superLikesUsed >= superLikeQuota) {
       if (userTier === 'free') {
         // Free user ran out -> Upsell
-        setToastMessage("Free limit reached. Upgrade for more.");
-        setShowSuperLikeToast(true);
-        setTimeout(() => setShowSuperLikeToast(false), 3000);
+        triggerToast("Free limit reached. Upgrade for more.");
         onUpgrade?.('kova_plus');
       } else {
         // Paid user ran out -> Just notify
-        setToastMessage("You've used all 5 Superlikes today!");
-        setShowSuperLikeToast(true);
-        setTimeout(() => setShowSuperLikeToast(false), 3000);
+        triggerToast("Daily Super Like limit reached (5/5)");
       }
       return;
     }
 
-    // Also check if normal swipes are exhausted (superlike counts as a swipe)
+    // 2. Also check if normal swipes are exhausted (superlike counts as a swipe)
     if (isLikesExhausted) {
       onOutOfSwipes?.();
       return;
     }
 
-    // Decrement local quota
-    incrementSuperLikeUsage();
+    // Increment local quota usage
+    updateUsage('superlike');
 
     // Visual indication (swipe up-right)
     await controls.start({ x: 500, y: -200, opacity: 0, transition: { duration: 0.3 } });
@@ -300,7 +332,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isLikesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
           <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
           <span className={`text-xs font-bold ${isLikesExhausted ? 'text-red-400' : 'text-white'}`}>
-            {displayRemainingLikes ?? 0} / 30
+            {effectiveRemainingLikes} / 30
           </span>
         </div>
       )}
@@ -426,9 +458,9 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       {/* Floating Action Buttons Row */}
       <div className="relative mt-6 w-full max-w-sm md:max-w-md flex justify-center items-center gap-3 md:gap-5 z-20">
           
-          {/* Toast for Super Like limit */}
+          {/* Toast for Super Like / Rewind limits */}
           <AnimatePresence>
-            {showSuperLikeToast && (
+            {showToast && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -449,7 +481,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
             }`}
             onClick={handleUndo}
             disabled={!history && userTier !== 'free'} // Allow free users to click so they see upsell
-            title="Undo"
+            title={userTier === 'free' ? "Upgrade to Rewind" : `Rewind (${rewindQuota - rewindsUsed} left)`}
           >
             {userTier === 'free' ? (
               <div className="relative">

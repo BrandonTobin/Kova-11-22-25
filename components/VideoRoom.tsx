@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft, MessageSquare, Send } from 'lucide-react';
-import { Match, Goal, User } from '../types';
+import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, CheckSquare, FileText, Sparkles, Plus, Loader2, ArrowRight, Monitor, MonitorOff, Users, UserPlus, X, ArrowLeft, MessageSquare, Send, Phone } from 'lucide-react';
+import { Match, Goal, User, CallType } from '../types';
 import { generateSharedGoals, generateMeetingSummary } from '../services/geminiService';
 import { startSession, endSession } from '../services/sessionService';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
@@ -13,6 +14,7 @@ interface VideoRoomProps {
   currentUser: User;
   onEndCall: () => void;
   onReturnToDashboard: () => void;
+  callType?: CallType;
 }
 
 interface ChatMessage {
@@ -31,7 +33,7 @@ const RTC_CONFIG = {
   ],
 };
 
-const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, onEndCall, onReturnToDashboard }) => {
+const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, onEndCall, onReturnToDashboard, callType = 'video' }) => {
   // Call State
   // participants list tracks active remote connections.
   const [participants, setParticipants] = useState<Match[]>([]);
@@ -40,7 +42,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
   // Media State
   const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
+  const [camOn, setCamOn] = useState(callType === 'video'); // Default based on call type
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -77,14 +79,18 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
   useEffect(() => {
     // Start backend session tracking
     if (!sessionId && currentUser && match?.user) {
-      startSession(currentUser.id, match.user.id).then((id) => {
+      startSession(currentUser.id, match.user.id, callType).then((id) => {
         if (id) setSessionId(id);
       });
     }
 
     const initMedia = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const constraints = {
+          audio: true,
+          video: callType === 'video'
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         setLocalStream(stream);
       } catch (err) {
         console.error("Error accessing media devices:", err);
@@ -97,7 +103,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
         id: 'system-1',
         senderId: 'system',
         senderName: 'System',
-        text: 'Welcome to the video room! Connecting to secure channel...',
+        text: `Welcome to the ${callType} room! Connecting to secure channel...`,
         timestamp: new Date()
     }]);
 
@@ -155,7 +161,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
     // Handle Remote Stream
     // IMPORTANT: This is the ONLY place we add the participant for the UI grid
-    // This ensures the tile only appears when video is actually received.
+    // This ensures the tile only appears when video/audio is actually received.
     pc.ontrack = (event) => {
       console.log("[WebRTC] Remote track received", event.streams[0]);
       setRemoteStream(event.streams[0]);
@@ -556,8 +562,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
             )}
             
             {(!camOn && !isScreenSharing) && (
-              <div className="absolute inset-0 flex items-center justify-center bg-background text-text-muted">
-                <VideoOff size={48} />
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-background text-text-muted gap-2">
+                {callType === 'audio' ? (
+                   <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/10">
+                      <img src={currentUser.imageUrl} className="w-full h-full object-cover" />
+                   </div>
+                ) : <VideoOff size={48} />}
+                {callType === 'audio' && <span className="text-xs font-bold text-text-muted">Audio Only</span>}
               </div>
             )}
             
@@ -579,9 +590,28 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                   ref={remoteVideoRef}
                   autoPlay 
                   playsInline 
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full object-cover ${(!remoteStream || remoteStream.getVideoTracks().length === 0) ? 'hidden' : ''}`}
                 />
               
+              {/* Show avatar if remote stream has no video (audio only) */}
+              {(!remoteStream || remoteStream.getVideoTracks().length === 0) && (
+                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-background gap-3">
+                    <div className="w-24 h-24 rounded-full border-4 border-primary/20 overflow-hidden shadow-xl relative">
+                        <img 
+                          src={match.user.imageUrl} 
+                          alt={match.user.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                        />
+                        <div className="absolute inset-0 bg-primary/20 animate-pulse rounded-full"></div>
+                    </div>
+                    <div className="text-center">
+                       <p className="font-bold text-text-main text-lg">{getDisplayName(match.user.name)}</p>
+                       <p className="text-xs text-text-muted">Audio Call</p>
+                    </div>
+                 </div>
+              )}
+
               <div className="absolute bottom-4 left-4 bg-black/60 px-3 py-1 rounded-lg text-sm font-medium backdrop-blur-sm text-white flex items-center gap-2">
                 {getDisplayName(match.user.name)}
                 <span className={`w-2 h-2 rounded-full ${remoteStream ? 'bg-green-500' : 'bg-yellow-500'} animate-pulse`}></span>

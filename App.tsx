@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -16,8 +17,9 @@ import PrivacyPolicy from './components/legal/PrivacyPolicy';
 import TermsOfService from './components/legal/TermsOfService';
 import RefundPolicy from './components/legal/RefundPolicy';
 import ContactPage from './components/legal/ContactPage';
+import IncomingCallPopup from './components/IncomingCallPopup';
 
-import { User, Match, ViewState, SubscriptionTier } from './types';
+import { User, Match, ViewState, SubscriptionTier, IncomingCall, CallType } from './types';
 import {
   LayoutGrid,
   MessageSquare,
@@ -169,6 +171,8 @@ function App() {
   const [newMatch, setNewMatch] = useState<User | null>(null);
   const [showMatchPopup, setShowMatchPopup] = useState(false);
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
+  const [activeCallType, setActiveCallType] = useState<CallType>('video');
+  const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
 
   // --- State: Notification Sound ---
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -269,6 +273,81 @@ function App() {
   useEffect(() => {
     currentViewRef.current = currentView;
   }, [currentView]);
+
+  // 🔔 Realtime listener for incoming sessions (CALLS)
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel(`incoming_calls:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'sessions',
+          filter: `partner_id=eq.${user.id}`,
+        },
+        async (payload: any) => {
+          const newSession = payload.new;
+          if (!newSession) return;
+
+          // Only accept sessions started very recently (e.g., last 60 seconds)
+          const startTime = new Date(newSession.started_at).getTime();
+          const now = Date.now();
+          if (now - startTime > 60000) return;
+
+          // Don't show popup if already in a call
+          if (currentViewRef.current === ViewState.VIDEO_ROOM) return;
+
+          // Fetch caller details
+          const callerId = newSession.host_id;
+          const { data: callerData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', callerId)
+            .single();
+
+          if (callerData) {
+            const caller: User = {
+                ...callerData,
+                imageUrl: callerData.image_url || DEFAULT_PROFILE_IMAGE,
+                kovaId: callerData.kova_id,
+                mainGoal: callerData.main_goal,
+                location: { city: callerData.city, state: callerData.state },
+                subscriptionTier: normalizeTierFromDb(callerData.subscription_tier),
+                proExpiresAt: callerData.pro_expires_at,
+                experienceLevel: callerData.experience_level,
+                communicationStyle: callerData.communication_style,
+                skills: callerData.skills,
+                lookingFor: callerData.looking_for,
+                availability: callerData.availability,
+                goalsList: callerData.goals_list,
+                links: callerData.links,
+                lastSeenAt: callerData.last_seen_at,
+                badges: callerData.badges || [],
+                tags: callerData.tags || [],
+                password: '',
+                securityQuestion: '',
+                securityAnswer: ''
+            };
+
+            const callType = newSession.call_type === 'audio' ? 'audio' : 'video';
+            setIncomingCall({
+              sessionId: newSession.id,
+              caller,
+              callType
+            });
+            playNotificationSound();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
 
   // 🔔 Realtime listener for unread message notifications
   useEffect(() => {
@@ -1161,6 +1240,31 @@ function App() {
     setCurrentView(ViewState.DASHBOARD);
   };
 
+  // --- Call Handlers ---
+  
+  const handleIncomingCallAccept = () => {
+    if (incomingCall && matches) {
+      // Find the match object for the caller
+      const callerMatch = matches.find(m => m.user.id === incomingCall.caller.id);
+      
+      if (callerMatch) {
+        setActiveVideoMatch(callerMatch);
+        setActiveCallType(incomingCall.callType);
+        setCurrentView(ViewState.VIDEO_ROOM);
+        setIncomingCall(null);
+      } else {
+        // Fallback if match not found in local state (should be rare)
+        alert('Could not find match data for this call.');
+        setIncomingCall(null);
+      }
+    }
+  };
+
+  const handleIncomingCallDecline = () => {
+    setIncomingCall(null);
+    // Optional: Could notify backend, but for now just clear local state
+  };
+
   // -----------------------------
   // Render
   // -----------------------------
@@ -1279,9 +1383,19 @@ function App() {
       : null;
 
     content = (
-      <div className="h-screen w-full bg-background flex flex-col overflow-hidden">
+      <div className="h-screen w-full bg-background flex flex-col overflow-hidden relative">
         {/* Global Modals */}
         
+        {/* Incoming Call Popup */}
+        {incomingCall && (
+          <IncomingCallPopup 
+            caller={incomingCall.caller}
+            callType={incomingCall.callType}
+            onAccept={handleIncomingCallAccept}
+            onDecline={handleIncomingCallDecline}
+          />
+        )}
+
         {/* Match Popup */}
         {showMatchPopup && newMatch && (
           <MatchPopup
@@ -1537,8 +1651,9 @@ function App() {
             <ChatInterface
               matches={matches}
               currentUser={user}
-              onStartVideoCall={(match) => {
+              onStartVideoCall={(match, type) => {
                 setActiveVideoMatch(match);
+                setActiveCallType(type);
                 setCurrentView(ViewState.VIDEO_ROOM);
               }}
               onConnectById={handleConnectById}
@@ -1554,6 +1669,7 @@ function App() {
               match={activeVideoMatch}
               allMatches={matches}
               currentUser={user}
+              callType={activeCallType}
               onEndCall={() => {
                 setActiveVideoMatch(null);
                 setCurrentView(ViewState.DASHBOARD);
@@ -1572,6 +1688,7 @@ function App() {
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
               onJoinSession={(match) => {
                 setActiveVideoMatch(match);
+                setActiveCallType('video'); // Default join type
                 setCurrentView(ViewState.VIDEO_ROOM);
               }}
               onNavigateLegal={handleNavigateLegal}

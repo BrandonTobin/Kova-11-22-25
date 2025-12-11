@@ -1,7 +1,8 @@
 
 import { supabase } from '../supabaseClient';
+import { CallType } from '../types';
 
-export const startSession = async (hostId: string, partnerId: string): Promise<string | null> => {
+export const startSession = async (hostId: string, partnerId: string, callType: CallType = 'video'): Promise<string | null> => {
   try {
     const { data, error } = await supabase
       .from('sessions')
@@ -10,6 +11,7 @@ export const startSession = async (hostId: string, partnerId: string): Promise<s
           host_id: hostId,
           partner_id: partnerId,
           started_at: new Date().toISOString(),
+          call_type: callType
         }
       ])
       .select('id')

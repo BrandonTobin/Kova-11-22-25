@@ -18,6 +18,13 @@ export enum ViewState {
 }
 
 export type SubscriptionTier = 'free' | 'kova_plus' | 'kova_pro';
+export type CallType = 'video' | 'audio';
+
+export interface IncomingCall {
+  sessionId: string;
+  caller: User;
+  callType: CallType;
+}
 
 export interface PlanConfig {
   id: SubscriptionTier;

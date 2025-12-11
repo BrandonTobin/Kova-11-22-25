@@ -199,8 +199,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     onSwipe(direction, activeUser);
 
     // Update Counters
-    // UPDATED: Only increment dailySwipes if direction is chargeable (right or superlike)
-    // Left swipes (skips) should not count against the limit.
     const isChargeable = direction === 'right' || direction === 'superlike';
     let newSwipesCount = dailySwipes;
     const updates: any = {};
@@ -217,7 +215,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       updates.daily_superlikes_count = newSuperLikes;
     }
 
-    // Fire DB Update only if there are updates
     if (Object.keys(updates).length > 0) {
       updateUserCounters(updates);
     }
@@ -233,33 +230,27 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   // --- Button Handlers ---
 
   const handleUndo = async () => {
-    // 1. Tier Check
     if (isFree) {
       triggerToast("Rewind is a Kova Plus / Pro feature.");
       onUpgrade?.('kova_plus');
       return;
     }
 
-    // 2. Limit Check
     if (dailyRewinds >= rewindsLimit) {
       triggerToast("You’ve used your 5 rewinds for today. They’ll reset tomorrow.");
       return;
     }
 
-    // 3. Availability Check
     if (!history) return;
 
-    // Execute Rewind
     const newRewinds = dailyRewinds + 1;
     setDailyRewinds(newRewinds);
     updateUserCounters({ daily_rewinds_count: newRewinds });
 
-    // Restore UI
     const prevIndex = history.index;
     setCurrentIndex(prevIndex);
     setHistory(null);
 
-    // Reset card
     x.set(0);
     y.set(0);
     await controls.start({ x: 0, y: 0, opacity: 1, rotate: 0, transition: { duration: 0.3 } });
@@ -278,7 +269,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   };
 
   const handleSuperLike = async () => {
-    // 1. Limit Check
     if (dailySuperLikes >= superLikesLimit) {
       if (isFree) {
         triggerToast("You’ve used your daily Super Like. Upgrade for 5 per day.");
@@ -289,14 +279,12 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       return;
     }
 
-    // 2. Swipes Check (Must have swipes available to Super Like)
     if (isSwipesExhausted) {
       triggerToast("You’re out of daily swipes.");
       onOutOfSwipes?.();
       return;
     }
 
-    // Execute
     await controls.start({ x: 500, y: -200, opacity: 0, transition: { duration: 0.3 } });
     triggerSwipe('superlike');
   };
@@ -320,30 +308,24 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     setIsSubmittingReport(true);
 
     try {
-      // 1. Insert Report
-      // FIX: Use exact column names from schema (reporter_user_id, reported_user_id)
+      const isOther = reportReason === 'Other';
+
+      // 1. Insert Report (match user_reports schema)
       const { error: reportError } = await supabase.from('user_reports').insert({
-        reporter_user_id: currentUserId, 
-        reported_user_id: activeUser.id,
+        reporter_user_id: currentUserId,
+        reported_id: activeUser.id,
         reason: reportReason,
-        details: reportDetails || null
+        other_reason: isOther ? (reportDetails || null) : null,
+        details: !isOther ? (reportDetails || null) : null
       });
 
       if (reportError) throw reportError;
 
-      // 2. Trigger Backend Handler (Fire & Forget)
-      supabase.rpc('handle_user_report', {
-        reported_user_id: activeUser.id
-      }).then(({ error }) => {
-        if (error) console.error("Error triggering handle_user_report:", error);
-      });
-
-      // 3. Block if checked
+      // 3. Block if checked (match user_blocks schema)
       if (blockChecked) {
-        // FIX: Use 'user_blocks' table and 'blocker_user_id'/'blocked_user_id'
         const { error: blockError } = await supabase.from('user_blocks').insert({
-          blocker_user_id: currentUserId,
-          blocked_user_id: activeUser.id
+          blocker_id: currentUserId,
+          blocked_id: activeUser.id
         });
         if (blockError) throw blockError;
       }
@@ -351,11 +333,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       triggerToast("Thanks for your report — our team will review it.");
       
       handleCloseReportModal();
-      
-      // 4. Remove card (Effectively a left swipe / skip)
-      // This will animate the card away and remove from view
-      handleButtonSwipe('left');
-
+      await handleButtonSwipe('left');
     } catch (error) {
       console.error("Report failed:", error);
       triggerToast("Couldn't submit report, please try again.");
@@ -369,17 +347,16 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     
     setIsSubmittingReport(true);
     try {
-      // FIX: Use 'user_blocks' table and 'blocker_user_id'/'blocked_user_id'
       const { error } = await supabase.from('user_blocks').insert({
-        blocker_user_id: currentUserId,
-        blocked_user_id: activeUser.id
+        blocker_id: currentUserId,
+        blocked_id: activeUser.id
       });
 
       if (error) throw error;
 
       triggerToast("User blocked.");
       handleCloseReportModal();
-      handleButtonSwipe('left');
+      await handleButtonSwipe('left');
     } catch (err) {
       console.error("Block failed:", err);
       triggerToast("Couldn't block user.");
@@ -471,7 +448,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const styles = getCardStyles(activeUser.subscriptionTier, activeUser.superLikedMe);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
+    <div className="relative w-full h-full flex items-center justifycenter overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
       
       {/* Report Modal */}
       <AnimatePresence>
@@ -595,7 +572,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isSwipesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
           <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
           <span className={`text-xs font-bold ${isSwipesExhausted ? 'text-red-400' : 'text-white'}`}>
-            {/* UPDATED: Clamp displayed counter so it doesn't show over limit */}
             {Math.min(dailySwipes, DAILY_SWIPE_LIMIT)} / {DAILY_SWIPE_LIMIT}
           </span>
         </div>
@@ -649,7 +625,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
            
            {/* Report Button */}
            <button
-             onPointerDown={(e) => e.stopPropagation()} // Prevent drag start
+             onPointerDown={(e) => e.stopPropagation()}
              onClick={(e) => {
                e.stopPropagation();
                setShowReportModal(true);
@@ -756,7 +732,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
               : 'bg-surface/50 text-white/20 cursor-not-allowed'
             }`}
             onClick={handleUndo}
-            disabled={!history && !isFree} // Free users click to see upgrade message
+            disabled={!history && !isFree}
             title={isFree ? "Upgrade to Rewind" : `Rewind (${rewindsLeft} left)`}
           >
             {isFree ? (

@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
   Video,
+  Phone,
   Bot,
   UserPlus,
   Search,
@@ -23,7 +25,7 @@ import {
   Trash2,
   Star,
 } from 'lucide-react';
-import { User, Match, Message, SubscriptionTier, hasPlusAccess } from '../types';
+import { User, Match, Message, SubscriptionTier, hasPlusAccess, CallType } from '../types';
 import { supabase } from '../supabaseClient';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
@@ -40,7 +42,7 @@ incomingMessageSound.volume = 0.025;
 interface ChatInterfaceProps {
   matches: Match[];
   currentUser: User;
-  onStartVideoCall: (match: Match) => void;
+  onStartVideoCall: (match: Match, type: CallType) => void;
   onConnectById: (user: User) => void;
   onUnmatch: (matchId: string) => void;
   newMatchIds?: string[];
@@ -1314,7 +1316,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center justify-center gap-2 shrink-0">
-                  <button onClick={() => onStartVideoCall(selectedMatch)} className="p-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" title="Start Call"><Video size={18} /></button>
+                  <button onClick={() => onStartVideoCall(selectedMatch, 'audio')} className="p-2 text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" title="Voice Call"><Phone size={18} /></button>
+                  <button onClick={() => onStartVideoCall(selectedMatch, 'video')} className="p-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" title="Video Call"><Video size={18} /></button>
+                  <div className="h-6 w-px bg-white/10 mx-1"></div>
                   <button onClick={handleDeleteChat} className="p-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center" title="Delete Chat"><Trash2 size={18} /></button>
                   <button onClick={handleUnmatchClick} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center" title="Unmatch"><UserMinus size={18} /></button>
                 </div>

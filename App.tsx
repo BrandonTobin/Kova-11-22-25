@@ -407,15 +407,25 @@ function App() {
 
     setDailySwipes(count || 0);
 
-    // 2. Fetch candidates (exclude self in query to save bandwidth)
-    const { data: candidates } = await supabase
+    // 2. Fetch candidates excluding swiped ones
+    let query = supabase
       .from('users')
       .select('*')
-      .neq('id', user.id)
-      .limit(50);
+      .neq('id', user.id);
+
+    if (swipedIds.size > 0) {
+      // Create a list of IDs to exclude.
+      // We use .not('id', 'in', ...) to ensure the query returns FRESH users from the DB.
+      // NOTE: If the user has swiped thousands of profiles, this might hit URL length limits.
+      // For now, this fixes the issue of new users not appearing for existing accounts.
+      const excludedIds = Array.from(swipedIds);
+      query = query.not('id', 'in', `(${excludedIds.map(id => `"${id}"`).join(',')})`);
+    }
+
+    const { data: candidates } = await query.limit(50);
 
     if (candidates) {
-      // 3. Filter out swiped & deduplicate
+      // 3. Filter out swiped & deduplicate (Client-side safety check)
       const seenIds = new Set<string>();
       
       const filtered = candidates
@@ -1479,6 +1489,7 @@ function App() {
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
               onOutOfSwipes={() => setShowOutOfSwipesModal(true)}
               currentUserId={user.id}
+              onRefresh={fetchUsersToSwipe}
             />
           )}
 

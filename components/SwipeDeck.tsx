@@ -16,7 +16,8 @@ import {
   Gem, 
   RotateCcw, 
   ThumbsUp,
-  Lock
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
@@ -30,6 +31,7 @@ interface SwipeDeckProps {
   onUpgrade?: (tier: SubscriptionTier) => void;
   onOutOfSwipes?: () => void;
   currentUserId?: string;
+  onRefresh?: () => void;
 }
 
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ 
@@ -39,7 +41,8 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   userTier = 'free', 
   onUpgrade, 
   onOutOfSwipes,
-  currentUserId 
+  currentUserId,
+  onRefresh
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const controls = useAnimation();
@@ -315,15 +318,32 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         <p className="text-text-muted max-w-md text-lg leading-relaxed mb-6">
           You've seen all active entrepreneurs in your area. Check back later for more matches.
         </p>
-        {history && (
-           <button 
-             onClick={handleUndo}
-             className="flex items-center gap-2 px-6 py-3 bg-surface border border-white/10 rounded-xl hover:bg-white/5 transition-colors text-text-muted hover:text-white"
-           >
-             {isFree ? <Lock size={16} /> : <RotateCcw size={16} />} 
-             Undo Last Swipe
-           </button>
-        )}
+        
+        <div className="flex flex-col gap-3">
+          {onRefresh && (
+            <button 
+              onClick={() => {
+                // Reset index when refreshing to show newly loaded users immediately
+                setCurrentIndex(0);
+                onRefresh();
+              }}
+              className="flex items-center gap-2 px-6 py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover transition-colors shadow-lg"
+            >
+              <RefreshCw size={18} />
+              Check for New Profiles
+            </button>
+          )}
+
+          {history && (
+             <button 
+               onClick={handleUndo}
+               className="flex items-center gap-2 px-6 py-3 bg-surface border border-white/10 rounded-xl hover:bg-white/5 transition-colors text-text-muted hover:text-white justify-center"
+             >
+               {isFree ? <Lock size={16} /> : <RotateCcw size={16} />} 
+               Undo Last Swipe
+             </button>
+          )}
+        </div>
       </div>
     );
   }

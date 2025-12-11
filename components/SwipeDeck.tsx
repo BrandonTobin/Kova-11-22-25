@@ -20,28 +20,17 @@ import {
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
+import { supabase } from '../supabaseClient';
 
 interface SwipeDeckProps {
   users: User[];
   onSwipe: (direction: 'left' | 'right' | 'superlike', user: User) => void;
-  remainingLikes?: number | null;
-  userTier?: SubscriptionTier;
+  remainingLikes?: number | null; // Legacy prop, we will use local DB state instead
+  userTier?: SubscriptionTier; // Initial tier, refreshed from DB
   onUpgrade?: (tier: SubscriptionTier) => void;
   onOutOfSwipes?: () => void;
-  currentUserId?: string; // Needed for local storage keys
+  currentUserId?: string;
 }
-
-// Helper to get daily Super Like quota
-const getSuperLikeQuota = (tier: SubscriptionTier = 'free') => {
-  if (tier === 'kova_pro' || tier === 'kova_plus') return 5;
-  return 1;
-};
-
-// Helper to get daily Rewind quota
-const getRewindQuota = (tier: SubscriptionTier = 'free') => {
-  if (tier === 'kova_pro' || tier === 'kova_plus') return 5;
-  return 0; // Free users get 0 rewinds
-};
 
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ 
   users, 
@@ -55,58 +44,76 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const [currentIndex, setCurrentIndex] = useState(0);
   const controls = useAnimation();
 
-  // --- Local State for New Features ---
-  // History stack for Undo (store previous index and user)
-  const [history, setHistory] = useState<{ index: number; user: User; direction: string } | null>(null);
-  
-  // Track refunded swipes locally to update the UI counter without touching backend
-  const [refundedSwipes, setRefundedSwipes] = useState(0);
+  // --- Local State for DB Counters ---
+  const [dailySwipes, setDailySwipes] = useState(0);
+  const [dailySuperLikes, setDailySuperLikes] = useState(0);
+  const [dailyRewinds, setDailyRewinds] = useState(0);
+  const [currentTier, setCurrentTier] = useState<SubscriptionTier>(userTier);
 
-  // Quota States
-  const [superLikesUsed, setSuperLikesUsed] = useState(0);
-  const [rewindsUsed, setRewindsUsed] = useState(0);
+  // History stack for Undo
+  const [history, setHistory] = useState<{ index: number; user: User; direction: string } | null>(null);
   
   // Toast State
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
-  // Daily Quota Logic
-  const superLikeQuota = getSuperLikeQuota(userTier);
-  const rewindQuota = getRewindQuota(userTier);
-  
-  const superLikesLeft = Math.max(0, superLikeQuota - superLikesUsed);
-  // We track rewind usage, but for free users quota is 0.
+  // --- Limits ---
+  const DAILY_SWIPE_LIMIT = 30;
+  const FREE_SUPERLIKE_LIMIT = 1;
+  const PAID_SUPERLIKE_LIMIT = 5;
+  const PAID_REWIND_LIMIT = 10;
 
-  // Initialize/Reset Quotas from LocalStorage with Daily Reset Logic
+  const isFree = currentTier === 'free';
+  const isSwipesExhausted = isFree && dailySwipes >= DAILY_SWIPE_LIMIT;
+  
+  const superLikesLimit = isFree ? FREE_SUPERLIKE_LIMIT : PAID_SUPERLIKE_LIMIT;
+  const superLikesLeft = Math.max(0, superLikesLimit - dailySuperLikes);
+  
+  const rewindsLimit = isFree ? 0 : PAID_REWIND_LIMIT;
+  const rewindsLeft = Math.max(0, rewindsLimit - dailyRewinds);
+
+  // --- Fetch User Stats on Mount ---
   useEffect(() => {
     if (!currentUserId) return;
     
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const superKey = `kova_superlikes_${currentUserId}_${today}`;
-    const rewindKey = `kova_rewinds_${currentUserId}_${today}`;
-    
-    // Load Super Likes
-    const storedSuper = localStorage.getItem(superKey);
-    setSuperLikesUsed(storedSuper ? parseInt(storedSuper, 10) : 0);
+    const fetchUserStats = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('subscription_tier, daily_swipes_count, daily_superlikes_count, daily_rewinds_count')
+          .eq('id', currentUserId)
+          .single();
 
-    // Load Rewinds
-    const storedRewind = localStorage.getItem(rewindKey);
-    setRewindsUsed(storedRewind ? parseInt(storedRewind, 10) : 0);
+        if (data && !error) {
+          setDailySwipes(data.daily_swipes_count || 0);
+          setDailySuperLikes(data.daily_superlikes_count || 0);
+          setDailyRewinds(data.daily_rewinds_count || 0);
+          
+          // Normalize tier
+          let tier: SubscriptionTier = 'free';
+          if (data.subscription_tier === 'plus') tier = 'kova_plus';
+          else if (data.subscription_tier === 'pro') tier = 'kova_pro';
+          setCurrentTier(tier);
+        }
+      } catch (err) {
+        console.error("Error fetching user stats:", err);
+      }
+    };
 
+    fetchUserStats();
   }, [currentUserId]);
 
-  const updateUsage = (type: 'superlike' | 'rewind') => {
+  const updateUserCounters = async (updates: any) => {
     if (!currentUserId) return;
-    const today = new Date().toISOString().split('T')[0];
     
-    if (type === 'superlike') {
-      const newVal = superLikesUsed + 1;
-      setSuperLikesUsed(newVal);
-      localStorage.setItem(`kova_superlikes_${currentUserId}_${today}`, newVal.toString());
-    } else {
-      const newVal = rewindsUsed + 1;
-      setRewindsUsed(newVal);
-      localStorage.setItem(`kova_rewinds_${currentUserId}_${today}`, newVal.toString());
+    const { error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', currentUserId);
+
+    if (error) {
+      console.error('Failed to update counters:', error);
+      triggerToast('Error syncing progress. Please check connection.');
     }
   };
 
@@ -116,61 +123,46 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     setTimeout(() => setShowToast(false), 3000);
   };
 
-  // Use the order provided by the parent (weighted shuffle)
   const sortedUsers = useMemo(() => [...users], [users]);
-
   const activeUser = sortedUsers[currentIndex];
   const nextUser = sortedUsers[currentIndex + 1];
 
-  // Motion Values - shared across renders but reset manually
+  // Motion Values
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  
-  // Subtle rotation (max 5 degrees) based on X drag distance
   const rotate = useTransform(x, [-200, 200], [-5, 5]);
-  
-  // Opacity for overlays
   const likeOpacity = useTransform(x, [20, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-20, -150], [0, 1]);
 
-  // Calculated displayed likes (props + local refunds)
-  // For Plus/Pro, effectively unlimited
-  const effectiveRemainingLikes = userTier === 'free' && remainingLikes !== null && remainingLikes !== undefined 
-    ? Math.min(30, remainingLikes + refundedSwipes) 
-    : 9999; // Unlimited
+  // --- Logic ---
 
-  // Only free users can be exhausted of normal swipes
-  const isLikesExhausted = userTier === 'free' && effectiveRemainingLikes <= 0;
-
-  // Handle the end of a drag gesture
   const handleDragEnd = async (_: any, info: PanInfo) => {
     const threshold = 100;
     const velocityThreshold = 500;
     const offset = info.offset.x;
     const velocity = info.velocity.x;
 
-    // Swipe detection logic
     const isSwipeRight = offset > threshold || (velocity > velocityThreshold && offset > -50);
     const isSwipeLeft = offset < -threshold || (velocity < -velocityThreshold && offset < 50);
 
     if (isSwipeRight) {
       // SWIPE RIGHT (LIKE)
-      if (isLikesExhausted) {
-        // Limit reached: Snap back to center & trigger external modal
+      if (isSwipesExhausted) {
+        // Limit reached: Snap back
         await controls.start({ x: 0, y: 0, rotate: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
+        triggerToast("You’re out of daily swipes. Upgrade for unlimited.");
         onOutOfSwipes?.();
       } else {
-        // Success: Animate out to the right
+        // Success
         await controls.start({ x: 500, opacity: 0, transition: { duration: 0.2 } });
         triggerSwipe('right');
       }
     } else if (isSwipeLeft) {
-      // SWIPE LEFT (NOPE)
-      // Success: Animate out to the left
+      // SWIPE LEFT (NOPE) - Skips allowed even if exhausted (card dismissal)
       await controls.start({ x: -500, opacity: 0, transition: { duration: 0.2 } });
       triggerSwipe('left');
     } else {
-      // No Swipe: Snap back to center (Reset X and Y)
+      // No Swipe: Snap back
       controls.start({ x: 0, y: 0, rotate: 0, transition: { type: 'spring', stiffness: 300, damping: 20 } });
     }
   };
@@ -178,13 +170,28 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const triggerSwipe = (direction: 'left' | 'right' | 'superlike') => {
     if (!activeUser) return;
     
-    // Save to history before moving on
+    // Save to history
     setHistory({ index: currentIndex, user: activeUser, direction });
 
-    // Call parent handler
+    // Call parent handler (performs insert)
     onSwipe(direction, activeUser);
+
+    // Update Counters
+    const newSwipesCount = dailySwipes + 1;
+    setDailySwipes(newSwipesCount);
     
-    // IMPORTANT: Reset motion values immediately before mounting the new card.
+    const updates: any = { daily_swipes_count: newSwipesCount };
+    
+    if (direction === 'superlike') {
+      const newSuperLikes = dailySuperLikes + 1;
+      setDailySuperLikes(newSuperLikes);
+      updates.daily_superlikes_count = newSuperLikes;
+    }
+
+    // Fire DB Update
+    updateUserCounters(updates);
+    
+    // Reset Motion
     x.set(0);
     y.set(0);
     controls.set({ x: 0, y: 0, rotate: 0, opacity: 1 });
@@ -195,43 +202,41 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   // --- Button Handlers ---
 
   const handleUndo = async () => {
-    // TIER CHECK: Free users cannot rewind (Limit 0)
-    if (userTier === 'free') {
+    // 1. Tier Check
+    if (isFree) {
+      triggerToast("Rewind is a Kova Plus / Pro feature.");
       onUpgrade?.('kova_plus');
       return;
     }
 
-    // LIMIT CHECK: Paid users have 5 rewinds
-    if (rewindsUsed >= rewindQuota) {
-      triggerToast("Daily rewind limit reached (5/5)");
+    // 2. Limit Check
+    if (dailyRewinds >= rewindsLimit) {
+      triggerToast("You’ve used your rewinds for today. They’ll reset tomorrow.");
       return;
     }
 
+    // 3. Availability Check
     if (!history) return;
 
-    // Decrement quota / Increment usage
-    updateUsage('rewind');
+    // Execute Rewind
+    const newRewinds = dailyRewinds + 1;
+    setDailyRewinds(newRewinds);
+    updateUserCounters({ daily_rewinds_count: newRewinds });
 
-    // Restore index
+    // Restore UI
     const prevIndex = history.index;
     setCurrentIndex(prevIndex);
-    
-    // Clear history (1 level deep)
     setHistory(null);
 
-    // If it was a right swipe (that consumed a daily like), refund it visually
-    if (history.direction === 'right' || history.direction === 'superlike') {
-      setRefundedSwipes(prev => prev + 1);
-    }
-
-    // Reset card position visually
+    // Reset card
     x.set(0);
     y.set(0);
     await controls.start({ x: 0, y: 0, opacity: 1, rotate: 0, transition: { duration: 0.3 } });
   };
 
   const handleButtonSwipe = async (direction: 'left' | 'right') => {
-    if (direction === 'right' && isLikesExhausted) {
+    if (direction === 'right' && isSwipesExhausted) {
+      triggerToast("You’re out of daily swipes. Upgrade for unlimited.");
       onOutOfSwipes?.();
       return;
     }
@@ -242,36 +247,29 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   };
 
   const handleSuperLike = async () => {
-    // 1. Check Super Like Quota
-    if (superLikesUsed >= superLikeQuota) {
-      if (userTier === 'free') {
-        // Free user ran out -> Upsell
-        triggerToast("Free limit reached. Upgrade for more.");
+    // 1. Limit Check
+    if (dailySuperLikes >= superLikesLimit) {
+      if (isFree) {
+        triggerToast("You’ve used your daily Super Like. Upgrade for 5 per day.");
         onUpgrade?.('kova_plus');
       } else {
-        // Paid user ran out -> Just notify
-        triggerToast("Daily Super Like limit reached (5/5)");
+        triggerToast("You’ve used your 5 daily Super Likes. They’ll reset tomorrow.");
       }
       return;
     }
 
-    // 2. Also check if normal swipes are exhausted (superlike counts as a swipe)
-    if (isLikesExhausted) {
+    // 2. Swipes Check (Must have swipes available to Super Like)
+    if (isSwipesExhausted) {
+      triggerToast("You’re out of daily swipes.");
       onOutOfSwipes?.();
       return;
     }
 
-    // Increment local quota usage
-    updateUsage('superlike');
-
-    // Visual indication (swipe up-right)
+    // Execute
     await controls.start({ x: 500, y: -200, opacity: 0, transition: { duration: 0.3 } });
-    
-    // Pass 'superlike' direction to parent (App.tsx writes to DB)
     triggerSwipe('superlike');
   };
 
-  // --- Styles helper ---
   const getCardStyles = (tier: SubscriptionTier) => {
     if (tier === 'kova_pro') {
       return {
@@ -308,13 +306,12 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         <p className="text-text-muted max-w-md text-lg leading-relaxed mb-6">
           You've seen all active entrepreneurs in your area. Check back later for more matches.
         </p>
-        {/* Allow undo even at end of deck (if tier allows) */}
         {history && (
            <button 
              onClick={handleUndo}
              className="flex items-center gap-2 px-6 py-3 bg-surface border border-white/10 rounded-xl hover:bg-white/5 transition-colors text-text-muted hover:text-white"
            >
-             {userTier === 'free' ? <Lock size={16} /> : <RotateCcw size={16} />} 
+             {isFree ? <Lock size={16} /> : <RotateCcw size={16} />} 
              Undo Last Swipe
            </button>
         )}
@@ -328,11 +325,11 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
       
       {/* Daily Limit Counter (Only show for Free users) */}
-      {userTier === 'free' && (
-        <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isLikesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
+      {isFree && (
+        <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isSwipesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
           <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
-          <span className={`text-xs font-bold ${isLikesExhausted ? 'text-red-400' : 'text-white'}`}>
-            {effectiveRemainingLikes} / 30
+          <span className={`text-xs font-bold ${isSwipesExhausted ? 'text-red-400' : 'text-white'}`}>
+            {dailySwipes} / {DAILY_SWIPE_LIMIT}
           </span>
         </div>
       )}
@@ -361,14 +358,14 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         whileTap={{ cursor: 'grabbing', scale: 1.02 }}
         className={`relative w-full max-w-sm md:max-w-md h-[60vh] md:h-[65vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}
       >
-        {/* Premium Banner (Top Ribbon) */}
+        {/* Premium Banner */}
         {styles.badgeText && (
            <div className={`absolute top-0 left-1/2 -translate-x-1/2 z-40 px-6 py-1.5 rounded-b-lg text-[10px] md:text-xs font-bold uppercase tracking-widest text-white shadow-lg flex items-center justify-center whitespace-nowrap ${styles.badgeBg}`}>
              {styles.badgeText}
            </div>
         )}
 
-        {/* Premium Glow Effect */}
+        {/* Premium Glow */}
         {styles.glow && (
            <div className="absolute inset-0 z-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none animate-pulse" />
         )}
@@ -398,12 +395,10 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent opacity-90" />
           
-          {/* Shimmer for Pro Users */}
           {activeUser.subscriptionTier === 'kova_pro' && (
             <div className="absolute inset-0 z-10 bg-gradient-to-tr from-transparent via-gold/10 to-transparent translate-x-[-100%] animate-[shimmer_3s_infinite]" />
           )}
 
-          {/* Badges Overlay */}
           <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-20 max-w-[80%]">
              {activeUser.subscriptionTier !== 'free' && (
                <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
@@ -412,7 +407,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
              )}
           </div>
           
-          {/* Stage Tag */}
           <div className="absolute bottom-2 left-4 z-20">
               <span className="bg-primary/90 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg border border-white/10">
                   {activeUser.stage} Stage
@@ -458,7 +452,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       {/* Floating Action Buttons Row */}
       <div className="relative mt-6 w-full max-w-sm md:max-w-md flex justify-center items-center gap-3 md:gap-5 z-20">
           
-          {/* Toast for Super Like / Rewind limits */}
           <AnimatePresence>
             {showToast && (
               <motion.div 
@@ -472,7 +465,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
             )}
           </AnimatePresence>
 
-          {/* 1. Undo Button */}
+          {/* 1. Rewind Button (Left) */}
           <button 
             className={`w-12 h-12 md:w-14 md:h-14 rounded-full border border-white/10 flex items-center justify-center shadow-lg backdrop-blur-sm transition-all relative ${
               history 
@@ -480,10 +473,10 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
               : 'bg-surface/50 text-white/20 cursor-not-allowed'
             }`}
             onClick={handleUndo}
-            disabled={!history && userTier !== 'free'} // Allow free users to click so they see upsell
-            title={userTier === 'free' ? "Upgrade to Rewind" : `Rewind (${rewindQuota - rewindsUsed} left)`}
+            disabled={!history && !isFree} // Free users click to see upgrade message
+            title={isFree ? "Upgrade to Rewind" : `Rewind (${rewindsLeft} left)`}
           >
-            {userTier === 'free' ? (
+            {isFree ? (
               <div className="relative">
                 <RotateCcw size={20} className="opacity-50" />
                 <Lock size={10} className="absolute -top-1 -right-1 text-gold" />
@@ -505,23 +498,28 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
           {/* 3. Connect Button */}
           <button 
             className={`w-14 h-14 md:w-16 md:h-16 rounded-full border flex items-center justify-center transition-all shadow-xl backdrop-blur-sm ${
-              isLikesExhausted 
-                ? 'bg-surface border-white/10 text-text-muted hover:bg-white/10' 
+              isSwipesExhausted 
+                ? 'bg-surface border-white/10 text-text-muted hover:bg-white/10 cursor-not-allowed opacity-70' 
                 : 'bg-surface border-emerald-500/30 text-emerald-500 hover:bg-emerald-500 hover:text-white hover:scale-110 hover:border-emerald-500'
             }`}
             onClick={() => handleButtonSwipe('right')}
-            title="Connect"
+            disabled={isSwipesExhausted}
+            title={isSwipesExhausted ? "Daily Limit Reached" : "Connect"}
           >
-            {isLikesExhausted ? <Lock size={24} /> : <Check size={28} />}
+            {isSwipesExhausted ? <Lock size={24} /> : <Check size={28} />}
           </button>
 
-          {/* 4. Super Like Button */}
+          {/* 4. Super Like Button (Right) */}
           <button 
-            className="relative w-12 h-12 md:w-14 md:h-14 rounded-full bg-surface border border-primary/30 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all shadow-lg hover:scale-105 hover:border-primary backdrop-blur-sm group"
+            className={`relative w-12 h-12 md:w-14 md:h-14 rounded-full bg-surface border flex items-center justify-center transition-all shadow-lg backdrop-blur-sm group ${
+               dailySuperLikes >= superLikesLimit || isSwipesExhausted
+               ? 'border-white/10 text-text-muted hover:bg-white/5'
+               : 'border-primary/30 text-primary hover:bg-primary hover:text-white hover:scale-105 hover:border-primary'
+            }`}
             onClick={handleSuperLike}
             title={`Super Like (${superLikesLeft} left)`}
           >
-            <ThumbsUp size={20} className="group-hover:animate-bounce" />
+            <ThumbsUp size={20} className={dailySuperLikes < superLikesLimit ? "group-hover:animate-bounce" : ""} />
             <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full border border-surface shadow-sm">
               {superLikesLeft}
             </span>

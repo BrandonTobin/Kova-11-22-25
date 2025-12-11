@@ -18,7 +18,10 @@ import {
   ThumbsUp,
   Lock,
   RefreshCw,
-  Star
+  Star,
+  Flag,
+  AlertTriangle,
+  ShieldOff
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
@@ -34,6 +37,14 @@ interface SwipeDeckProps {
   currentUserId?: string;
   onRefresh?: () => void;
 }
+
+const REPORT_REASONS = [
+  "Spam or scam",
+  "Inappropriate content",
+  "Harassment or hate",
+  "Fake / misleading profile",
+  "Other"
+];
 
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ 
   users, 
@@ -60,6 +71,13 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   // Toast State
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  // --- Report & Block State ---
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDetails, setReportDetails] = useState('');
+  const [blockChecked, setBlockChecked] = useState(false);
+  const [isSubmittingReport, setIsSubmittingReport] = useState(false);
 
   // --- Limits ---
   const DAILY_SWIPE_LIMIT = 30;
@@ -283,6 +301,90 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     triggerSwipe('superlike');
   };
 
+  // --- Report & Block Handlers ---
+
+  const handleCloseReportModal = () => {
+    setShowReportModal(false);
+    setReportReason('');
+    setReportDetails('');
+    setBlockChecked(false);
+  };
+
+  const handleReportSubmit = async () => {
+    if (!currentUserId || !activeUser) return;
+    if (!reportReason) {
+      triggerToast("Please select a reason.");
+      return;
+    }
+
+    setIsSubmittingReport(true);
+
+    try {
+      // 1. Insert Report
+      const { error: reportError } = await supabase.from('user_reports').insert({
+        reporter_id: currentUserId,
+        reported_user_id: activeUser.id,
+        reason: reportReason,
+        details: reportReason === 'Other' ? reportDetails : null
+      });
+
+      if (reportError) throw reportError;
+
+      // 2. Trigger Backend Handler (Fire & Forget)
+      supabase.rpc('handle_user_report', {
+        reported_user_id: activeUser.id
+      }).then(({ error }) => {
+        if (error) console.error("Error triggering handle_user_report:", error);
+      });
+
+      // 3. Block if checked
+      if (blockChecked) {
+        const { error: blockError } = await supabase.from('blocked_users').insert({
+          blocker_id: currentUserId,
+          blocked_user_id: activeUser.id
+        });
+        if (blockError) throw blockError;
+      }
+
+      triggerToast("Thanks for your report — our team will review it.");
+      
+      handleCloseReportModal();
+      
+      // 4. Remove card (Effectively a left swipe / skip)
+      // This will animate the card away and remove from view
+      handleButtonSwipe('left');
+
+    } catch (error) {
+      console.error("Report failed:", error);
+      triggerToast("Couldn't submit report, please try again.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
+  const handleBlockOnly = async () => {
+    if (!currentUserId || !activeUser) return;
+    
+    setIsSubmittingReport(true);
+    try {
+      const { error } = await supabase.from('blocked_users').insert({
+        blocker_id: currentUserId,
+        blocked_user_id: activeUser.id
+      });
+
+      if (error) throw error;
+
+      triggerToast("User blocked.");
+      handleCloseReportModal();
+      handleButtonSwipe('left');
+    } catch (err) {
+      console.error("Block failed:", err);
+      triggerToast("Couldn't block user.");
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   const getCardStyles = (tier: SubscriptionTier, superLikedMe?: boolean) => {
     // Super Like Received (Highest Priority Overlay)
     if (superLikedMe) {
@@ -368,6 +470,123 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
       
+      {/* Report Modal */}
+      <AnimatePresence>
+        {showReportModal && activeUser && (
+          <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-surface w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">
+                <h3 className="text-xl font-bold text-text-main flex items-center gap-2">
+                  <AlertTriangle className="text-gold" size={20} />
+                  Report User
+                </h3>
+                <button 
+                  onClick={handleCloseReportModal}
+                  className="text-text-muted hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                <p className="text-text-muted text-sm mb-4">
+                  Why are you reporting <span className="font-bold text-text-main">{getDisplayName(activeUser.name)}</span>?
+                </p>
+
+                <div className="space-y-3 mb-6">
+                  {REPORT_REASONS.map((reason) => (
+                    <label 
+                      key={reason}
+                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        reportReason === reason 
+                          ? 'bg-primary/20 border-primary' 
+                          : 'bg-background border-white/5 hover:bg-white/5'
+                      }`}
+                    >
+                      <input 
+                        type="radio" 
+                        name="reportReason" 
+                        value={reason}
+                        checked={reportReason === reason}
+                        onChange={(e) => setReportReason(e.target.value)}
+                        className="hidden"
+                      />
+                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                        reportReason === reason ? 'border-primary' : 'border-text-muted'
+                      }`}>
+                        {reportReason === reason && <div className="w-2 h-2 rounded-full bg-primary" />}
+                      </div>
+                      <span className={`text-sm ${reportReason === reason ? 'text-white font-medium' : 'text-text-muted'}`}>
+                        {reason}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                {reportReason === 'Other' && (
+                  <div className="mb-6 animate-in fade-in slide-in-from-top-2">
+                    <label className="block text-xs font-bold text-text-muted uppercase mb-2">Details</label>
+                    <textarea 
+                      value={reportDetails}
+                      onChange={(e) => setReportDetails(e.target.value)}
+                      className="w-full bg-background border border-white/10 rounded-xl p-3 text-sm text-text-main focus:outline-none focus:border-gold/50 resize-none h-24"
+                      placeholder="Please tell us more..."
+                    />
+                  </div>
+                )}
+
+                <div className="bg-white/5 rounded-xl p-4 border border-white/5 mb-6">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input 
+                      type="checkbox"
+                      checked={blockChecked}
+                      onChange={(e) => setBlockChecked(e.target.checked)}
+                      className="mt-1 accent-gold"
+                    />
+                    <div>
+                      <span className="block text-sm font-bold text-text-main">Also block this user</span>
+                      <span className="block text-xs text-text-muted mt-1 leading-relaxed">
+                        You won't see each other in Discover, matches, or chat.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 mt-2 pt-4 border-t border-white/10">
+                <button 
+                  onClick={handleReportSubmit}
+                  disabled={!reportReason || isSubmittingReport}
+                  className="w-full py-3 bg-primary text-white rounded-xl font-bold hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSubmittingReport ? "Submitting..." : "Submit Report"}
+                </button>
+                
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={handleCloseReportModal}
+                    className="flex-1 py-3 text-sm text-text-muted hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleBlockOnly}
+                    className="flex-1 py-3 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <ShieldOff size={14} /> Block User
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Daily Limit Counter (Only show for Free users) */}
       {isFree && (
         <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isSwipesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
@@ -416,6 +635,29 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
            <div className={`absolute inset-0 z-0 bg-gradient-to-b ${activeUser.superLikedMe ? 'from-[#00BFFF]/10' : 'from-white/5'} to-transparent pointer-events-none animate-pulse`} />
         )}
 
+        {/* Report Button */}
+        <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-20 max-w-[80%]">
+           {/* Tier Badge */}
+           {activeUser.subscriptionTier !== 'free' && (
+             <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
+               {activeUser.subscriptionTier === 'kova_pro' ? <Crown size={14} className="text-gold" /> : <Gem size={14} className="text-emerald-400" />}
+             </div>
+           )}
+           
+           {/* Report Button */}
+           <button
+             onPointerDown={(e) => e.stopPropagation()} // Prevent drag start
+             onClick={(e) => {
+               e.stopPropagation();
+               setShowReportModal(true);
+             }}
+             className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg text-white/50 hover:text-white hover:bg-black/60 transition-colors"
+             title="Report User"
+           >
+             <Flag size={14} />
+           </button>
+        </div>
+
         {/* Swipe Indicators */}
         <motion.div 
           style={{ opacity: likeOpacity }}
@@ -444,14 +686,6 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
           {activeUser.subscriptionTier === 'kova_pro' && (
             <div className="absolute inset-0 z-10 bg-gradient-to-tr from-transparent via-gold/10 to-transparent translate-x-[-100%] animate-[shimmer_3s_infinite]" />
           )}
-
-          <div className="absolute top-4 right-4 flex flex-col gap-2 items-end z-20 max-w-[80%]">
-             {activeUser.subscriptionTier !== 'free' && (
-               <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/20 shadow-lg">
-                 {activeUser.subscriptionTier === 'kova_pro' ? <Crown size={14} className="text-gold" /> : <Gem size={14} className="text-emerald-400" />}
-               </div>
-             )}
-          </div>
           
           <div className="absolute bottom-2 left-4 z-20">
               <span className="bg-primary/90 backdrop-blur-md text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider shadow-lg border border-white/10">

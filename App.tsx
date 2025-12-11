@@ -814,20 +814,24 @@ function App() {
   // -----------------------------
   // Swipes / Matches
   // -----------------------------
+  
+  // UNIFIED HELPER: Handles both normal likes and superlikes uniformly for matching
   const handleSwipe = async (direction: 'left' | 'right' | 'superlike', swipedUser: User) => {
     if (!user) return;
 
+    // 1. Counters & Local State
     if (direction === 'right' || direction === 'superlike') {
       setDailySwipes((prev) => prev + 1);
     }
 
-    // Update local set immediately to prevent seeing this user again if state reloads
     setSwipedUserIds(prev => {
         const next = new Set(prev);
         next.add(swipedUser.id);
         return next;
     });
 
+    // 2. Insert Swipe Record
+    // We store the specific direction ('right' or 'superlike') so UI knows IF it was a superlike.
     const { error: swipeError } = await supabase.from('swipes').insert([
       {
         swiper_id: user.id,
@@ -841,74 +845,69 @@ function App() {
       return;
     }
 
-    if (direction !== 'right' && direction !== 'superlike') return;
+    // 3. Check for Match (Mutual Connection)
+    // A match happens if I swiped 'right' OR 'superlike', AND they swiped 'right' OR 'superlike'.
+    if (direction === 'right' || direction === 'superlike') {
+        
+        // Check reciprocal: Did they swipe 'right' or 'superlike' on me?
+        const { data: reciprocal, error: reciprocalError } = await supabase
+          .from('swipes')
+          .select('id')
+          .eq('swiper_id', swipedUser.id)
+          .eq('swiped_id', user.id)
+          .in('direction', ['right', 'superlike']) // TREAT SUPERLIKE AS A VALID LIKE FOR MATCHING
+          .maybeSingle();
 
-    const { data: reciprocal, error: reciprocalError } = await supabase
-      .from('swipes')
-      .select('id')
-      .eq('swiper_id', swipedUser.id)
-      .eq('swiped_id', user.id)
-      .or('direction.eq.right,direction.eq.superlike') // Check for either right or superlike from the other user
-      .maybeSingle();
+        if (reciprocalError) {
+          console.error('Error checking reciprocal swipe:', reciprocalError);
+          return;
+        }
 
-    if (reciprocalError) {
-      console.error('Error checking reciprocal swipe:', reciprocalError);
-      return;
-    }
+        // If mutual like found -> Create Match
+        if (reciprocal) {
+            
+            // Double check match doesn't already exist (idempotency)
+            const { data: existingMatch } = await supabase
+              .from('matches')
+              .select('id')
+              .or(
+                `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`
+              )
+              .maybeSingle();
 
-    if (!reciprocal) return;
+            if (existingMatch) {
+               // Match already exists, just show UI if needed (rare case if swiping again)
+               setNewMatch(swipedUser);
+               setShowMatchPopup(true);
+               return; 
+            }
 
-    const { data: existingMatch, error: existingError } = await supabase
-      .from('matches')
-      .select('id')
-      .or(
-        `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`
-      )
-      .maybeSingle();
+            // Create the match row
+            const { data: matchData, error: matchError } = await supabase
+              .from('matches')
+              .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
+              .select()
+              .single();
 
-    if (existingError) {
-      console.error('Error checking existing match:', existingError);
-      return;
-    }
+            if (matchError) {
+              console.error('Error creating match:', matchError);
+              return;
+            }
 
-    // If match already exists, just show popup + mark as "new"
-    if (existingMatch) {
-      setNewMatch(swipedUser);
-      setShowMatchPopup(true);
-      playNotificationSound();
-      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
+            if (matchData) {
+              // Successful new match
+              setNewMatch(swipedUser);
+              setShowMatchPopup(true);
+              playNotificationSound();
+              addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
 
-      setNewMatchIds((prev) =>
-        prev.includes(existingMatch.id) ? prev : [...prev, existingMatch.id]
-      );
+              setNewMatchIds((prev) =>
+                prev.includes(matchData.id) ? prev : [...prev, matchData.id]
+              );
 
-      fetchMatches();
-      return;
-    }
-
-    // Otherwise create a new match
-    const { data: matchData, error: matchError } = await supabase
-      .from('matches')
-      .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
-      .select()
-      .single();
-
-    if (matchError) {
-      console.error('Error creating match:', matchError);
-      return;
-    }
-
-    if (matchData) {
-      setNewMatch(swipedUser);
-      setShowMatchPopup(true);
-      playNotificationSound();
-      addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
-
-      setNewMatchIds((prev) =>
-        prev.includes(matchData.id) ? prev : [...prev, matchData.id]
-      );
-
-      fetchMatches();
+              fetchMatches();
+            }
+        }
     }
   };
 

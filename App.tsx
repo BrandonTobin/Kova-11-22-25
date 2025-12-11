@@ -763,10 +763,10 @@ function App() {
   // -----------------------------
   // Swipes / Matches
   // -----------------------------
-  const handleSwipe = async (direction: 'left' | 'right', swipedUser: User) => {
+  const handleSwipe = async (direction: 'left' | 'right' | 'superlike', swipedUser: User) => {
     if (!user) return;
 
-    if (direction === 'right') {
+    if (direction === 'right' || direction === 'superlike') {
       setDailySwipes((prev) => prev + 1);
     }
 
@@ -790,14 +790,14 @@ function App() {
       return;
     }
 
-    if (direction !== 'right') return;
+    if (direction !== 'right' && direction !== 'superlike') return;
 
     const { data: reciprocal, error: reciprocalError } = await supabase
       .from('swipes')
       .select('id')
       .eq('swiper_id', swipedUser.id)
       .eq('swiped_id', user.id)
-      .eq('direction', 'right')
+      .or('direction.eq.right,direction.eq.superlike') // Check for either right or superlike from the other user
       .maybeSingle();
 
     if (reciprocalError) {
@@ -1478,6 +1478,7 @@ function App() {
               userTier={user.subscriptionTier}
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
               onOutOfSwipes={() => setShowOutOfSwipesModal(true)}
+              currentUserId={user.id}
             />
           )}
 

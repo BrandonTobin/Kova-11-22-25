@@ -27,7 +27,8 @@ import {
   Headphones,
   Mic,
   MicOff,
-  LogOut
+  LogOut,
+  Volume2
 } from 'lucide-react';
 import { User, Match, Message, SubscriptionTier, hasPlusAccess, CallType } from '../types';
 import { supabase } from '../supabaseClient';
@@ -36,6 +37,8 @@ import { getDisplayName } from '../utils/nameUtils';
 import SharedGoalsPanel from './SharedGoalsPanel';
 import AIRecapPanel from './AIRecapPanel';
 import { startSession, endSession } from '../services/sessionService';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { useVoiceChannel } from '../hooks/useVoiceChannel';
 
 // Separate sound JUST for incoming chat messages (not the match sound)
 const incomingMessageSound = new Audio(
@@ -164,15 +167,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   >(null);
   const longPressTimeoutRef = useRef<number | null>(null);
 
-  // --- Voice Channel State ---
-  const [isVoiceConnected, setIsVoiceConnected] = useState(false);
+  // --- Voice Channel State (Hook Integration) ---
+  const { 
+    voiceParticipants, 
+    isInVoice, 
+    joinVoice, 
+    leaveVoice 
+  } = useVoiceChannel(selectedMatchId, currentUser.id);
+
+  // WebRTC Refs (Local Audio State)
+  // We keep the RTC connection independent of the UI render cycle to prevent drops
   const [voiceMicOn, setVoiceMicOn] = useState(true);
-  const [voiceRemoteStream, setVoiceRemoteStream] = useState<MediaStream | null>(null);
-  const voicePeerConnection = useRef<RTCPeerConnection | null>(null);
+  const activeVoiceChannelRef = useRef<RealtimeChannel | null>(null); // Signaling channel
+  const activeVoiceConnectionRef = useRef<RTCPeerConnection | null>(null);
   const voiceLocalStream = useRef<MediaStream | null>(null);
-  const voiceChannelRef = useRef<any>(null);
-  const voiceSessionId = useRef<string | null>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null); // Invisible audio element for playback
+  const voiceSessionId = useRef<string | null>(null);
 
   const EMOJIS: string[] = [
     '😀',
@@ -247,7 +257,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       if (longPressTimeoutRef.current) {
         window.clearTimeout(longPressTimeoutRef.current);
       }
-      leaveVoiceChannel(); // Ensure voice cleanup
+      // If unmounting, kill active voice connection
+      leaveActiveVoiceConnection();
     };
   }, []);
 
@@ -929,22 +940,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     typingTimeoutRef.current = window.setTimeout(() => sendTypingStatus(false), 3000);
   };
 
-  // --- Voice Channel Logic ---
-  const joinVoiceChannel = async () => {
-    if (!selectedMatchId || !currentUser || !selectedMatch) return;
-    
+  // --- Voice Connection Logic (Audio + WebRTC) ---
+  const joinActiveVoiceConnection = async (matchId: string, targetUser: User) => {
     try {
+      // 1. Get Media
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       voiceLocalStream.current = stream;
-      setIsVoiceConnected(true);
       setVoiceMicOn(true);
 
-      // Start Backend Session (type: 'audio')
-      const sid = await startSession(currentUser.id, selectedMatch.user.id, 'audio');
+      // 2. Start Backend Session (type: 'audio') for logging
+      const sid = await startSession(currentUser.id, targetUser.id, 'audio');
       voiceSessionId.current = sid;
 
-      // Initialize Signaling & PeerConnection
-      initializeVoicePeerConnection(stream, selectedMatchId);
+      // 3. Initialize Signaling & PeerConnection for this specific match
+      initializeVoicePeerConnection(stream, matchId, targetUser.id);
+
+      // 4. Update Database Presence (The Hook will reflect this in UI)
+      joinVoice();
 
     } catch (err) {
       console.error("Failed to join voice:", err);
@@ -952,30 +964,44 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const leaveVoiceChannel = async () => {
+  const leaveActiveVoiceConnection = async () => {
     // 1. Cleanup Streams
     if (voiceLocalStream.current) {
       voiceLocalStream.current.getTracks().forEach(t => t.stop());
       voiceLocalStream.current = null;
     }
-    if (voicePeerConnection.current) {
-      voicePeerConnection.current.close();
-      voicePeerConnection.current = null;
+    
+    // 2. Close PeerConnection
+    if (activeVoiceConnectionRef.current) {
+      activeVoiceConnectionRef.current.close();
+      activeVoiceConnectionRef.current = null;
     }
-    setVoiceRemoteStream(null);
-    setIsVoiceConnected(false);
 
-    // 2. End Backend Session
+    // 3. End Backend Session
     if (voiceSessionId.current) {
       await endSession(voiceSessionId.current);
       voiceSessionId.current = null;
     }
 
-    // 3. Leave Signaling Channel
-    if (voiceChannelRef.current) {
-        voiceChannelRef.current.send({ type: 'broadcast', event: 'leave', payload: {} });
-        supabase.removeChannel(voiceChannelRef.current);
-        voiceChannelRef.current = null;
+    // 4. Leave Active Signaling Channel
+    if (activeVoiceChannelRef.current) {
+        // Send leave signal for WebRTC cleanup on peer side
+        await activeVoiceChannelRef.current.send({ type: 'broadcast', event: 'leave', payload: {} });
+        await supabase.removeChannel(activeVoiceChannelRef.current);
+        activeVoiceChannelRef.current = null;
+    }
+
+    // 5. Update Database Presence
+    leaveVoice();
+  };
+
+  const handleVoiceToggle = () => {
+    if (!selectedMatchId || !selectedMatch) return;
+
+    if (isInVoice) {
+      leaveActiveVoiceConnection();
+    } else {
+      joinActiveVoiceConnection(selectedMatchId, selectedMatch.user);
     }
   };
 
@@ -989,16 +1015,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const initializeVoicePeerConnection = (stream: MediaStream, matchId: string) => {
+  const initializeVoicePeerConnection = (stream: MediaStream, matchId: string, partnerId: string) => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
-    voicePeerConnection.current = pc;
+    activeVoiceConnectionRef.current = pc;
 
     // Add local tracks
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
     // Handle remote tracks
     pc.ontrack = (event) => {
-      setVoiceRemoteStream(event.streams[0]);
       // Play audio invisibly
       if (voiceAudioRef.current) {
         voiceAudioRef.current.srcObject = event.streams[0];
@@ -1009,7 +1034,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     // ICE Candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        voiceChannelRef.current?.send({
+        activeVoiceChannelRef.current?.send({
           type: 'broadcast',
           event: 'ice-candidate',
           payload: { candidate: event.candidate }
@@ -1017,13 +1042,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     };
 
-    // Signaling
-    const channel = supabase.channel(`voice-signaling:${matchId}`);
-    voiceChannelRef.current = channel;
+    // Signaling Channel for Audio
+    const channel = supabase.channel(`voice-audio:${matchId}`);
+    activeVoiceChannelRef.current = channel;
 
     // Is current user initiator? (Lower ID initiates)
-    // NOTE: In the VideoRoom logic, we use ID comparison. We stick to that here.
-    const isInitiator = currentUser.id < selectedMatch!.user.id;
+    const isInitiator = currentUser.id < partnerId;
     const iceQueue: RTCIceCandidateInit[] = [];
 
     channel
@@ -1053,15 +1077,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         }
       })
       .on('broadcast', { event: 'join' }, () => {
-         // If someone joins, send ack to trigger offer flow if needed
          channel.send({ type: 'broadcast', event: 'ack', payload: {} });
          if (isInitiator) createAndSendOffer(pc, channel);
       })
       .on('broadcast', { event: 'ack' }, () => {
          if (isInitiator) createAndSendOffer(pc, channel);
       })
-      .subscribe((status) => {
+      .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
+           // Notify peer that I am ready for audio
            channel.send({ type: 'broadcast', event: 'join', payload: {} });
         }
       });
@@ -1072,6 +1096,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     channel.send({ type: 'broadcast', event: 'offer', payload: { sdp: offer } });
+  };
+
+  const handleStartVideo = async (match: Match, type: CallType) => {
+     // If active in voice, leave first to release mic
+     if (isInVoice) {
+        await leaveActiveVoiceConnection();
+     }
+     onStartVideoCall(match, type);
   };
 
   // --- Render Components ---
@@ -1417,6 +1449,53 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
           <div className="px-4 pb-4"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search connections..." className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} /></div></div>
         </div>
+
+        {/* Discord-style Active Voice Channel Display */}
+        {selectedMatchId && voiceParticipants.length > 0 && (
+          <div className="px-4 py-3 border-b border-white/5 bg-background/30 animate-in fade-in slide-in-from-top-2">
+             <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                   <Volume2 size={14} className="text-green-500" />
+                   <span className="text-xs font-bold text-text-main uppercase tracking-wide">
+                     Voice Channel
+                   </span>
+                </div>
+                {isInVoice ? (
+                   <button 
+                     onClick={handleVoiceToggle}
+                     className="text-[10px] text-red-400 hover:text-white transition-colors border border-red-500/20 bg-red-500/10 px-2 py-0.5 rounded"
+                   >
+                     Disconnect
+                   </button>
+                ) : (
+                   <button 
+                     onClick={handleVoiceToggle}
+                     className="text-[10px] text-primary hover:text-white transition-colors border border-primary/20 bg-primary/10 px-2 py-0.5 rounded"
+                   >
+                     Join
+                   </button>
+                )}
+             </div>
+             <div className="space-y-1.5 pl-1">
+                {voiceParticipants.map(participant => (
+                   <div key={participant.user_id} className="flex items-center gap-2.5 p-1 rounded-lg hover:bg-white/5 transition-colors">
+                      <div className="relative">
+                         <img 
+                           src={participant.avatar_url || DEFAULT_PROFILE_IMAGE} 
+                           className="w-6 h-6 rounded-full object-cover border border-white/10" 
+                           onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                         />
+                         <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-black rounded-full"></div>
+                      </div>
+                      <span className={`text-xs ${participant.user_id === currentUser.id ? 'text-primary font-bold' : 'text-text-muted'}`}>
+                         {participant.display_name}
+                      </span>
+                   </div>
+                ))}
+             </div>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {filteredMatches.length === 0 ? (
             matches.length === 0 ? (
@@ -1491,10 +1570,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
                 <div className="flex items-center justify-center gap-2 shrink-0">
                   {/* JOIN VOICE BUTTON */}
-                  {!isVoiceConnected ? (
+                  {!isInVoice ? (
                     <button 
-                      onClick={joinVoiceChannel} 
-                      className="p-2 text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
+                      onClick={handleVoiceToggle} 
+                      className="p-2 text-text-muted hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
                       title="Join Voice Channel"
                     >
                       <Headphones size={18} />
@@ -1502,19 +1581,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   ) : (
                     <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg">
                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                       <span className="text-xs font-bold text-green-500 hidden sm:inline">Voice Active</span>
+                       <span className="text-xs font-bold text-green-500 hidden sm:inline">Voice Connected</span>
                        <div className="h-4 w-px bg-white/10 mx-1"></div>
                        <button onClick={toggleVoiceMic} className="text-text-main hover:text-white transition-colors">
                           {voiceMicOn ? <Mic size={14} /> : <MicOff size={14} className="text-red-400" />}
                        </button>
-                       <button onClick={leaveVoiceChannel} className="text-text-muted hover:text-red-400 transition-colors ml-1" title="Disconnect">
+                       <button onClick={handleVoiceToggle} className="text-text-muted hover:text-red-400 transition-colors ml-1" title="Disconnect">
                           <LogOut size={14} />
                        </button>
                     </div>
                   )}
 
                   {/* VIDEO CALL BUTTON (Existing full-screen logic) */}
-                  <button onClick={() => onStartVideoCall(selectedMatch, 'video')} className="p-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" title="Video Call"><Video size={18} /></button>
+                  <button onClick={() => handleStartVideo(selectedMatch, 'video')} className="p-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" title="Video Call"><Video size={18} /></button>
                   
                   <div className="h-6 w-px bg-white/10 mx-1"></div>
                   <button onClick={handleDeleteChat} className="p-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center" title="Delete Chat"><Trash2 size={18} /></button>

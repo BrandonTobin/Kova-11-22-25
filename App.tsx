@@ -293,14 +293,14 @@ function App() {
           if (!newSession) return;
 
           // VOICE CHANNEL LOGIC: 
-          // If this is a voice channel (audio), we DO NOT show a global popup.
-          // Voice channels are drop-in/drop-out via the Chat UI.
+          // Discord-style voice channels do NOT trigger a popup. 
+          // They are drop-in/drop-out.
           if (newSession.call_type !== 'video') {
             return;
           }
 
           // VIDEO CALL LOGIC:
-          // Proceed with popup only for video calls.
+          // Proceed with popup ONLY for video calls.
 
           // Only accept sessions started very recently (e.g., last 60 seconds)
           const startTime = new Date(newSession.started_at).getTime();
@@ -342,7 +342,7 @@ function App() {
                 securityAnswer: ''
             };
 
-            const callType = 'video'; // Explicitly set to video as we filtered out audio above
+            const callType = 'video';
             setIncomingCall({
               sessionId: newSession.id,
               caller,
@@ -411,6 +411,8 @@ function App() {
       supabase.removeChannel(channel);
     };
   }, [user?.id]);
+
+  // ... (rest of App.tsx remains unchanged)
 
   // -----------------------------
   // Auth + Profile
@@ -504,9 +506,6 @@ function App() {
 
     if (swipedIds.size > 0) {
       // Create a list of IDs to exclude.
-      // We use .not('id', 'in', ...) to ensure the query returns FRESH users from the DB.
-      // NOTE: If the user has swiped thousands of profiles, this might hit URL length limits.
-      // For now, this fixes the issue of new users not appearing for existing accounts.
       const excludedIds = Array.from(swipedIds);
       query = query.not('id', 'in', `(${excludedIds.map(id => `"${id}"`).join(',')})`);
     }

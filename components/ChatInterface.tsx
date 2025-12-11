@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
@@ -336,7 +337,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         window.clearTimeout(longPressTimeoutRef.current);
       }
       // If unmounting, kill active voice connection
-      leaveActiveVoiceConnection();
+      // leaveActiveVoiceConnection(); // DISABLED AUTO-DISCONNECT ON UNMOUNT
     };
   }, []);
 

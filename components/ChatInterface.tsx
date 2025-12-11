@@ -167,7 +167,86 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   >(null);
   const longPressTimeoutRef = useRef<number | null>(null);
 
-  // --- Voice Channel State (Hook Integration) ---
+  // --- Global Voice Presence (Sidebar Indicators) ---
+  const [activeVoiceMatchIds, setActiveVoiceMatchIds] = useState<Set<string>>(new Set());
+  const matchIdsRef = useRef<string[]>([]);
+
+  // Update ref when matches change
+  useEffect(() => {
+    matchIdsRef.current = matches.map(m => m.id);
+  }, [matches]);
+
+  // Initial fetch of active voice sessions for all matches
+  useEffect(() => {
+    if (!currentUser || matches.length === 0) return;
+
+    let isMounted = true;
+    const fetchVoiceActivity = async () => {
+      const ids = matches.map(m => m.id);
+      const { data, error } = await supabase
+        .from('voice_sessions')
+        .select('match_id')
+        .in('match_id', ids)
+        .eq('is_active', true);
+
+      if (isMounted && !error && data) {
+        const activeSet = new Set(data.map(item => item.match_id));
+        setActiveVoiceMatchIds(activeSet);
+      }
+    };
+
+    fetchVoiceActivity();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [matches, currentUser]);
+
+  // Realtime subscription for voice status changes across all matches
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const channel = supabase
+      .channel(`voice_sessions:global:${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'voice_sessions',
+        },
+        async (payload: any) => {
+          const matchId = payload.new?.match_id || payload.old?.match_id;
+          
+          // Only process if this is one of our matches
+          if (!matchId || !matchIdsRef.current.includes(matchId)) return;
+
+          // Re-fetch status for this specific match to ensure accuracy
+          const { data: sessions } = await supabase
+            .from('voice_sessions')
+            .select('match_id')
+            .eq('match_id', matchId)
+            .eq('is_active', true);
+
+          setActiveVoiceMatchIds(prev => {
+            const next = new Set(prev);
+            if (sessions && sessions.length > 0) {
+              next.add(matchId);
+            } else {
+              next.delete(matchId);
+            }
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser.id]);
+
+  // --- Voice Channel State (Hook Integration for Selected Match) ---
   const { 
     voiceParticipants, 
     isInVoice, 
@@ -355,9 +434,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     });
   }, [matches, liveMessageUpdates, clearedChats]);
 
-  // Sort matches by activity
+  // Sort matches by activity, prioritizing active voice channels
   const sortedMatches = useMemo(() => {
     return [...mergedMatches].sort((a, b) => {
+      // 1) Voice channel priority
+      const aInVoice = activeVoiceMatchIds.has(a.id);
+      const bInVoice = activeVoiceMatchIds.has(b.id);
+
+      // If one is in voice and the other isn't, put the "in voice" one first
+      if (aInVoice !== bInVoice) {
+        // true > false: voice matches float to the top
+        return bInVoice ? 1 : -1;
+      }
+
+      // 2) Existing time-based sort (most recent first)
       const timeA = a.lastMessageAt
         ? parseSupabaseTimestamp(a.lastMessageAt).getTime()
         : a.timestamp
@@ -372,7 +462,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       return timeB - timeA;
     });
-  }, [mergedMatches]);
+  }, [mergedMatches, activeVoiceMatchIds]);
 
   // Filter for search and cleared chats
   const filteredMatches = useMemo(
@@ -1513,6 +1603,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               const isNewMatch = newMatchIds.includes(match.id);
               const hasUnread = unreadConversationIds.has(match.id);
               const showNewBadge = isNewMatch || hasUnread;
+              const isVoiceActive = activeVoiceMatchIds.has(match.id);
 
               return (
                 <div key={match.id} onClick={() => { setSelectedMatchId(match.id); if (isNewMatch && onMatchSeen) onMatchSeen(match.id); }} className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${selectedMatchId === match.id ? 'bg-background/80 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}`}>
@@ -1522,6 +1613,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       <div className="flex items-center gap-2 min-w-0">
                         <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>{getDisplayName(match.user.name)}</h3>
                         {showNewBadge && (<span className="text-[9px] font-bold text-gold bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded-full shrink-0">NEW</span>)}
+                        {isVoiceActive && (
+                          <span className="flex items-center gap-1 text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
+                            <Headphones size={10} className="shrink-0" />
+                            <span>In Voice</span>
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         {match.user.superLikedMe && (

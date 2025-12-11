@@ -1554,7 +1554,7 @@ function App() {
         {currentView !== ViewState.VIDEO_ROOM &&
           currentView !== ViewState.PAYMENT_SUCCESS && (
             <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0 z-50 transition-colors duration-300">
-              <div className="flex justify-between md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
+              <div className="flex md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
                 {navItems.map((item: any) => {
                   const count = !item.isLocked
                     ? tabNotifications[item.id as ViewState] ?? 0
@@ -1572,7 +1572,7 @@ function App() {
                         item.isLocked ? 'Kova Pro • Coming Soon' : undefined
                       }
                       disabled={item.id === 'KOVA_AI'}
-                      className={`relative flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 transition-all duration-200 ${
+                      className={`relative flex flex-col items-center justify-center flex-1 md:flex-none md:w-20 h-full gap-1.5 transition-all duration-200 ${
                         isActive
                           ? 'text-gold'
                           : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
@@ -1617,7 +1617,7 @@ function App() {
                 {/* Logout button */}
                 <button
                   onClick={handleLogout}
-                  className="flex flex-col items-center justify-center w-16 md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
+                  className="flex flex-col items-center justify-center flex-1 md:flex-none md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
                 >
                   <LogOut size={20} strokeWidth={2} />
                   <span className="text-[9px] md:text-[10px] font-bold tracking-widest">

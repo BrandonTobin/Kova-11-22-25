@@ -8,7 +8,16 @@ import {
   AnimatePresence 
 } from 'framer-motion';
 import { User, SubscriptionTier } from '../types';
-import { X, Check, Briefcase, Tag, MapPin, Star, Lock, Crown, Gem, Sparkles, Zap } from 'lucide-react';
+import { 
+  X, 
+  Check, 
+  Briefcase, 
+  Crown, 
+  Gem, 
+  RotateCcw, 
+  ThumbsUp,
+  Lock
+} from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 
@@ -21,9 +30,32 @@ interface SwipeDeckProps {
   onOutOfSwipes?: () => void;
 }
 
+// Helper to get daily Super Like quota
+const getSuperLikeQuota = (tier: SubscriptionTier = 'free') => {
+  if (tier === 'kova_pro') return 5;
+  if (tier === 'kova_plus') return 3;
+  return 1;
+};
+
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, userTier = 'free', onUpgrade, onOutOfSwipes }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const controls = useAnimation();
+
+  // --- Local State for New Features ---
+  // History stack for Undo (store previous index and user)
+  const [history, setHistory] = useState<{ index: number; user: User; direction: string } | null>(null);
+  
+  // Track refunded swipes locally to update the UI counter without touching backend
+  const [refundedSwipes, setRefundedSwipes] = useState(0);
+
+  // Super Like State
+  const [superLikesLeft, setSuperLikesLeft] = useState(getSuperLikeQuota(userTier));
+  const [showSuperLikeToast, setShowSuperLikeToast] = useState(false);
+
+  // Update super likes if tier changes prop side
+  useEffect(() => {
+    setSuperLikesLeft(getSuperLikeQuota(userTier));
+  }, [userTier]);
 
   // Use the order provided by the parent (weighted shuffle)
   // We make a shallow copy to be safe, but we do NOT re-sort.
@@ -43,7 +75,12 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
   const likeOpacity = useTransform(x, [20, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-20, -150], [0, 1]);
 
-  const isLikesExhausted = userTier === 'free' && remainingLikes !== null && remainingLikes <= 0;
+  // Calculated displayed likes (props + local refunds)
+  const displayRemainingLikes = remainingLikes !== null && remainingLikes !== undefined 
+    ? Math.min(30, remainingLikes + refundedSwipes) 
+    : null;
+
+  const isLikesExhausted = userTier === 'free' && displayRemainingLikes !== null && displayRemainingLikes <= 0;
 
   // Handle the end of a drag gesture
   const handleDragEnd = async (_: any, info: PanInfo) => {
@@ -80,10 +117,14 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
 
   const triggerSwipe = (direction: 'left' | 'right') => {
     if (!activeUser) return;
+    
+    // Save to history before moving on
+    setHistory({ index: currentIndex, user: activeUser, direction });
+
+    // Call parent handler
     onSwipe(direction, activeUser);
     
     // IMPORTANT: Reset motion values immediately before mounting the new card.
-    // This ensures the next card doesn't inherit the drag position of the previous one.
     x.set(0);
     y.set(0);
     controls.set({ x: 0, y: 0, rotate: 0, opacity: 1 });
@@ -91,7 +132,29 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
     setCurrentIndex(prev => prev + 1);
   };
 
-  // Button handlers
+  // --- Button Handlers ---
+
+  const handleUndo = async () => {
+    if (!history) return;
+
+    // Restore index
+    const prevIndex = history.index;
+    setCurrentIndex(prevIndex);
+    
+    // Clear history (1 level deep)
+    setHistory(null);
+
+    // If it was a right swipe (that consumed a daily like), refund it visually
+    if (history.direction === 'right') {
+      setRefundedSwipes(prev => prev + 1);
+    }
+
+    // Reset card position visually
+    x.set(0);
+    y.set(0);
+    await controls.start({ x: 0, y: 0, opacity: 1, rotate: 0, transition: { duration: 0.3 } });
+  };
+
   const handleButtonSwipe = async (direction: 'left' | 'right') => {
     if (direction === 'right' && isLikesExhausted) {
       onOutOfSwipes?.();
@@ -101,6 +164,29 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
     const targetX = direction === 'right' ? 500 : -500;
     await controls.start({ x: targetX, opacity: 0, transition: { duration: 0.3 } });
     triggerSwipe(direction);
+  };
+
+  const handleSuperLike = async () => {
+    if (superLikesLeft <= 0) {
+      setShowSuperLikeToast(true);
+      setTimeout(() => setShowSuperLikeToast(false), 3000);
+      return;
+    }
+
+    // Treat as a right swipe but decrement super like quota
+    if (isLikesExhausted) {
+      onOutOfSwipes?.();
+      return;
+    }
+
+    // Decrement local quota
+    setSuperLikesLeft(prev => prev - 1);
+
+    // Visual indication (swipe up-right)
+    await controls.start({ x: 500, y: -200, opacity: 0, transition: { duration: 0.3 } });
+    
+    // Backend note: In a real implementation, we'd pass { isSuperLike: true } here
+    triggerSwipe('right');
   };
 
   // --- Styles helper ---
@@ -140,6 +226,15 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         <p className="text-text-muted max-w-md text-lg leading-relaxed mb-6">
           You've seen all active entrepreneurs in your area. Check back later for more matches.
         </p>
+        {/* Allow undo even at end of deck */}
+        {history && (
+           <button 
+             onClick={handleUndo}
+             className="flex items-center gap-2 px-6 py-3 bg-surface border border-white/10 rounded-xl hover:bg-white/5 transition-colors text-text-muted hover:text-white"
+           >
+             <RotateCcw size={16} /> Undo Last Swipe
+           </button>
+        )}
       </div>
     );
   }
@@ -147,21 +242,21 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
   const styles = getCardStyles(activeUser.subscriptionTier);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000">
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
       
       {/* Daily Limit Counter (if free) */}
       {userTier === 'free' && (
         <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isLikesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
           <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
           <span className={`text-xs font-bold ${isLikesExhausted ? 'text-red-400' : 'text-white'}`}>
-            {remainingLikes ?? 0} / 30
+            {displayRemainingLikes ?? 0} / 30
           </span>
         </div>
       )}
 
       {/* Background Card (Next User) */}
       {nextUser && (
-        <div className="absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl border border-white/5 shadow-xl overflow-hidden transform scale-95 translate-y-4 -z-10 opacity-40 filter blur-[1px]">
+        <div className="absolute top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] w-full max-w-sm md:max-w-md h-[60vh] md:h-[65vh] bg-surface rounded-3xl border border-white/5 shadow-xl overflow-hidden transform scale-95 translate-y-[-46%] -z-10 opacity-40 filter blur-[1px]">
           <img
             src={nextUser.imageUrl || DEFAULT_PROFILE_IMAGE}
             alt="Next"
@@ -178,10 +273,10 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         drag
         dragConstraints={{ left: -200, right: 200, top: -300, bottom: 300 }}
         dragElastic={0.1}
-        dragMomentum={false} // Prevents card from drifting on release
+        dragMomentum={false}
         onDragEnd={handleDragEnd}
         whileTap={{ cursor: 'grabbing', scale: 1.02 }}
-        className={`absolute w-full max-w-sm md:max-w-md h-[65vh] md:h-[70vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}
+        className={`relative w-full max-w-sm md:max-w-md h-[60vh] md:h-[65vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}
       >
         {/* Premium Banner (Top Ribbon) */}
         {styles.badgeText && (
@@ -277,25 +372,71 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({ users, onSwipe, remainingLikes, u
         </div>
       </motion.div>
 
-      {/* Floating Action Buttons */}
-      <div className="absolute bottom-6 md:bottom-10 w-full flex justify-center items-center gap-8 z-20 px-4 pointer-events-none">
+      {/* Floating Action Buttons Row */}
+      <div className="relative mt-6 w-full max-w-sm md:max-w-md flex justify-center items-center gap-3 md:gap-5 z-20">
+          
+          {/* Toast for Super Like limit */}
+          <AnimatePresence>
+            {showSuperLikeToast && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute -top-12 left-1/2 -translate-x-1/2 bg-black/90 text-white text-xs px-4 py-2 rounded-full whitespace-nowrap shadow-xl border border-white/10 z-50 pointer-events-none"
+              >
+                No Super Likes left. Upgrade for more.
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* 1. Undo Button */}
           <button 
-            className="w-16 h-16 rounded-full bg-surface border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-2xl hover:scale-110 hover:border-red-500 pointer-events-auto backdrop-blur-sm"
-            onClick={() => handleButtonSwipe('left')}
+            className={`w-12 h-12 md:w-14 md:h-14 rounded-full border border-white/10 flex items-center justify-center shadow-lg backdrop-blur-sm transition-all ${
+              history 
+              ? 'bg-surface text-text-muted hover:text-white hover:bg-white/10 hover:scale-105' 
+              : 'bg-surface/50 text-white/20 cursor-not-allowed'
+            }`}
+            onClick={handleUndo}
+            disabled={!history}
+            title="Undo"
           >
-            <X size={32} />
+            <RotateCcw size={20} />
           </button>
 
+          {/* 2. Skip Button */}
           <button 
-            className={`w-16 h-16 rounded-full border flex items-center justify-center transition-all shadow-2xl pointer-events-auto backdrop-blur-sm ${
+            className="w-14 h-14 md:w-16 md:h-16 rounded-full bg-surface border border-red-500/30 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-xl hover:scale-110 hover:border-red-500 backdrop-blur-sm"
+            onClick={() => handleButtonSwipe('left')}
+            title="Skip"
+          >
+            <X size={28} />
+          </button>
+
+          {/* 3. Connect Button */}
+          <button 
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-full border flex items-center justify-center transition-all shadow-xl backdrop-blur-sm ${
               isLikesExhausted 
                 ? 'bg-surface border-white/10 text-text-muted hover:bg-white/10' 
                 : 'bg-surface border-emerald-500/30 text-emerald-500 hover:bg-emerald-500 hover:text-white hover:scale-110 hover:border-emerald-500'
             }`}
             onClick={() => handleButtonSwipe('right')}
+            title="Connect"
           >
-            {isLikesExhausted ? <Lock size={28} /> : <Check size={32} />}
+            {isLikesExhausted ? <Lock size={24} /> : <Check size={28} />}
           </button>
+
+          {/* 4. Super Like Button */}
+          <button 
+            className="relative w-12 h-12 md:w-14 md:h-14 rounded-full bg-surface border border-primary/30 text-primary flex items-center justify-center hover:bg-primary hover:text-white transition-all shadow-lg hover:scale-105 hover:border-primary backdrop-blur-sm group"
+            onClick={handleSuperLike}
+            title={`Super Like (${superLikesLeft} left)`}
+          >
+            <ThumbsUp size={20} className="group-hover:animate-bounce" />
+            <span className="absolute -top-1 -right-1 bg-primary text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full border border-surface shadow-sm">
+              {superLikesLeft}
+            </span>
+          </button>
+
       </div>
     </div>
   );

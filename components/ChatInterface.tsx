@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
@@ -1670,10 +1669,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {!isInVoice ? (
                     <button 
                       onClick={handleVoiceToggle} 
-                      className="p-2 text-text-muted hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
+                      className="px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
                       title="Join Voice Channel"
                     >
                       <Headphones size={18} />
+                      <span className="hidden sm:inline text-xs font-medium">
+                        Voice Chat
+                      </span>
                     </button>
                   ) : (
                     <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg">
@@ -1690,11 +1692,40 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   )}
 
                   {/* VIDEO CALL BUTTON (Existing full-screen logic) */}
-                  <button onClick={() => handleStartVideo(selectedMatch, 'video')} className="p-2 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" title="Video Call"><Video size={18} /></button>
+                  <button 
+                    onClick={() => handleStartVideo(selectedMatch, 'video')} 
+                    className="px-3 py-1.5 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
+                    title="Video Call"
+                  >
+                    <Video size={18} />
+                    <span className="hidden sm:inline text-xs font-medium">
+                      Video Chat
+                    </span>
+                  </button>
                   
                   <div className="h-6 w-px bg-white/10 mx-1"></div>
-                  <button onClick={handleDeleteChat} className="p-2 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center" title="Delete Chat"><Trash2 size={18} /></button>
-                  <button onClick={handleUnmatchClick} className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center" title="Unmatch"><UserMinus size={18} /></button>
+
+                  <button 
+                    onClick={handleDeleteChat} 
+                    className="px-3 py-1.5 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
+                    title="Delete Chat"
+                  >
+                    <Trash2 size={18} />
+                    <span className="hidden sm:inline text-xs font-medium">
+                      Delete Chat
+                    </span>
+                  </button>
+
+                  <button 
+                    onClick={handleUnmatchClick} 
+                    className="px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
+                    title="Unmatch"
+                  >
+                    <UserMinus size={18} />
+                    <span className="hidden sm:inline text-xs font-medium">
+                      Unmatch
+                    </span>
+                  </button>
                 </div>
               </div>
 

@@ -321,11 +321,12 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
     try {
       // 1. Insert Report
+      // FIX: Use exact column names from schema (reporter_user_id, reported_user_id)
       const { error: reportError } = await supabase.from('user_reports').insert({
-        reporter_id: currentUserId,
+        reporter_user_id: currentUserId, 
         reported_user_id: activeUser.id,
         reason: reportReason,
-        details: reportReason === 'Other' ? reportDetails : null
+        details: reportDetails || null
       });
 
       if (reportError) throw reportError;
@@ -339,8 +340,9 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
       // 3. Block if checked
       if (blockChecked) {
-        const { error: blockError } = await supabase.from('blocked_users').insert({
-          blocker_id: currentUserId,
+        // FIX: Use 'user_blocks' table and 'blocker_user_id'/'blocked_user_id'
+        const { error: blockError } = await supabase.from('user_blocks').insert({
+          blocker_user_id: currentUserId,
           blocked_user_id: activeUser.id
         });
         if (blockError) throw blockError;
@@ -367,8 +369,9 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     
     setIsSubmittingReport(true);
     try {
-      const { error } = await supabase.from('blocked_users').insert({
-        blocker_id: currentUserId,
+      // FIX: Use 'user_blocks' table and 'blocker_user_id'/'blocked_user_id'
+      const { error } = await supabase.from('user_blocks').insert({
+        blocker_user_id: currentUserId,
         blocked_user_id: activeUser.id
       });
 

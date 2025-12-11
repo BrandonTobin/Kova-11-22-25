@@ -94,6 +94,9 @@ export interface User {
   links?: UserLinks;
   lastSeenAt?: string | null; // ISO string from Supabase
 
+  // Interaction State
+  superLikedMe?: boolean; // True if this user super liked the current user
+
   // Security recovery
   securityQuestion: string;
   securityAnswer: string;

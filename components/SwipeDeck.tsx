@@ -17,7 +17,8 @@ import {
   RotateCcw, 
   ThumbsUp,
   Lock,
-  RefreshCw
+  RefreshCw,
+  Star
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
@@ -282,12 +283,24 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     triggerSwipe('superlike');
   };
 
-  const getCardStyles = (tier: SubscriptionTier) => {
+  const getCardStyles = (tier: SubscriptionTier, superLikedMe?: boolean) => {
+    // Super Like Received (Highest Priority Overlay)
+    if (superLikedMe) {
+      return {
+        container: 'border-[3px] border-[#00BFFF] shadow-[0_0_25px_rgba(0,191,255,0.6)] transition-all duration-200',
+        badgeBg: 'bg-[rgba(0,191,255,0.18)] backdrop-blur-md',
+        badgeText: '⭐ Super Liked You',
+        badgeColor: 'text-[#00BFFF]',
+        glow: true
+      };
+    }
+
     if (tier === 'kova_pro') {
       return {
         container: 'border-2 border-gold shadow-[0_0_25px_rgba(214,167,86,0.5)]',
         badgeBg: 'bg-[#B8860B]', 
         badgeText: '👑 KOVA PRO USER',
+        badgeColor: 'text-white',
         glow: true
       };
     }
@@ -296,6 +309,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         container: 'border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.5)]',
         badgeBg: 'bg-emerald-700',
         badgeText: '💎 KOVA PLUS USER',
+        badgeColor: 'text-white',
         glow: true
       };
     }
@@ -303,6 +317,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       container: 'border border-white/10 shadow-xl',
       badgeBg: '',
       badgeText: '',
+      badgeColor: '',
       glow: false
     };
   };
@@ -348,7 +363,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     );
   }
 
-  const styles = getCardStyles(activeUser.subscriptionTier);
+  const styles = getCardStyles(activeUser.subscriptionTier, activeUser.superLikedMe);
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
@@ -388,16 +403,17 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         whileTap={{ cursor: 'grabbing', scale: 1.02 }}
         className={`relative w-full max-w-sm md:max-w-md h-[60vh] md:h-[65vh] bg-surface rounded-3xl flex flex-col overflow-hidden z-20 cursor-grab ${styles.container}`}
       >
-        {/* Premium Banner */}
+        {/* Special Banner Logic */}
         {styles.badgeText && (
-           <div className={`absolute top-0 left-1/2 -translate-x-1/2 z-40 px-6 py-1.5 rounded-b-lg text-[10px] md:text-xs font-bold uppercase tracking-widest text-white shadow-lg flex items-center justify-center whitespace-nowrap ${styles.badgeBg}`}>
+           <div className={`absolute top-4 left-4 z-40 px-3 py-1.5 rounded-xl text-[13px] font-bold shadow-lg flex items-center justify-center whitespace-nowrap ${styles.badgeBg} ${styles.badgeColor}`}>
+             {activeUser.superLikedMe && <Star size={14} className="mr-1 fill-current" />}
              {styles.badgeText}
            </div>
         )}
 
-        {/* Premium Glow */}
+        {/* Premium/SuperLike Glow */}
         {styles.glow && (
-           <div className="absolute inset-0 z-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none animate-pulse" />
+           <div className={`absolute inset-0 z-0 bg-gradient-to-b ${activeUser.superLikedMe ? 'from-[#00BFFF]/10' : 'from-white/5'} to-transparent pointer-events-none animate-pulse`} />
         )}
 
         {/* Swipe Indicators */}

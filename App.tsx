@@ -425,6 +425,23 @@ function App() {
     const { data: candidates } = await query.limit(50);
 
     if (candidates) {
+      // Fetch incoming superlikes from these candidates
+      const candidateIds = candidates.map((c: any) => c.id);
+      let superLikerIds = new Set<string>();
+
+      if (candidateIds.length > 0) {
+        const { data: incomingSuperLikes } = await supabase
+          .from('swipes')
+          .select('swiper_id')
+          .eq('swiped_id', user.id)
+          .eq('direction', 'superlike')
+          .in('swiper_id', candidateIds);
+        
+        if (incomingSuperLikes) {
+          superLikerIds = new Set(incomingSuperLikes.map((s: any) => s.swiper_id));
+        }
+      }
+
       // 3. Filter out swiped & deduplicate (Client-side safety check)
       const seenIds = new Set<string>();
       
@@ -456,13 +473,17 @@ function App() {
           tags: c.tags || [],
           password: '',
           securityQuestion: '',
-          securityAnswer: ''
+          securityAnswer: '',
+          superLikedMe: superLikerIds.has(c.id) // Populate superLikedMe
         })) as User[];
 
       // 4. Randomize the order with weighted shuffle
-      const randomized = weightedShuffle(filtered, (user) =>
-        getTierWeight(user.subscriptionTier)
-      );
+      // Prioritize super likers
+      const randomized = weightedShuffle(filtered, (user) => {
+        let weight = getTierWeight(user.subscriptionTier);
+        if (user.superLikedMe) weight += 10; // High priority for superlikes
+        return weight;
+      });
 
       setUsersToSwipe(randomized);
     }
@@ -489,6 +510,25 @@ function App() {
     }
 
     if (data) {
+      // Get all partner IDs to check for incoming superlikes
+      const partnerIds = data.map((m: any) => 
+        m.user1.id === user.id ? m.user2.id : m.user1.id
+      );
+
+      let superLikerIds = new Set<string>();
+      if (partnerIds.length > 0) {
+        const { data: superLikes } = await supabase
+          .from('swipes')
+          .select('swiper_id')
+          .eq('swiped_id', user.id)
+          .eq('direction', 'superlike')
+          .in('swiper_id', partnerIds);
+        
+        if (superLikes) {
+          superLikerIds = new Set(superLikes.map((s: any) => s.swiper_id));
+        }
+      }
+
       const formattedMatchesResults = await Promise.all(
         data.map(async (m: any) => {
           if (!m.user1 || !m.user2) return null;
@@ -516,7 +556,8 @@ function App() {
             tags: otherUserRaw.tags || [],
             password: '',
             securityQuestion: '',
-            securityAnswer: ''
+            securityAnswer: '',
+            superLikedMe: superLikerIds.has(otherUserRaw.id)
           };
 
           let lastMessageText = null;

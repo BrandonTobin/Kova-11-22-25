@@ -21,6 +21,7 @@ import {
   Users,
   Hash,
   Trash2,
+  Star,
 } from 'lucide-react';
 import { User, Match, Message, SubscriptionTier, hasPlusAccess } from '../types';
 import { supabase } from '../supabaseClient';
@@ -935,7 +936,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         {/* Header / Profile Pic Card */}
         <div className="bg-surface border border-white/10 rounded-2xl p-6 flex flex-col items-center text-center">
           <div className="relative group mb-4">
-            <div className="w-24 h-24 rounded-full border-4 border-background shadow-xl overflow-hidden relative">
+            <div className={`w-24 h-24 rounded-full border-4 ${user.superLikedMe ? 'border-[#00BFFF]' : 'border-background'} shadow-xl overflow-hidden relative`}>
               <img
                 src={user.imageUrl || DEFAULT_PROFILE_IMAGE}
                 alt="Profile"
@@ -945,13 +946,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }}
               />
             </div>
+            {user.superLikedMe && (
+              <div className="absolute -top-2 -right-2 bg-[rgba(0,191,255,0.2)] border border-[#00BFFF]/50 p-1.5 rounded-full backdrop-blur-sm">
+                <Star size={12} className="text-[#00BFFF] fill-[#00BFFF]" />
+              </div>
+            )}
           </div>
-          <h2 className="text-xl font-bold.text-text-main">
+          <h2 className="text-xl font-bold text-text-main">
             {getDisplayName(user.name)}
           </h2>
           <p className="text-sm text-text-muted mb-3">{user.role}</p>
 
-          <div className="flex items-center.gap-2 text-xs text-text-muted bg-background/50 px-3 py-1.5 rounded-lg border border-white/5 mb-3">
+          <div className="flex items-center gap-2 text-xs text-text-muted bg-background/50 px-3 py-1.5 rounded-lg border border-white/5 mb-3">
             <Hash size={12} className="text-gold" />
             <span className="font-mono">{user.kovaId || 'N/A'}</span>
           </div>
@@ -983,7 +989,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1 flex.items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5">
                 <Globe size={12} /> Industry
               </label>
               <p className="text-sm text-text-main">{user.industry}</p>
@@ -1009,7 +1015,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1 flex.items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5">
                 <MapPin size={12} /> Location
               </label>
               <p className="text-sm text-text-main">
@@ -1040,7 +1046,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex.items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
                 <Target size={12} /> Goals
               </label>
               <ul className="space-y-1.5">
@@ -1065,7 +1071,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1 flex.items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5">
                 <MessageCircle size={12} /> Communication
               </label>
               <span className="inline-block px-2.5 py-1 bg-surface border border-white/10 rounded-full text-xs text-text-main">
@@ -1077,7 +1083,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
         {/* Interests & Connect Card */}
         <div className="bg-surface border border-white/10 rounded-2xl p-4">
-          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider.mb-4 pb-2 border-b border-white/5">
+          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">
             Interests & Connect
           </h3>
 
@@ -1098,21 +1104,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex.items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
                 <Target size={12} /> Looking For
               </label>
               <TagDisplay tags={user.lookingFor || []} />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex.items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
                 <Clock size={12} /> Availability
               </label>
               <TagDisplay tags={user.availability || []} />
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-3 flex.items-center gap-1.5">
+              <label className="block text-xs font-medium text-text-muted mb-3 flex items-center gap-1.5">
                 <LinkIcon size={12} /> Links
               </label>
               <div className="flex flex-wrap gap-2">
@@ -1121,7 +1127,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     href={user.links.linkedin}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-2.5 py-1 bg-background.border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
+                    className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
                   >
                     LinkedIn
                   </a>
@@ -1151,7 +1157,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     href={user.links.portfolio}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-2.5 py-1 bg-background.border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
+                    className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
                   >
                     Portfolio
                   </a>
@@ -1175,7 +1181,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Connections Modal */}
       {connectionsModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-surface w-full max-w-md rounded-2xl border border-white/10.shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
+          <div className="bg-surface w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
             <div className="flex justify-between items-center mb-4 shrink-0">
               <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
                 <Users size={18} className="text-gold" /> Connections
@@ -1256,7 +1262,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               return (
                 <div key={match.id} onClick={() => { setSelectedMatchId(match.id); if (isNewMatch && onMatchSeen) onMatchSeen(match.id); }} className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${selectedMatchId === match.id ? 'bg-background/80 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}`}>
                   <div className="relative"><img src={match.user.imageUrl} alt={match.user.name} className="w-12 h-12 rounded-full object-cover border border-white/10" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} /><div className={`absolute bottom-0 right-0 w-3 h-3 ${dotClass} rounded-full border-2 border-surface`} /></div>
-                  <div className="flex-1 min-w-0"><div className="flex justify-between items-baseline mb-1"><div className="flex items-center gap-2 min-w-0"><h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>{getDisplayName(match.user.name)}</h3>{showNewBadge && (<span className="text-[9px] font-bold text-gold bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded-full shrink-0">NEW</span>)}</div><span className="text-[10px] text-text-muted shrink-0 ml-2">{timeToDisplay}</span></div><p className="text-sm text-text-muted truncate opacity-80">{truncatedPreview}</p></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between items-baseline mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>{getDisplayName(match.user.name)}</h3>
+                        {showNewBadge && (<span className="text-[9px] font-bold text-gold bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded-full shrink-0">NEW</span>)}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {match.user.superLikedMe && (
+                          <span className="text-[#00BFFF] text-[10px]" title="Super Liked You">⭐</span>
+                        )}
+                        <span className="text-[10px] text-text-muted shrink-0 ml-1">{timeToDisplay}</span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-text-muted truncate opacity-80">{truncatedPreview}</p>
+                  </div>
                 </div>
               );
             })
@@ -1279,12 +1299,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <button onClick={() => setSelectedMatchId(null)} className="md:hidden text-text-muted hover:text-white shrink-0 p-1"><ArrowLeft size={22} /></button>
                   <img src={selectedMatch.user.imageUrl} alt={selectedMatch.user.name} className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0 cursor-pointer" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} onClick={() => setShowProfileModal(true)} />
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setShowProfileModal(true)}>
-                    <h3 className="font-bold text-text-main truncate">{getDisplayName(selectedMatch.user.name)}</h3>
+                    <h3 className="font-bold text-text-main truncate leading-tight">{getDisplayName(selectedMatch.user.name)}</h3>
+                    {selectedMatch.user.superLikedMe && (
+                      <p className="text-[#00BFFF] text-xs font-semibold mt-0.5 flex items-center gap-1">⭐ This user Super Liked you</p>
+                    )}
                     {(() => {
                       const currentStatus = getPresenceStatus(selectedMatch.user.lastSeenAt);
                       const statusLabel = currentStatus === 'online' ? 'Online' : currentStatus === 'away' ? 'Away' : 'Offline';
                       const statusColor = currentStatus === 'online' ? 'text-green-500' : currentStatus === 'away' ? 'text-amber-500' : 'text-gray-500';
-                      return (<p className="text-xs text-text-muted truncate flex items-center gap-1.5"><span className={statusColor}>●</span> {statusLabel}<span className="text-white/20">|</span><span className="truncate">{selectedMatch.user.role}</span></p>);
+                      return !selectedMatch.user.superLikedMe && (
+                        <p className="text-xs text-text-muted truncate flex items-center gap-1.5"><span className={statusColor}>●</span> {statusLabel}<span className="text-white/20">|</span><span className="truncate">{selectedMatch.user.role}</span></p>
+                      );
                     })()}
                   </div>
                 </div>

@@ -448,7 +448,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const styles = getCardStyles(activeUser.subscriptionTier, activeUser.superLikedMe);
 
   return (
-    <div className="relative w-full h-full flex items-center justifycenter overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden p-4 md:p-8 perspective-1000 flex-col">
       
       {/* Report Modal */}
       <AnimatePresence>

@@ -61,7 +61,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const DAILY_SWIPE_LIMIT = 30;
   const FREE_SUPERLIKE_LIMIT = 1;
   const PAID_SUPERLIKE_LIMIT = 5;
-  const PAID_REWIND_LIMIT = 10;
+  const PAID_REWIND_LIMIT = 5;
 
   const isFree = currentTier === 'free';
   const isSwipesExhausted = isFree && dailySwipes >= DAILY_SWIPE_LIMIT;
@@ -177,10 +177,17 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     onSwipe(direction, activeUser);
 
     // Update Counters
-    const newSwipesCount = dailySwipes + 1;
-    setDailySwipes(newSwipesCount);
-    
-    const updates: any = { daily_swipes_count: newSwipesCount };
+    // UPDATED: Only increment dailySwipes if direction is chargeable (right or superlike)
+    // Left swipes (skips) should not count against the limit.
+    const isChargeable = direction === 'right' || direction === 'superlike';
+    let newSwipesCount = dailySwipes;
+    const updates: any = {};
+
+    if (isChargeable) {
+      newSwipesCount = dailySwipes + 1;
+      setDailySwipes(newSwipesCount);
+      updates.daily_swipes_count = newSwipesCount;
+    }
     
     if (direction === 'superlike') {
       const newSuperLikes = dailySuperLikes + 1;
@@ -188,8 +195,10 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       updates.daily_superlikes_count = newSuperLikes;
     }
 
-    // Fire DB Update
-    updateUserCounters(updates);
+    // Fire DB Update only if there are updates
+    if (Object.keys(updates).length > 0) {
+      updateUserCounters(updates);
+    }
     
     // Reset Motion
     x.set(0);
@@ -211,7 +220,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
 
     // 2. Limit Check
     if (dailyRewinds >= rewindsLimit) {
-      triggerToast("You’ve used your rewinds for today. They’ll reset tomorrow.");
+      triggerToast("You’ve used your 5 rewinds for today. They’ll reset tomorrow.");
       return;
     }
 
@@ -329,7 +338,8 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
         <div className={`absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-black/60 backdrop-blur-md rounded-full px-4 py-1.5 border flex items-center gap-2 shadow-lg transition-colors ${isSwipesExhausted ? 'border-red-500/50' : 'border-white/10'}`}>
           <span className="text-xs text-text-muted font-medium">Daily Swipes:</span>
           <span className={`text-xs font-bold ${isSwipesExhausted ? 'text-red-400' : 'text-white'}`}>
-            {dailySwipes} / {DAILY_SWIPE_LIMIT}
+            {/* UPDATED: Clamp displayed counter so it doesn't show over limit */}
+            {Math.min(dailySwipes, DAILY_SWIPE_LIMIT)} / {DAILY_SWIPE_LIMIT}
           </span>
         </div>
       )}

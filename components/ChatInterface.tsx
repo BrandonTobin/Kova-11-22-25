@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
@@ -301,8 +300,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       requestAnimationFrame(() => {
         if (messageInputRef.current) {
           const input = messageInputRef.current;
-          input.focus();
           const len = next.length;
+          input.focus();
           input.setSelectionRange(len, len); // caret at end
         }
       });
@@ -1038,8 +1037,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       voiceLocalStream.current = stream;
       setVoiceMicOn(true);
 
-      // 2. Start Backend Session (type: 'audio') for logging
-      const sid = await startSession(currentUser.id, targetUser.id, 'audio');
+      // 2. Start Backend Session (type: 'voice') for logging
+      const sid = await startSession(currentUser.id, targetUser.id, 'voice');
       voiceSessionId.current = sid;
 
       // 3. Initialize Signaling & PeerConnection for this specific match
@@ -1366,8 +1365,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5">
-                <MessageCircle size={12} /> Communication
+              <label className="block text-xs font-medium text-text-muted mb-1">
+                Communication
               </label>
               <span className="inline-block px-2.5 py-1 bg-surface border border-white/10 rounded-full text-xs text-text-main">
                 {user.communicationStyle || 'Not specified'}
@@ -1391,12 +1390,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
 
             <div>
-  <label className="block text-xs font-medium text-text-muted mb-2">
-    Interests
-  </label>
-  <TagDisplay tags={user.tags || []} />
-</div>
-
+              <label className="block text-xs font-medium text-text-muted mb-2">
+                Interests
+              </label>
+              <TagDisplay tags={user.tags || []} />
+            </div>
 
             <div>
               <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
@@ -1519,8 +1517,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Profile modal (mobile/desktop) */}
       {showProfileModal && selectedMatch && (
         <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
-            <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text-white hover:bg-black/60 transition-colors"><X size={20} /></button>
+          <div className="bg-surface w.full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
+            <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text.white hover:bg-black/60 transition-colors"><X size={20} /></button>
             <div className="flex-1 overflow-y-auto custom-scrollbar"><ProfileDetailView match={selectedMatch} /></div>
           </div>
         </div>
@@ -1670,7 +1668,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {!isInVoice ? (
                     <button 
                       onClick={handleVoiceToggle} 
-                      className="px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary/10 border border-transparent hover:border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
+                      className="px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary/10 border border.transparent hover:border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
                       title="Join Voice Channel"
                     >
                       <Headphones size={18} />
@@ -1681,7 +1679,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   ) : (
                     <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg">
                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                       <span className="text-xs font-bold text-green-500 hidden sm:inline">Voice Connected</span>
+                       <span className="text-xs font-bold text-green-500 hidden.sm:inline">Voice Connected</span>
                        <div className="h-4 w-px bg-white/10 mx-1"></div>
                        <button onClick={toggleVoiceMic} className="text-text-main hover:text-white transition-colors">
                           {voiceMicOn ? <Mic size={14} /> : <MicOff size={14} className="text-red-400" />}
@@ -1695,7 +1693,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {/* VIDEO CALL BUTTON (Existing full-screen logic) */}
                   <button 
                     onClick={() => handleStartVideo(selectedMatch, 'video')} 
-                    className="px-3 py-1.5 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
+                    className="px-3 py-1.5 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex.items-center justify-center gap-2" 
                     title="Video Call"
                   >
                     <Video size={18} />
@@ -1749,8 +1747,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                     return (
                       <React.Fragment key={msg.id}>
-                        {showDate && (<div className="w-full flex justify-center my-6"><div className="flex items-center justify-center"><div className="h-px bg-white/5 w-16" /><span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">{getDateLabel(msg.timestamp as any)}</span><div className="h-px bg-white/5 w-16" /></div></div>)}
-                        {showNewDivider && (<div className="w-full flex justify-center my-3"><div className="flex items-center justify-center"><div className="h-px bg-gold/40 w-12" /><span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">New messages</span><div className="h-px bg-gold/40 w-12" /></div></div>)}
+                        {showDate && (<div className="w-full flex.justify-center my-6"><div className="flex items-center justify-center"><div className="h-px bg-white/5 w-16" /><span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">{getDateLabel(msg.timestamp as any)}</span><div className="h-px bg-white/5 w-16" /></div></div>)}
+                        {showNewDivider && (<div className="w-full flex.justify-center my-3"><div className="flex items-center justify-center"><div className="h-px bg-gold/40 w-12" /><span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">New messages</span><div className="h-px bg-gold/40 w-12" /></div></div>)}
                         <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} group relative`} onContextMenu={(e) => { e.preventDefault(); setActiveReactionMessageId(msg.id); }} onMouseDown={() => startLongPress(msg.id)} onMouseUp={cancelLongPress} onMouseLeave={cancelLongPress} onTouchStart={() => startLongPress(msg.id)} onTouchEnd={cancelLongPress}>
                           {activeReactionMessageId === msg.id && (<div className={`absolute -top-9 ${isMe ? 'right-0' : 'left-0'} bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}>{REACTION_EMOJIS.map((emoji) => (<button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className="text-lg leading-none px-1 hover:scale-125 transition-transform">{emoji}</button>))}</div>)}
                           <div className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] p-3.5 rounded-2xl shadow-sm ${isMe ? 'bg-primary text-white rounded-tr-sm' : 'bg-surface border border-white/5 text-text-main rounded-tl-sm'}`}>
@@ -1768,14 +1766,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 </div>
               </div>
 
-              {isOtherTyping && (<div className="absolute bottom-20 left-6 z-10 px-4 py-2 bg-surface/90 backdrop-blur border border-white/10 rounded-full text-xs text-text-muted italic shadow-lg">{getDisplayName(selectedMatch.user.name)} is typing…</div>)}
+              {isOtherTyping && (<div className="absolute.bottom-20 left-6 z-10 px-4 py-2 bg-surface/90 backdrop-blur border border-white/10 rounded-full text-xs text-text-muted italic shadow-lg">{getDisplayName(selectedMatch.user.name)} is typing…</div>)}
 
               {/* Input area */}
               <div className="p-4 border-t border-white/5 bg-white/5 backdrop-blur-md shrink-0">
-                <div className="w-full"><div className="flex gap-2 items-end"><div className="flex-1 relative"><button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform">🙂</button><input ref={messageInputRef} type="text" value={inputText} onChange={handleInputChange} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Type a message..." className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm" />{showEmojiPicker && (<div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">{EMOJIS.map((e, i) => (<button key={i} type="button" onClick={() => handleEmojiClick(e)} className="hover:scale-125 transition-transform">{e}</button>))}</div>)}</div><button onClick={() => handleSendMessage()} disabled={!inputText.trim()} className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"><Send size={20} /></button></div></div>
+                <div className="w-full"><div className="flex gap-2 items-end"><div className="flex-1.relative"><button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform">🙂</button><input ref={messageInputRef} type="text" value={inputText} onChange={handleInputChange} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Type a message..." className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm" />{showEmojiPicker && (<div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">{EMOJIS.map((e, i) => (<button key={i} type="button" onClick={() => handleEmojiClick(e)} className="hover:scale-125 transition-transform">{e}</button>))}</div>)}</div><button onClick={() => handleSendMessage()} disabled={!inputText.trim()} className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"><Send size={20} /></button></div></div>
               </div>
             </div>
-
+            
             {/* Right Column Group: Shared Goals + Profile (Desktop Only) */}
             <aside className="hidden xl:flex gap-4 w-[640px] shrink-0 h-full">
                

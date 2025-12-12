@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -292,8 +291,8 @@ function App() {
           const newSession = payload.new;
           if (!newSession) return;
 
-          // VOICE CHANNEL LOGIC: 
-          // Discord-style voice channels do NOT trigger a popup. 
+          // VOICE CHANNEL LOGIC:
+          // Discord-style voice channels do NOT trigger a popup.
           // They are drop-in/drop-out.
           if (newSession.call_type !== 'video') {
             return;
@@ -320,26 +319,26 @@ function App() {
 
           if (callerData) {
             const caller: User = {
-                ...callerData,
-                imageUrl: callerData.image_url || DEFAULT_PROFILE_IMAGE,
-                kovaId: callerData.kova_id,
-                mainGoal: callerData.main_goal,
-                location: { city: callerData.city, state: callerData.state },
-                subscriptionTier: normalizeTierFromDb(callerData.subscription_tier),
-                proExpiresAt: callerData.pro_expires_at,
-                experienceLevel: callerData.experience_level,
-                communicationStyle: callerData.communication_style,
-                skills: callerData.skills,
-                lookingFor: callerData.looking_for,
-                availability: callerData.availability,
-                goalsList: callerData.goals_list,
-                links: callerData.links,
-                lastSeenAt: callerData.last_seen_at,
-                badges: callerData.badges || [],
-                tags: callerData.tags || [],
-                password: '',
-                securityQuestion: '',
-                securityAnswer: ''
+              ...callerData,
+              imageUrl: callerData.image_url || DEFAULT_PROFILE_IMAGE,
+              kovaId: callerData.kova_id,
+              mainGoal: callerData.main_goal,
+              location: { city: callerData.city, state: callerData.state },
+              subscriptionTier: normalizeTierFromDb(callerData.subscription_tier),
+              proExpiresAt: callerData.pro_expires_at,
+              experienceLevel: callerData.experience_level,
+              communicationStyle: callerData.communication_style,
+              skills: callerData.skills,
+              lookingFor: callerData.looking_for,
+              availability: callerData.availability,
+              goalsList: callerData.goals_list,
+              links: callerData.links,
+              lastSeenAt: callerData.last_seen_at,
+              badges: callerData.badges || [],
+              tags: callerData.tags || [],
+              password: '',
+              securityQuestion: '',
+              securityAnswer: ''
             };
 
             const callType = 'video';
@@ -411,8 +410,6 @@ function App() {
       supabase.removeChannel(channel);
     };
   }, [user?.id]);
-
-  // ... (rest of App.tsx remains unchanged)
 
   // -----------------------------
   // Auth + Profile
@@ -1649,7 +1646,9 @@ function App() {
             />
           )}
 
-          {currentView === ViewState.MATCHES && (
+          {/* ChatInterface is ALWAYS mounted, just hidden when not on MATCHES.
+              This keeps voice channels alive when you switch tabs. */}
+          <div className={currentView === ViewState.MATCHES ? 'h-full w-full' : 'hidden'}>
             <ChatInterface
               matches={matches}
               currentUser={user}
@@ -1664,7 +1663,7 @@ function App() {
               onMatchSeen={handleMatchSeen}
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
             />
-          )}
+          </div>
 
           {currentView === ViewState.VIDEO_ROOM && activeVideoMatch && (
             <VideoRoom

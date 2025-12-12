@@ -389,7 +389,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
     if (tier === 'kova_plus') {
       return {
         container: 'border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.5)]',
-        badgeBg: 'bg-emerald-700',
+        badgeBg: 'bg-emerald-600', // Emerald for Plus badge
         badgeText: '💎 KOVA PLUS USER',
         badgeColor: 'text-white',
         glow: true

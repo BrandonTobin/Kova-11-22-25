@@ -1439,7 +1439,7 @@ function App() {
             onClick={() => setShowOutOfSwipesModal(false)}
           >
             <div 
-              className="bg-surface rounded-3xl border border-gold/30 max-w-4xl w-full p-6 md:p-8 shadow-2xl relative overflow-y-auto max-h-[90vh]"
+              className="bg-surface rounded-3xl border border-white/10 max-w-4xl w-full p-6 md:p-8 shadow-2xl relative overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
               <button 
@@ -1456,7 +1456,7 @@ function App() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {/* Free Plan */}
-                <div className="border border-white/10 bg-white/5 p-6 rounded-2xl flex flex-col relative opacity-80">
+                <div className="border border-white/10 bg-white/5 p-6 rounded-2xl flex flex-col relative opacity-80 shadow-sm">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white/10 border border-white/10 text-text-muted text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                     Current Plan
                   </div>
@@ -1498,7 +1498,7 @@ function App() {
                 </div>
 
                 {/* Kova Pro (Locked State) */}
-                <div className="relative border border-white/5 bg-black/20 p-6 rounded-2xl flex flex-col overflow-hidden pointer-events-none select-none">
+                <div className="relative border border-gold/30 bg-gold/5 p-6 rounded-2xl flex flex-col overflow-hidden pointer-events-none select-none">
                    {/* Blur Overlay - Increased blur strength */}
                    <div className="opacity-30 blur-[6px] flex flex-col h-full">
                       <h3 className="text-xl font-bold text-gold mt-2 mb-4 text-center">Kova Pro</h3>
@@ -1513,9 +1513,9 @@ function App() {
 
                    {/* Pill Overlay */}
                    <div className="absolute inset-0 flex items-center justify-center z-10">
-                      <div className="px-3 py-1.5 rounded-full bg-black/90 border border-white/10 flex items-center gap-2 shadow-xl">
+                      <div className="px-3 py-1.5 rounded-full bg-black/90 border border-gold/30 flex items-center gap-2 shadow-xl">
                          <Lock size={12} className="text-zinc-400" />
-                         <span className="text-[10px] font-bold text-white tracking-wider uppercase">
+                         <span className="text-[10px] font-bold text-gold tracking-wider uppercase">
                            Kova Pro | Coming Soon
                          </span>
                       </div>
@@ -1542,7 +1542,9 @@ function App() {
             onClick={() => !isProcessingPayment && setUpgradeTargetTier(null)}
           >
             <div
-              className="bg-surface max-w-md w-full p-8 rounded-3xl border border-gold/30 text-center shadow-2xl relative animate-in fade-in zoom-in duration-200"
+              className={`bg-surface max-w-md w-full p-8 rounded-3xl border text-center shadow-2xl relative animate-in fade-in zoom-in duration-200 ${
+                upgradeTargetTier === 'kova_plus' ? 'border-emerald-500/50' : 'border-gold/30'
+              }`}
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -1553,11 +1555,13 @@ function App() {
                 <X />
               </button>
 
-              <div className="w-16 h-16 bg-gradient-to-br from-gold to-amber-600 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg">
-                <Crown size={32} fill="currentColor" />
+              <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg ${
+                upgradeTargetTier === 'kova_plus' ? 'bg-emerald-500' : 'bg-gradient-to-br from-gold to-amber-600'
+              }`}>
+                {upgradeTargetTier === 'kova_plus' ? <Gem size={32} fill="currentColor" /> : <Crown size={32} fill="currentColor" />}
               </div>
 
-              <h2 className="text-2xl font-bold text-text-main mb-2">
+              <h2 className={`text-2xl font-bold mb-2 ${upgradeTargetTier === 'kova_plus' ? 'text-emerald-400' : 'text-gold'}`}>
                 Upgrade to {upgradeModalContent.name}
               </h2>
 
@@ -1568,7 +1572,9 @@ function App() {
               <button
                 onClick={() => handleUpgradeSubscription(upgradeTargetTier)}
                 disabled={isProcessingPayment}
-                className="w-full py-3 bg-gold text-surface font-bold rounded-xl hover:bg-gold-hover transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mb-4"
+                className={`w-full py-3 text-white font-bold rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mb-4 ${
+                  upgradeTargetTier === 'kova_plus' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-gold hover:bg-gold-hover text-surface'
+                }`}
               >
                 {isProcessingPayment ? (
                   <Loader2 className="animate-spin" size={20} />

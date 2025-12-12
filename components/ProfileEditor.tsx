@@ -370,11 +370,11 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
             
             <div className="flex items-center gap-3 mb-4">
                {user.subscriptionTier === 'kova_pro' ? (
-                 <div className="w-12 h-12 bg-gradient-to-br from-gold to-amber-600 rounded-full flex items-center justify-center text-white shadow-lg shrink-0">
+                 <div className="w-12 h-12 bg-gradient-to-br from-gold to-amber-600 rounded-full flex items-center justify-center text-white shadow-lg shrink-0 border border-gold/30">
                    <Crown size={24} fill="currentColor" />
                  </div>
                ) : user.subscriptionTier === 'kova_plus' ? (
-                  <div className="w-12 h-12 bg-surface border border-white/20 rounded-full flex items-center justify-center text-white shadow-lg shrink-0">
+                  <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center text-white shadow-lg shrink-0 border border-emerald-400/30">
                    <Crown size={24} className="text-white" fill="white" />
                  </div>
                ) : (
@@ -383,7 +383,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                  </div>
                )}
                <div>
-                  <p className="font-bold text-text-main text-lg">
+                  <p className={`font-bold text-lg ${user.subscriptionTier === 'kova_pro' ? 'text-gold' : user.subscriptionTier === 'kova_plus' ? 'text-emerald-400' : 'text-text-main'}`}>
                     {SUBSCRIPTION_PLANS[user.subscriptionTier]?.name || 'Unknown'}
                   </p>
                   <p className="text-xs text-text-muted">
@@ -414,37 +414,56 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                   const isPlus = plan.id === 'kova_plus';
                   const isFree = plan.id === 'free';
                   
+                  // Define strict styles based on tier rules
+                  let cardStyles = 'bg-background border-white/5 hover:border-white/10'; // Default non-active
+                  let pillStyles = 'bg-white/10 text-text-muted border-white/10'; // Default pill (Free)
+
+                  if (isCurrent) {
+                    if (isFree) {
+                      cardStyles = 'bg-white/5 border-white/20 shadow-sm'; // Neutral/Gray
+                      pillStyles = 'bg-white/20 text-text-muted border-white/10';
+                    } else if (isPlus) {
+                      cardStyles = 'bg-emerald-500/5 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)]'; // Emerald
+                      pillStyles = 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20';
+                    } else if (isPro) {
+                      cardStyles = 'bg-gold/5 border-gold shadow-[0_0_15px_rgba(214,167,86,0.2)]'; // Gold
+                      pillStyles = 'bg-gold text-white border-gold shadow-lg shadow-gold/20';
+                    }
+                  }
+
+                  // Title Color
+                  const titleColor = isPro ? 'text-gold' : isPlus ? 'text-emerald-400' : 'text-text-main';
+                  
+                  // Icon/Check Color
+                  const accentColor = isPro ? 'text-gold' : isPlus ? 'text-emerald-400' : 'text-text-muted';
+
                   return (
                     <div 
                       key={plan.id}
-                      className={`relative flex flex-col p-4 rounded-xl border transition-all ${
-                        isCurrent 
-                          ? 'bg-white/5 border-gold shadow-[0_0_15px_rgba(214,167,86,0.15)]' 
-                          : 'bg-background border-white/5 hover:border-white/10'
-                      }`}
+                      className={`relative flex flex-col p-4 rounded-xl border transition-all ${cardStyles}`}
                     >
                       {/* Locked Overlay for Pro */}
-                      {isPro && (
+                      {isPro && !isCurrent && (
                         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
-                           <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
+                           <div className="px-4 py-2 rounded-full bg-black/90 flex items-center gap-2 border border-gold/30 shadow-xl">
                               <Lock size={12} className="text-zinc-400" />
-                              <span className="text-xs font-semibold tracking-wide text-white">
+                              <span className="text-xs font-semibold tracking-wide text-gold">
                                 Kova Pro | Coming Soon
                               </span>
                            </div>
                         </div>
                       )}
 
-                      {/* Content Wrapper - Pointer events disabled for Pro */}
-                      <div className={isPro ? "pointer-events-none" : ""}>
+                      {/* Content Wrapper - Pointer events disabled for Pro if locked */}
+                      <div className={isPro && !isCurrent ? "pointer-events-none" : ""}>
                         {isCurrent && (
-                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gold text-surface text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm z-10">
+                          <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-sm z-10 border ${pillStyles}`}>
                             Current
                           </div>
                         )}
                         
                         <div className="text-center mb-4 mt-2">
-                           <h4 className={`font-bold text-lg ${isPro ? 'text-gold' : 'text-text-main'}`}>
+                           <h4 className={`font-bold text-lg ${titleColor}`}>
                              {plan.name}
                            </h4>
                            <p className="text-sm font-medium text-text-muted">{plan.price}</p>
@@ -453,7 +472,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                         <ul className="space-y-2 mb-6 flex-1">
                           {plan.features.slice(0, 3).map((feat, i) => (
                             <li key={i} className="text-xs text-text-muted flex items-start gap-2">
-                              <Check size={12} className={`shrink-0 mt-0.5 ${isPro ? 'text-gold' : 'text-text-muted'}`} />
+                              <Check size={12} className={`shrink-0 mt-0.5 ${accentColor}`} />
                               <span className="leading-tight">{feat}</span>
                             </li>
                           ))}
@@ -465,7 +484,9 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                             onClick={() => onUpgrade(plan.id)}
                             className={`w-full py-2 rounded-lg text-xs font-bold transition-colors ${
                               isPro 
-                                ? 'bg-gradient-to-r from-gold to-amber-600 text-white opacity-50 cursor-not-allowed' 
+                                ? 'bg-gradient-to-r from-gold to-amber-600 text-white opacity-50 cursor-not-allowed border border-gold/50' 
+                                : isPlus
+                                ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
                                 : 'bg-surface border border-white/10 hover:bg-white/5 text-text-main'
                             }`}
                           >
@@ -474,7 +495,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                         )}
                         
                         {isCurrent && (
-                          <div className="w-full py-2 text-center text-xs font-bold text-gold/50 cursor-default">
+                          <div className={`w-full py-2 text-center text-xs font-bold cursor-default ${isPro ? 'text-gold' : isPlus ? 'text-emerald-500' : 'text-text-muted'}`}>
                             Active
                           </div>
                         )}

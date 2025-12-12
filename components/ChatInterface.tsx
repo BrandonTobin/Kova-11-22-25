@@ -1037,8 +1037,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       voiceLocalStream.current = stream;
       setVoiceMicOn(true);
 
-      // 2. Start Backend Session (type: 'voice') for logging
-      const sid = await startSession(currentUser.id, targetUser.id, 'voice');
+      // 2. Start Backend Session (type: 'audio') for logging
+      const sid = await startSession(currentUser.id, targetUser.id, 'audio');
       voiceSessionId.current = sid;
 
       // 3. Initialize Signaling & PeerConnection for this specific match

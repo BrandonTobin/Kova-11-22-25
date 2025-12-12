@@ -1226,7 +1226,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     );
 
     return (
-      <div className="p-4 space-y-4 pb-20">
+      <div className="p-4 space-y-4">
         {/* Header / Profile Pic Card */}
         <div className="bg-surface border border-white/10 rounded-2xl p-6 flex flex-col items-center text-center">
           <div className="relative group mb-4">
@@ -1469,7 +1469,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   return (
-    <div className="flex h-full w-full bg-background overflow-hidden border-t border-white/5 relative">
+    <div className="flex h-full w-full bg-background overflow-hidden relative">
       {/* Invisible Audio Element for Voice Channel */}
       <audio ref={voiceAudioRef} autoPlay style={{display: 'none'}} />
 
@@ -1517,65 +1517,65 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Profile modal (mobile/desktop) */}
       {showProfileModal && selectedMatch && (
         <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-surface w.full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
+          <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
             <button onClick={() => setShowProfileModal(false)} className="absolute top-4 right-4 z-10 p-2 bg-black/40 rounded-full text.white hover:bg-black/60 transition-colors"><X size={20} /></button>
             <div className="flex-1 overflow-y-auto custom-scrollbar"><ProfileDetailView match={selectedMatch} /></div>
           </div>
         </div>
       )}
 
-      {/* Column 1: sidebar */}
+      {/* Column 1: sidebar (Messages List) */}
       <div
-        className={`w-full md:w-72 lg:w-80 bg-surface border-r border-white/5 flex flex-col shrink-0 ${
-          selectedMatchId ? 'hidden md:flex' : 'flex'
+        className={`flex-col border-r border-white/5 bg-surface/50 shrink-0 md:w-64 lg:w-72 ${
+          selectedMatchId ? 'hidden md:flex' : 'flex w-full'
         }`}
       >
-        <div className="flex flex-col bg-surface border-b border-white/5 shrink-0">
-          <div className="p-4 pb-2 flex justify-between items-center">
-            <h2 className="text-xl font-bold text-text-main">Messages</h2>
-            <button onClick={() => setShowConnectModal(true)} className="flex items-center gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold transition-colors rounded-lg border border-white/10"><UserPlus size={14} /> Add via Kova ID</button>
+        <div className="flex flex-col border-b border-white/5 shrink-0">
+          <div className="p-3 pb-2 flex justify-between items-center">
+            <h2 className="text-lg font-bold text-text-main">Messages</h2>
+            <button onClick={() => setShowConnectModal(true)} className="flex items-center gap-2 px-3 py-1.5 bg-background hover:bg-primary/10 hover:text-primary hover:border-primary/20 text-text-muted text-xs font-bold transition-colors rounded-lg border border-white/10"><UserPlus size={14} /> Add</button>
           </div>
-          <div className="px-4 pb-4"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search connections..." className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-base md:text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} /></div></div>
+          <div className="px-3 pb-3"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} /></div></div>
         </div>
 
         {/* Discord-style Active Voice Channel Display */}
         {selectedMatchId && voiceParticipants.length > 0 && (
-          <div className="px-4 py-3 border-b border-white/5 bg-background/30 animate-in fade-in slide-in-from-top-2">
-             <div className="flex items-center justify-between mb-2">
+          <div className="px-3 py-2 border-b border-white/5 bg-background/30 animate-in fade-in slide-in-from-top-2">
+             <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-2">
-                   <Volume2 size={14} className="text-green-500" />
-                   <span className="text-xs font-bold text-text-main uppercase tracking-wide">
+                   <Volume2 size={12} className="text-green-500" />
+                   <span className="text-[10px] font-bold text-text-main uppercase tracking-wide">
                      Voice Channel
                    </span>
                 </div>
                 {isInVoice ? (
                    <button 
                      onClick={handleVoiceToggle}
-                     className="text-[10px] text-red-400 hover:text-white transition-colors border border-red-500/20 bg-red-500/10 px-2 py-0.5 rounded"
+                     className="text-[9px] text-red-400 hover:text-white transition-colors border border-red-500/20 bg-red-500/10 px-1.5 py-0.5 rounded"
                    >
                      Disconnect
                    </button>
                 ) : (
                    <button 
                      onClick={handleVoiceToggle}
-                     className="text-[10px] text-primary hover:text-white transition-colors border border-primary/20 bg-primary/10 px-2 py-0.5 rounded"
+                     className="text-[9px] text-primary hover:text-white transition-colors border border-primary/20 bg-primary/10 px-1.5 py-0.5 rounded"
                    >
                      Join
                    </button>
                 )}
              </div>
-             <div className="space-y-1.5 pl-1">
+             <div className="space-y-1 pl-1">
                 {voiceParticipants.map(participant => (
-                   <div key={participant.user_id} className="flex items-center gap-2.5 p-1 rounded-lg hover:bg-white/5 transition-colors">
+                   <div key={participant.user_id} className="flex items-center gap-2 p-1 rounded-lg hover:bg-white/5 transition-colors">
                       <div className="relative">
                          <img 
                            src={participant.avatar_url || DEFAULT_PROFILE_IMAGE} 
-                           className="w-6 h-6 rounded-full object-cover border border-white/10" 
+                           className="w-5 h-5 rounded-full object-cover border border-white/10" 
                            onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
                          />
-                         <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-green-500 border-2 border-black rounded-full"></div>
+                         <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 border border-black rounded-full"></div>
                       </div>
-                      <span className={`text-xs ${participant.user_id === currentUser.id ? 'text-primary font-bold' : 'text-text-muted'}`}>
+                      <span className={`text-[10px] ${participant.user_id === currentUser.id ? 'text-primary font-bold' : 'text-text-muted'}`}>
                          {participant.display_name}
                       </span>
                    </div>
@@ -1587,14 +1587,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {filteredMatches.length === 0 ? (
             matches.length === 0 ? (
-              <div className="p-8 text-center text-text-muted flex flex-col items-center gap-4"><div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border border-white/5"><Bot size={32} className="opacity-20" /></div><p>No matches yet. Start swiping or add by ID!</p></div>
+              <div className="p-8 text-center text-text-muted flex flex-col items-center gap-4"><div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border border-white/5"><Bot size={32} className="opacity-20" /></div><p className="text-xs">No matches yet.</p></div>
             ) : (
-              <p className="text-center text-text-muted p-6 text-sm">No matches found.</p>
+              <p className="text-center text-text-muted p-6 text-xs">No matches found.</p>
             )
           ) : (
             filteredMatches.map((match) => {
               const previewText = match.lastMessageText || 'Chat started';
-              const truncatedPreview = previewText.length > 40 ? previewText.slice(0, 40) + '…' : previewText;
+              const truncatedPreview = previewText.length > 35 ? previewText.slice(0, 35) + '…' : previewText;
               const timeToDisplay = match.lastMessageAt ? formatSidebarDate(match.lastMessageAt) : formatSidebarDate(match.timestamp as any);
               const status = getPresenceStatus(match.user.lastSeenAt);
               const dotClass = status === 'online' ? 'bg-green-500' : status === 'away' ? 'bg-amber-500' : 'bg-gray-500';
@@ -1604,28 +1604,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               const isVoiceActive = activeVoiceMatchIds.has(match.id);
 
               return (
-                <div key={match.id} onClick={() => { setSelectedMatchId(match.id); if (isNewMatch && onMatchSeen) onMatchSeen(match.id); }} className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${selectedMatchId === match.id ? 'bg-background/80 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}`}>
-                  <div className="relative"><img src={match.user.imageUrl} alt={match.user.name} className="w-12 h-12 rounded-full object-cover border border-white/10" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} /><div className={`absolute bottom-0 right-0 w-3 h-3 ${dotClass} rounded-full border-2 border-surface`} /></div>
+                <div key={match.id} onClick={() => { setSelectedMatchId(match.id); if (isNewMatch && onMatchSeen) onMatchSeen(match.id); }} className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-background/50 transition-colors border-b border-white/5 ${selectedMatchId === match.id ? 'bg-background/80 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}`}>
+                  <div className="relative"><img src={match.user.imageUrl} alt={match.user.name} className="w-10 h-10 rounded-full object-cover border border-white/10" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} /><div className={`absolute bottom-0 right-0 w-2.5 h-2.5 ${dotClass} rounded-full border-2 border-surface`} /></div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-baseline mb-1">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <h3 className={`font-medium truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>{getDisplayName(match.user.name)}</h3>
-                        {showNewBadge && (<span className="text-[9px] font-bold text-gold bg-gold/10 border border-gold/30 px-1.5 py-0.5 rounded-full shrink-0">NEW</span>)}
+                    <div className="flex justify-between items-baseline mb-0.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className={`font-medium text-sm truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>{getDisplayName(match.user.name)}</h3>
+                        {showNewBadge && (<span className="text-[8px] font-bold text-gold bg-gold/10 border border-gold/30 px-1 py-0.5 rounded-full shrink-0">NEW</span>)}
                         {isVoiceActive && (
-                          <span className="flex items-center gap-1 text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded-full border border-emerald-500/30">
-                            <Headphones size={10} className="shrink-0" />
+                          <span className="flex items-center gap-0.5 text-[8px] font-semibold text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded-full border border-emerald-500/30">
+                            <Headphones size={8} className="shrink-0" />
                             <span>In Voice</span>
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1">
                         {match.user.superLikedMe && (
-                          <span className="text-[#00BFFF] text-[10px]" title="Super Liked You">⭐</span>
+                          <span className="text-[#00BFFF] text-[9px]" title="Super Liked You">⭐</span>
                         )}
-                        <span className="text-[10px] text-text-muted shrink-0 ml-1">{timeToDisplay}</span>
+                        <span className="text-[9px] text-text-muted shrink-0 ml-1">{timeToDisplay}</span>
                       </div>
                     </div>
-                    <p className="text-sm text-text-muted truncate opacity-80">{truncatedPreview}</p>
+                    <p className="text-xs text-text-muted truncate opacity-80">{truncatedPreview}</p>
                   </div>
                 </div>
               );
@@ -1635,23 +1635,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Main Content Area */}
-      <div className={`flex-1 flex flex-col min-w-0 bg-background relative ${!selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
+      <div className={`flex-1 flex min-w-0 bg-background relative ${!selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
         {selectedMatch ? (
-          // NEW LAYOUT WRAPPER (Padded with gap for bubble look)
-          <div className="flex-1 flex flex-row p-4 gap-4 h-full w-full bg-background overflow-hidden">
-            
-            {/* 1. CHAT CARD - Flex 1 to fill available space */}
-            <div className="flex-1 flex flex-col bg-surface/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-xl overflow-hidden relative min-w-0">
+          <>
+            {/* 2. Left-Center (Goals) - Visible on 2xl+ */}
+            <div className="hidden 2xl:flex w-80 flex-col border-r border-white/5 bg-surface/30 backdrop-blur-sm shrink-0 h-full">
+               <div className="flex-1 overflow-hidden p-3 h-full">
+                  <SharedGoalsPanel 
+                    isPlusOrPro={hasPlusAccess(currentUser)} 
+                    partnerName={selectedMatch.user.name} 
+                    onUpgrade={onUpgrade}
+                    matchId={selectedMatch.id}
+                  />
+               </div>
+            </div>
+
+            {/* 3. Center Chat Column - Dominant focus */}
+            <div className="flex-1 flex flex-col min-w-0 bg-background">
               
-              {/* Chat header */}
-              <div className="h-16 border-b border-white/5 bg-white/5 backdrop-blur-md shrink-0 flex items-center px-4 justify-between z-20">
+              {/* Header */}
+              <div className="h-16 border-b border-white/5 flex items-center justify-between px-6 shrink-0 bg-surface/30 backdrop-blur-md z-10">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <button onClick={() => setSelectedMatchId(null)} className="md:hidden text-text-muted hover:text-white shrink-0 p-1"><ArrowLeft size={22} /></button>
                   <img src={selectedMatch.user.imageUrl} alt={selectedMatch.user.name} className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0 cursor-pointer" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} onClick={() => setShowProfileModal(true)} />
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setShowProfileModal(true)}>
-                    <h3 className="font-bold text-text-main truncate leading-tight">{getDisplayName(selectedMatch.user.name)}</h3>
+                    <h3 className="font-bold text-text-main truncate text-base leading-tight">{getDisplayName(selectedMatch.user.name)}</h3>
                     {selectedMatch.user.superLikedMe && (
-                      <p className="text-[#00BFFF] text-xs font-semibold mt-0.5 flex items-center gap-1">⭐ This user Super Liked you</p>
+                      <p className="text-[#00BFFF] text-[10px] font-semibold mt-0.5 flex items-center gap-1">⭐ Super Liked you</p>
                     )}
                     {(() => {
                       const currentStatus = getPresenceStatus(selectedMatch.user.lastSeenAt);
@@ -1663,77 +1673,70 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     })()}
                   </div>
                 </div>
-                <div className="flex items-center justify-center gap-2 shrink-0">
-                  {/* JOIN VOICE BUTTON */}
-                  {!isInVoice ? (
-                    <button 
-                      onClick={handleVoiceToggle} 
-                      className="px-3 py-1.5 text-text-muted hover:text-primary hover:bg-primary/10 border border.transparent hover:border-primary/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
-                      title="Join Voice Channel"
-                    >
-                      <Headphones size={18} />
-                      <span className="hidden sm:inline text-xs font-medium">
-                        Voice Chat
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-lg">
-                       <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                       <span className="text-xs font-bold text-green-500 hidden.sm:inline">Voice Connected</span>
-                       <div className="h-4 w-px bg-white/10 mx-1"></div>
-                       <button onClick={toggleVoiceMic} className="text-text-main hover:text-white transition-colors">
-                          {voiceMicOn ? <Mic size={14} /> : <MicOff size={14} className="text-red-400" />}
-                       </button>
-                       <button onClick={handleVoiceToggle} className="text-text-muted hover:text-red-400 transition-colors ml-1" title="Disconnect">
-                          <LogOut size={14} />
-                       </button>
-                    </div>
-                  )}
+                
+                <div className="flex items-center justify-center gap-3 shrink-0">
+                  {/* Group 1: Comms */}
+                  <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1 border border-white/5">
+                      {!isInVoice ? (
+                        <button 
+                          onClick={handleVoiceToggle} 
+                          className="px-3 py-1.5 text-text-muted hover:text-primary hover:bg-white/5 rounded-md transition-colors flex items-center justify-center gap-1.5" 
+                          title="Join Voice Channel"
+                        >
+                          <Headphones size={16} />
+                          <span className="hidden lg:inline text-xs font-medium">Voice</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-2 px-3 py-1.5">
+                           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
+                           <button onClick={toggleVoiceMic} className="text-text-main hover:text-white transition-colors">
+                              {voiceMicOn ? <Mic size={14} /> : <MicOff size={14} className="text-red-400" />}
+                           </button>
+                           <button onClick={handleVoiceToggle} className="text-xs font-bold text-red-400 hover:text-red-300 ml-1">Leave</button>
+                        </div>
+                      )}
 
-                  {/* VIDEO CALL BUTTON (Existing full-screen logic) */}
-                  <button 
-                    onClick={() => handleStartVideo(selectedMatch, 'video')} 
-                    className="px-3 py-1.5 text-gold bg-gold/10 hover:bg-gold/20 border border-gold/20 rounded-lg transition-colors flex.items-center justify-center gap-2" 
-                    title="Video Call"
-                  >
-                    <Video size={18} />
-                    <span className="hidden sm:inline text-xs font-medium">
-                      Video Chat
-                    </span>
-                  </button>
-                  
-                  <div className="h-6 w-px bg-white/10 mx-1"></div>
+                      <div className="w-px h-4 bg-white/10"></div>
 
-                  <button 
-                    onClick={handleDeleteChat} 
-                    className="px-3 py-1.5 text-text-muted hover:text-white hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
-                    title="Delete Chat"
-                  >
-                    <Trash2 size={18} />
-                    <span className="hidden sm:inline text-xs font-medium">
-                      Delete Chat
-                    </span>
-                  </button>
+                      <button 
+                        onClick={() => handleStartVideo(selectedMatch, 'video')} 
+                        className="px-3 py-1.5 text-text-muted hover:text-white hover:bg-white/5 rounded-md transition-colors flex items-center justify-center gap-1.5" 
+                        title="Start Video Call"
+                      >
+                        <Video size={16} />
+                        <span className="hidden lg:inline text-xs font-medium">Video</span>
+                      </button>
+                  </div>
 
-                  <button 
-                    onClick={handleUnmatchClick} 
-                    className="px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition-colors flex items-center justify-center gap-2" 
-                    title="Unmatch"
-                  >
-                    <UserMinus size={18} />
-                    <span className="hidden sm:inline text-xs font-medium">
-                      Unmatch
-                    </span>
-                  </button>
+                  {/* Group 2: Actions */}
+                  <div className="flex items-center gap-2">
+                      <button 
+                        onClick={handleDeleteChat} 
+                        className="p-2 text-text-muted hover:text-white hover:bg-white/5 rounded-lg transition-colors flex items-center justify-center gap-1.5" 
+                        title="Delete Chat"
+                      >
+                        <Trash2 size={16} />
+                        <span className="hidden xl:inline text-xs font-medium">Delete</span>
+                      </button>
+
+                      <button 
+                        onClick={handleUnmatchClick} 
+                        className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-1.5" 
+                        title="Unmatch"
+                      >
+                        <UserMinus size={16} />
+                        <span className="hidden xl:inline text-xs font-medium">Unmatch</span>
+                      </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 md:p-6 scroll-smooth custom-scrollbar">
-                <div className="w-full space-y-4">
+              {/* Messages Area - Constrained Max Width */}
+              <div className="flex-1 overflow-y-auto p-0 scroll-smooth custom-scrollbar">
+                <div className="w-full max-w-3xl mx-auto px-6 py-6 space-y-2">
                   {isLoadingMessages && <div className="flex justify-center p-4"><Loader2 className="animate-spin text-gold" /></div>}
                   {messages.length === 0 && !isLoadingMessages && (
-                    <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center text-text-muted opacity-60">
+                    <div className="flex flex-col items-center justify-center h-[300px] text-center text-text-muted opacity-60">
                       <p className="mb-1">This is the start of your conversation with {getDisplayName(selectedMatch.user.name)}.</p>
                       <p className="text-xs">Say hello to start collaborating!</p>
                     </div>
@@ -1741,72 +1744,168 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   {messages.map((msg, idx) => {
                     const isMe = msg.senderId === currentUser.id;
                     const prevMsg = messages[idx - 1];
+                    const nextMsg = messages[idx + 1];
+                    
+                    // Grouping logic for spacing
+                    const isSameSenderPrev = prevMsg && prevMsg.senderId === msg.senderId;
+                    const isSameSenderNext = nextMsg && nextMsg.senderId === msg.senderId;
+                    
                     const showDate = shouldShowDateDivider(msg, prevMsg);
                     const showNewDivider = firstUnreadIndex !== -1 && idx === firstUnreadIndex;
                     const reactionsForMsg = messageReactions[msg.id] || {};
 
                     return (
                       <React.Fragment key={msg.id}>
-                        {showDate && (<div className="w-full flex.justify-center my-6"><div className="flex items-center justify-center"><div className="h-px bg-white/5 w-16" /><span className="mx-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">{getDateLabel(msg.timestamp as any)}</span><div className="h-px bg-white/5 w-16" /></div></div>)}
-                        {showNewDivider && (<div className="w-full flex.justify-center my-3"><div className="flex items-center justify-center"><div className="h-px bg-gold/40 w-12" /><span className="mx-2 text-[11px] font-semibold uppercase tracking-wider text-gold">New messages</span><div className="h-px bg-gold/40 w-12" /></div></div>)}
-                        <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} group relative`} onContextMenu={(e) => { e.preventDefault(); setActiveReactionMessageId(msg.id); }} onMouseDown={() => startLongPress(msg.id)} onMouseUp={cancelLongPress} onMouseLeave={cancelLongPress} onTouchStart={() => startLongPress(msg.id)} onTouchEnd={cancelLongPress}>
-                          {activeReactionMessageId === msg.id && (<div className={`absolute -top-9 ${isMe ? 'right-0' : 'left-0'} bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}>{REACTION_EMOJIS.map((emoji) => (<button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className="text-lg leading-none px-1 hover:scale-125 transition-transform">{emoji}</button>))}</div>)}
-                          <div className={`max-w-[85%] md:max-w-[70%] lg:max-w-[60%] p-3.5 rounded-2xl shadow-sm ${isMe ? 'bg-primary text-white rounded-tr-sm' : 'bg-surface border border-white/5 text-text-main rounded-tl-sm'}`}>
-                            <p className="text-base md:text-base leading-relaxed">{msg.text}</p>
-                            <div className={`mt-1 space-y-1 ${isMe ? 'text-right' : 'text-left'}`}>
-                              <div className={`flex items-center gap-1 ${isMe ? 'justify-end' : 'justify-start'}`}><span className={`text-[10px] ${isMe ? 'text-white/60' : 'text-text-muted/60'}`}>{formatLocalTime(msg.timestamp as any)}</span>{isMe && msg.id === lastSeenMessageId && (<span className="text-[10px] text-emerald-400 ml-2">Seen</span>)}</div>
-                              {Object.keys(reactionsForMsg).length > 0 && (<div className={`flex items-center gap-1 flex-wrap ${isMe ? 'justify-end' : 'justify-start'}`}>{Object.entries(reactionsForMsg).map(([emoji, info]) => (<button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors ${info.reactedByCurrentUser ? 'bg-gold/20 border-gold/60 text-gold' : isMe ? 'bg-black/20 border-white/20 text-white/90' : 'bg-black/10 border-white/10 text-text-main/90'}`}><span>{emoji}</span><span>{info.count}</span></button>))}</div>)}
+                        {showDate && (
+                            <div className="w-full flex justify-center my-4 pt-2">
+                                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider bg-surface/50 px-2 py-0.5 rounded-md border border-white/5">
+                                    {getDateLabel(msg.timestamp as any)}
+                                </span>
                             </div>
+                        )}
+                        
+                        {showNewDivider && (
+                            <div className="w-full flex justify-center my-4">
+                                <div className="flex items-center justify-center gap-2 opacity-80">
+                                    <div className="h-px bg-gold/40 w-16" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gold">New messages</span>
+                                    <div className="h-px bg-gold/40 w-16" />
+                                </div>
+                            </div>
+                        )}
+                        
+                        <div 
+                            className={`flex ${isMe ? 'justify-end' : 'justify-start'} group relative ${isSameSenderNext ? 'mb-0.5' : 'mb-4'}`} 
+                            onContextMenu={(e) => { e.preventDefault(); setActiveReactionMessageId(msg.id); }}
+                        >
+                          {/* Reaction Picker Popover */}
+                          {activeReactionMessageId === msg.id && (
+                              <div className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}>
+                                  {REACTION_EMOJIS.map((emoji) => (
+                                      <button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className="text-lg leading-none px-1 hover:scale-125 transition-transform">{emoji}</button>
+                                  ))}
+                              </div>
+                          )}
+                          
+                          <div className={`max-w-[85%] md:max-w-[75%] lg:max-w-[65%] px-5 py-3 rounded-2xl shadow-sm text-base leading-relaxed ${
+                              isMe 
+                                ? 'bg-primary text-white rounded-tr-sm' 
+                                : 'bg-surface border border-white/10 text-text-main rounded-tl-sm'
+                          }`}>
+                            <p>{msg.text}</p>
+                            <div className={`mt-1 flex items-center gap-1.5 ${isMe ? 'justify-end' : 'justify-start'} opacity-60`}>
+                              <span className="text-[10px]">{formatLocalTime(msg.timestamp as any)}</span>
+                              {isMe && msg.id === lastSeenMessageId && (<span className="text-[10px] font-bold text-emerald-300">Read</span>)}
+                            </div>
+                            
+                            {/* Reactions Display */}
+                            {Object.keys(reactionsForMsg).length > 0 && (
+                                <div className={`flex items-center gap-1 flex-wrap mt-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                                    {Object.entries(reactionsForMsg).map(([emoji, info]) => (
+                                        <button 
+                                            key={emoji} 
+                                            type="button" 
+                                            onClick={() => handleToggleReaction(msg.id, emoji)} 
+                                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border transition-colors ${info.reactedByCurrentUser ? 'bg-gold/20 border-gold/60 text-gold' : 'bg-black/20 border-white/10 text-white/80'}`}
+                                        >
+                                            <span>{emoji}</span><span>{info.count}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                           </div>
                         </div>
                       </React.Fragment>
                     );
                   })}
+                  
+                  {isOtherTyping && (
+                      <div className="flex justify-start mb-4">
+                         <div className="bg-surface border border-white/10 px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1">
+                            <div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce"></div>
+                            <div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce delay-100"></div>
+                            <div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce delay-200"></div>
+                         </div>
+                      </div>
+                  )}
+                  
                   <div ref={messagesEndRef} />
                 </div>
               </div>
 
-              {isOtherTyping && (<div className="absolute.bottom-20 left-6 z-10 px-4 py-2 bg-surface/90 backdrop-blur border border-white/10 rounded-full text-xs text-text-muted italic shadow-lg">{getDisplayName(selectedMatch.user.name)} is typing…</div>)}
-
-              {/* Input area */}
-              <div className="p-4 border-t border-white/5 bg-white/5 backdrop-blur-md shrink-0">
-                <div className="w-full"><div className="flex gap-2 items-end"><div className="flex-1.relative"><button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform">🙂</button><input ref={messageInputRef} type="text" value={inputText} onChange={handleInputChange} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Type a message..." className="w-full bg-background text-text-main border border-white/10 rounded-2xl pl-10 pr-12 py-3.5 focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all placeholder-gray-600 text-base md:text-sm" />{showEmojiPicker && (<div className="absolute bottom-12 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">{EMOJIS.map((e, i) => (<button key={i} type="button" onClick={() => handleEmojiClick(e)} className="hover:scale-125 transition-transform">{e}</button>))}</div>)}</div><button onClick={() => handleSendMessage()} disabled={!inputText.trim()} className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"><Send size={20} /></button></div></div>
+              {/* Input Area - Constrained Max Width */}
+              <div className="p-4 border-t border-white/5 bg-surface/30 backdrop-blur-md shrink-0">
+                <div className="w-full max-w-3xl mx-auto">
+                    <div className="flex gap-3 items-end">
+                        <div className="flex-1 relative bg-background border border-white/10 rounded-2xl focus-within:border-gold/50 focus-within:ring-1 focus-within:ring-gold/50 transition-all shadow-inner">
+                            <button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform p-1">🙂</button>
+                            <input 
+                                ref={messageInputRef} 
+                                type="text" 
+                                value={inputText} 
+                                onChange={handleInputChange} 
+                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} 
+                                placeholder="Type a message..." 
+                                className="w-full bg-transparent text-text-main rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none placeholder-gray-500/50 text-base" 
+                            />
+                            {showEmojiPicker && (
+                                <div className="absolute bottom-14 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
+                                    {EMOJIS.map((e, i) => (<button key={i} type="button" onClick={() => handleEmojiClick(e)} className="hover:scale-125 transition-transform">{e}</button>))}
+                                </div>
+                            )}
+                        </div>
+                        <button 
+                            onClick={() => handleSendMessage()} 
+                            disabled={!inputText.trim()} 
+                            className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
+                        >
+                            <Send size={20} />
+                        </button>
+                    </div>
+                </div>
               </div>
             </div>
             
-            {/* Right Column Group: Shared Goals + Profile (Desktop Only) */}
-            <aside className="hidden xl:flex gap-4 w-[640px] shrink-0 h-full">
-               
-               {/* 2. SHARED GOALS & AI RECAP COLUMN - Flexible width */}
-               <div className="flex-1 min-w-[280px] flex flex-col gap-4 h-full">
-                 {/* Shared Goals Panel - Takes 50% of column height */}
-                 <div className="flex-1 min-h-0 relative">
-                    <SharedGoalsPanel
-                        isPlusOrPro={hasPlusAccess(currentUser)}
-                        partnerName={selectedMatch.user.name}
-                        onUpgrade={onUpgrade}
-                        matchId={selectedMatch.id}
-                    />
-                 </div>
-                 
-                 {/* AI Accountability Recap Panel - Takes 50% of column height */}
-                 <div className="flex-1 min-h-0 relative">
-                    <AIRecapPanel 
-                        subscriptionTier={currentUser.subscriptionTier}
-                        onUpgrade={onUpgrade}
-                    />
-                 </div>
+            {/* 4. Right-Center (Recap) - Visible on 2xl+ */}
+            <div className="hidden 2xl:flex w-80 flex-col border-l border-white/5 bg-surface/30 backdrop-blur-sm shrink-0 h-full">
+               <div className="flex-1 overflow-hidden p-3 h-full">
+                  <AIRecapPanel 
+                     subscriptionTier={currentUser.subscriptionTier} 
+                     onUpgrade={onUpgrade} 
+                   />
                </div>
-
-               {/* 3. PROFILE CARD - Fixed width */}
-               <div className="w-[320px] bg-surface/40 backdrop-blur-xl border border-white/5 rounded-3xl shadow-xl flex flex-col shrink-0 overflow-hidden">
-                  <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    <ProfileDetailView match={selectedMatch} />
-                  </div>
-               </div>
+            </div>
+            
+            {/* 5. Right Sidebar (Profile) - Tighter & Stacked */}
+            <aside className="hidden xl:flex flex-col w-80 shrink-0 border-l border-white/5 bg-surface/30 h-full backdrop-blur-sm">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
+                    {/* Fallback for Screens < 2xl: Show Goals/Recap here so they aren't lost on standard desktops */}
+                    <div className="block 2xl:hidden space-y-3">
+                        <div className="h-64 shrink-0">
+                           <SharedGoalsPanel 
+                             isPlusOrPro={hasPlusAccess(currentUser)} 
+                             partnerName={selectedMatch.user.name} 
+                             onUpgrade={onUpgrade}
+                             matchId={selectedMatch.id}
+                           />
+                        </div>
+                        
+                        <div className="h-48 shrink-0">
+                           <AIRecapPanel 
+                             subscriptionTier={currentUser.subscriptionTier} 
+                             onUpgrade={onUpgrade} 
+                           />
+                        </div>
+                    </div>
+                    
+                    {/* Profile detail wrapped to scroll if needed, but flex-1 allows it to take remaining space */}
+                    <div className="bg-surface/50 border border-white/5 rounded-2xl overflow-hidden shrink-0">
+                        <ProfileDetailView match={selectedMatch} />
+                    </div>
+                </div>
             </aside>
 
-          </div>
+          </>
         ) : (
           // Empty state (desktop)
           <div className="w-full h-full hidden md:flex flex-col items-center justify-center bg-background p-8 text-center">

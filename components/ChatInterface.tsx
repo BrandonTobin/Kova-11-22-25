@@ -189,7 +189,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         .eq('is_active', true);
 
       if (isMounted && !error && data) {
-        const activeSet = new Set(data.map(item => item.match_id));
+        const activeSet = new Set(data.map((item: any) => item.match_id as string));
         setActiveVoiceMatchIds(activeSet);
       }
     };

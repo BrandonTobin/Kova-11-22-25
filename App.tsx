@@ -101,6 +101,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [showRegister, setShowRegister] = useState(false);
+  const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(false);
 
   // --- State: Onboarding ---
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(() => {
@@ -225,7 +226,18 @@ function App() {
   // Session + Theme Effects
   // -----------------------------
   useEffect(() => {
+    // Listen for Password Recovery event
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecoveryMode(true);
+      }
+    });
+
     checkSession();
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -1342,6 +1354,25 @@ function App() {
         <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mb-4"></div>
         <p className="animate-pulse">Loading Kova...</p>
       </div>
+    );
+  } else if (isPasswordRecoveryMode) {
+    // Password Recovery View (Even if user is technically logged in via magic link)
+    content = (
+        <LoginScreen
+          onLogin={handleLogin}
+          onRegisterClick={() => setShowRegister(true)}
+          error={authError}
+          isLoading={isLoading}
+          onNavigateLegal={handleNavigateLegal}
+          isPasswordRecovery={true}
+          onPasswordUpdated={() => {
+             setIsPasswordRecoveryMode(false);
+             // User is already logged in via recovery link, so just navigate to dashboard
+             setCurrentView(ViewState.DASHBOARD);
+             // Clear URL fragments
+             window.history.replaceState({}, document.title, '/');
+          }}
+        />
     );
   } else if (!user) {
     if (!hasSeenOnboarding) {

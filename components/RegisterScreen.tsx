@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check } from 'lucide-react';
 import { User, ViewState } from '../types';
@@ -51,7 +52,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     image: null as File | null,
     imagePreview: '',
     securityQuestion: SECURITY_QUESTIONS[0],
-    securityAnswer: ''
+    securityAnswer: '',
+    acceptTerms: false,
+    acceptPrivacy: false,
+    isSixteen: false
   });
 
   const generateKovaId = () => {
@@ -120,8 +124,12 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
         newErrors.general = "Please provide your location.";
         isValid = false;
       }
+    } else if (currentStep === 2) { // Step 2: Final & Consent
+      if (!formData.acceptTerms || !formData.acceptPrivacy || !formData.isSixteen) {
+        newErrors.general = "You must accept the Terms, Privacy Policy, and confirm your age.";
+        isValid = false;
+      }
     }
-    // Step 2 is just image upload (optional), so no strict validation needed.
 
     setErrors(newErrors);
     return isValid;
@@ -317,9 +325,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
              </div>
           </div>
         );
-      case 2: // Profile Image
+      case 2: // Profile Image & Consent
         return (
-          <div className="flex flex-col items-center justify-center space-y-6 animate-in fade-in zoom-in duration-300 py-4">
+          <div className="flex flex-col items-center justify-start space-y-6 animate-in fade-in zoom-in duration-300 py-4">
              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                 <div className="w-40 h-40 rounded-full border-4 border-dashed border-white/20 flex items-center justify-center bg-background hover:bg-white/5 transition-colors overflow-hidden">
                    {formData.imagePreview ? (
@@ -344,9 +352,45 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                   onChange={handleImageChange}
                 />
              </div>
-             <p className="text-sm text-text-muted text-center max-w-xs">
-                {formData.imagePreview ? "Looks great! You can proceed." : "A professional photo increases engagement by 40%."}
-             </p>
+             
+             {/* Agreements */}
+             <div className="w-full bg-surface border border-white/10 rounded-xl p-4 space-y-3">
+               <label className="flex items-start gap-3 cursor-pointer">
+                 <input 
+                   type="checkbox" 
+                   checked={formData.acceptTerms}
+                   onChange={(e) => setFormData({...formData, acceptTerms: e.target.checked})}
+                   className="mt-1 accent-gold w-4 h-4"
+                 />
+                 <span className="text-xs text-text-muted">
+                   I agree to the <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>
+                 </span>
+               </label>
+               
+               <label className="flex items-start gap-3 cursor-pointer">
+                 <input 
+                   type="checkbox" 
+                   checked={formData.acceptPrivacy}
+                   onChange={(e) => setFormData({...formData, acceptPrivacy: e.target.checked})}
+                   className="mt-1 accent-gold w-4 h-4"
+                 />
+                 <span className="text-xs text-text-muted">
+                   I agree to the <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button>
+                 </span>
+               </label>
+
+               <label className="flex items-start gap-3 cursor-pointer">
+                 <input 
+                   type="checkbox" 
+                   checked={formData.isSixteen}
+                   onChange={(e) => setFormData({...formData, isSixteen: e.target.checked})}
+                   className="mt-1 accent-gold w-4 h-4"
+                 />
+                 <span className="text-xs text-text-muted">
+                   I confirm I am 16 years of age or older.
+                 </span>
+               </label>
+             </div>
           </div>
         );
       default: return null;
@@ -376,7 +420,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
             <h2 className="text-2xl font-bold text-text-main text-center">
                {step === 0 && "Create Account"}
                {step === 1 && "Founder Profile"}
-               {step === 2 && "Profile Photo"}
+               {step === 2 && "Finalize & Consent"}
             </h2>
          </div>
 
@@ -418,19 +462,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                  )
                )}
             </button>
-            
-            <div className="mt-3 text-center">
-                 <p className="text-[10px] text-text-muted leading-tight">
-                    By continuing, you agree to Kova’s <button type="button" onClick={() => onNavigateLegal?.(ViewState.PRIVACY)} className="text-primary hover:underline">Privacy Policy</button> and <button type="button" onClick={() => onNavigateLegal?.(ViewState.TERMS)} className="text-primary hover:underline">Terms of Service</button>.
-                 </p>
-                 {step === TOTAL_STEPS - 1 && (
-                     <p className="text-[10px] text-text-muted mt-1">
-                        You must be at least 16 years old to use Kova.
-                     </p>
-                 )}
-            </div>
          </div>
-         <LegalFooter onNavigateLegal={onNavigateLegal} className="!mt-2 pb-4" />
       </div>
     </div>
   );

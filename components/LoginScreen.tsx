@@ -1,28 +1,34 @@
-
 import React, { useState } from 'react';
 import { ArrowRight, UserPlus, Mail, Lock, KeyRound, ArrowLeft, CheckCircle, ShieldCheck, Loader2 } from 'lucide-react';
 import LegalFooter from './LegalFooter';
 import { ViewState } from '../types';
+import { supabase } from '../supabaseClient';
 
 interface LoginScreenProps {
   onLogin: (email: string, pass: string) => void;
   onRegisterClick: () => void;
   error?: string;
   isLoading?: boolean;
-  onGetSecurityQuestion?: (email: string) => Promise<string | null>;
-  onVerifyAndReset?: (email: string, answer: string, newPass: string) => Promise<{ success: boolean; message: string }>;
   onNavigateLegal?: (view: ViewState) => void;
+  isPasswordRecovery?: boolean;
+  onPasswordUpdated?: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, error, isLoading = false, onGetSecurityQuestion, onVerifyAndReset, onNavigateLegal }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ 
+  onLogin, 
+  onRegisterClick, 
+  error, 
+  isLoading = false, 
+  onNavigateLegal,
+  isPasswordRecovery = false,
+  onPasswordUpdated
+}) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   
   // Forgot Password State
-  const [view, setView] = useState<'login' | 'forgot-email' | 'security-challenge' | 'reset-success'>('login');
+  const [view, setView] = useState<'login' | 'forgot-email' | 'reset-success' | 'update-password'>(isPasswordRecovery ? 'update-password' : 'login');
   const [resetEmail, setResetEmail] = useState('');
-  const [resetQuestion, setResetQuestion] = useState('');
-  const [securityAnswer, setSecurityAnswer] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [resetError, setResetError] = useState('');
@@ -35,31 +41,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
     }
   };
 
-  const handleLookupEmail = async (e: React.FormEvent) => {
+  const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError('');
     setIsResetting(true);
+    
     if (!resetEmail.trim()) {
       setResetError('Please enter your email address.');
       setIsResetting(false);
       return;
     }
 
-    if (onGetSecurityQuestion) {
-      const question = await onGetSecurityQuestion(resetEmail);
-      if (question) {
-        setResetQuestion(question);
-        setView('security-challenge');
-      } else {
-        setResetError('No account found with this email.');
-      }
-    } else {
-      setResetError('Reset functionality unavailable.');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+      setView('reset-success');
+    } catch (err: any) {
+      setResetError(err.message || 'Failed to send reset email.');
+    } finally {
+      setIsResetting(false);
     }
-    setIsResetting(false);
   };
 
-  const handleVerifyAndReset = async (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setResetError('');
     setIsResetting(true);
@@ -74,21 +81,19 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
       setIsResetting(false);
       return;
     }
-    if (!securityAnswer.trim()) {
-       setResetError('Please answer the security question.');
-       setIsResetting(false);
-       return;
-    }
 
-    if (onVerifyAndReset) {
-      const result = await onVerifyAndReset(resetEmail, securityAnswer, newPassword);
-      if (result.success) {
-        setView('reset-success');
-      } else {
-        setResetError(result.message);
-      }
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      
+      if (onPasswordUpdated) onPasswordUpdated();
+      setView('login');
+      alert('Password updated successfully. Please sign in.');
+    } catch (err: any) {
+      setResetError(err.message || 'Failed to update password.');
+    } finally {
+      setIsResetting(false);
     }
-    setIsResetting(false);
   };
 
   const renderLoginForm = () => (
@@ -202,10 +207,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
           <KeyRound size={32} />
         </div>
         <h2 className="text-2xl font-bold text-text-main">Reset Password</h2>
-        <p className="text-text-muted text-sm mt-2">Enter your email to find your account.</p>
+        <p className="text-text-muted text-sm mt-2">Enter your email to receive a reset link.</p>
       </div>
 
-      <form onSubmit={handleLookupEmail} className="space-y-6">
+      <form onSubmit={handleSendResetEmail} className="space-y-6">
         <div>
           <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Email Address</label>
           <div className="relative group">
@@ -230,7 +235,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
           disabled={isResetting}
           className="w-full py-4 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-primary-hover transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Next Step"}
+          {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Send Reset Link"}
         </button>
       </form>
       <div className="mt-8">
@@ -239,40 +244,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
     </div>
   );
 
-  const renderSecurityChallenge = () => (
+  const renderUpdatePassword = () => (
     <div className="animate-in fade-in slide-in-from-right duration-300">
-      <button onClick={() => setView('forgot-email')} className="text-text-muted hover:text-white mb-6 flex items-center gap-2 text-sm">
-        <ArrowLeft size={16} /> Change Email
-      </button>
-      
-      <div className="text-center mb-6">
+      <div className="text-center mb-8">
         <div className="w-16 h-16 bg-gold/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-gold/20 text-gold">
           <ShieldCheck size={32} />
         </div>
-        <h2 className="text-xl font-bold text-text-main">Security Challenge</h2>
-        <p className="text-text-muted text-sm mt-1">Answer your security question to reset.</p>
+        <h2 className="text-xl font-bold text-text-main">Set New Password</h2>
+        <p className="text-text-muted text-sm mt-1">Please create a new secure password.</p>
       </div>
 
-      <form onSubmit={handleVerifyAndReset} className="space-y-4">
-        <div className="bg-surface border border-white/10 p-4 rounded-xl mb-4 text-center">
-            <p className="text-xs text-gold font-bold uppercase tracking-wider mb-1">Question</p>
-            <p className="text-text-main font-medium">{resetQuestion}</p>
-        </div>
-
-        <div>
-           <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Your Answer</label>
-           <input 
-             type="text" 
-             required
-             value={securityAnswer}
-             onChange={(e) => setSecurityAnswer(e.target.value)}
-             className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-gold/50 focus:ring-1 focus:ring-gold/50 transition-all"
-             placeholder="Type your answer"
-           />
-        </div>
-
-        <div className="border-t border-white/10 my-4 pt-4"></div>
-        
+      <form onSubmit={handleUpdatePassword} className="space-y-4">
         <div>
            <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">New Password</label>
            <input 
@@ -304,12 +286,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
           disabled={isResetting}
           className="w-full py-4 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-primary-hover transition-colors mt-2 disabled:opacity-50 flex justify-center items-center"
         >
-          {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Reset Password"}
+          {isResetting ? <Loader2 className="animate-spin" size={20} /> : "Update Password"}
         </button>
       </form>
-      <div className="mt-8">
-        <LegalFooter onNavigateLegal={onNavigateLegal} />
-      </div>
     </div>
   );
 
@@ -318,17 +297,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
        <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/20 text-green-500">
           <CheckCircle size={40} />
        </div>
-       <h2 className="text-2xl font-bold text-text-main mb-2">Password Reset!</h2>
-       <p className="text-text-muted text-sm mb-8">Your password has been successfully updated. You can now log in with your new credentials.</p>
+       <h2 className="text-2xl font-bold text-text-main mb-2">Check your email</h2>
+       <p className="text-text-muted text-sm mb-8">We've sent a password reset link to your email address.</p>
        
        <button 
          onClick={() => {
             setView('login');
             setResetEmail('');
-            setResetQuestion('');
-            setSecurityAnswer('');
-            setNewPassword('');
-            setConfirmNewPassword('');
          }}
          className="w-full py-4 rounded-xl bg-primary text-white font-bold shadow-lg hover:bg-primary-hover transition-colors"
        >
@@ -350,7 +325,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onRegisterClick, err
       <div className="max-w-md w-full bg-surface/90 backdrop-blur-xl p-8 rounded-3xl border border-white/5 shadow-2xl relative z-10">
         {view === 'login' && renderLoginForm()}
         {view === 'forgot-email' && renderForgotEmail()}
-        {view === 'security-challenge' && renderSecurityChallenge()}
+        {view === 'update-password' && renderUpdatePassword()}
         {view === 'reset-success' && renderSuccess()}
       </div>
     </div>

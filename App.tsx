@@ -109,7 +109,15 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState('');
-  const [showRegister, setShowRegister] = useState(false);
+  
+  // Initialize showRegister based on whether a draft exists
+  const [showRegister, setShowRegister] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !!sessionStorage.getItem('kova_register_form');
+    }
+    return false;
+  });
+  
   const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(false);
 
   // --- State: Onboarding ---
@@ -738,6 +746,11 @@ function App() {
         return;
       }
 
+      // Cleanup registration drafts if login successful
+      sessionStorage.removeItem('kova_register_form');
+      sessionStorage.removeItem('kova_register_step');
+      setShowRegister(false);
+
       localStorage.setItem('kova_current_user_id', profile.id);
       await fetchUserProfile(profile.id);
 
@@ -848,6 +861,11 @@ function App() {
       if (createError) throw createError;
 
       if (createdUser) {
+        // Clear draft on successful registration
+        sessionStorage.removeItem('kova_register_form');
+        sessionStorage.removeItem('kova_register_step');
+        setShowRegister(false);
+
         localStorage.setItem('kova_current_user_id', createdUser.id);
         await fetchUserProfile(createdUser.id);
 
@@ -870,10 +888,15 @@ function App() {
       console.error('Error signing out of Supabase auth', e);
     }
 
+    // Clean up all local state
     localStorage.removeItem('kova_current_user_id');
     localStorage.removeItem('kova_current_view');
+    // Ensure draft is cleared if they somehow made one before logging out (unlikely but safe)
+    sessionStorage.removeItem('kova_register_form');
+    sessionStorage.removeItem('kova_register_step');
 
     setUser(null);
+    setShowRegister(false); // Reset this so they land on login
     setCurrentView(ViewState.LOGIN);
 
     setUsersToSwipe([]);
@@ -903,6 +926,8 @@ function App() {
       localStorage.removeItem('kova_current_user_id');
       localStorage.removeItem('kova_current_view');
       localStorage.removeItem('kova_seen_onboarding');
+      sessionStorage.removeItem('kova_register_form');
+      sessionStorage.removeItem('kova_register_step');
 
       setUser(null);
       setCurrentView(ViewState.LOGIN);
@@ -1227,7 +1252,7 @@ function App() {
         <PrivacyPolicy
           onBack={() => {
             window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
           }}
         />
       </>
@@ -1246,7 +1271,7 @@ function App() {
         <TermsOfService
           onBack={() => {
             window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
           }}
         />
       </>
@@ -1265,7 +1290,7 @@ function App() {
         <RefundPolicy
           onBack={() => {
             window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
           }}
         />
       </>
@@ -1284,7 +1309,7 @@ function App() {
         <ContactPage
           onBack={() => {
             window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
           }}
         />
       </>
@@ -1349,10 +1374,12 @@ function App() {
       );
     }
   } else {
+    // ... existing authenticated user logic ...
     const upgradeModalContent = upgradeTargetTier ? SUBSCRIPTION_PLANS[upgradeTargetTier] : null;
 
     content = (
       <div className="h-screen w-full bg-background flex flex-col overflow-hidden relative">
+        {/* ... existing overlays ... */}
         {incomingCall && (
           <IncomingCallPopup
             caller={incomingCall.caller}
@@ -1402,6 +1429,7 @@ function App() {
             className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300"
             onClick={() => setShowOutOfSwipesModal(false)}
           >
+            {/* ... Out of swipes modal content ... */}
             <div
               className="bg-surface rounded-3xl border border-white/10 max-w-4xl w-full p-6 md:p-8 shadow-2xl relative overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}

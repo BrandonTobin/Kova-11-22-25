@@ -1,6 +1,5 @@
 
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check, Crop } from 'lucide-react';
 import { User, ViewState, getAvatarStyle } from '../types';
 import { SECURITY_QUESTIONS } from '../constants';
@@ -30,12 +29,21 @@ const US_STATES = [
 const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isLoading = false, error, onClearError, onNavigateLegal }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
+  // Refs for Autofocus
+  const fullNameRef = useRef<HTMLInputElement>(null);
+  const dobRef = useRef<HTMLInputElement>(null);
+  
   // 0-based index for steps: 0, 1, 2
   const [step, setStep] = useState(0); 
   const TOTAL_STEPS = 3;
 
   const [errors, setErrors] = useState<{email?: string, password?: string, confirmPassword?: string, general?: string}>({});
   
+  // Location Validation State
+  const [isValidatingLocation, setIsValidatingLocation] = useState(false);
+  const [locationError, setLocationError] = useState('');
+  const [isLocationVerified, setIsLocationVerified] = useState(false);
+
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -61,10 +69,61 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     securityAnswer: '',
     acceptTerms: false,
     acceptPrivacy: false,
-    isSixteen: false
+    isSixteen: false,
   });
 
   const [showPhotoEditor, setShowPhotoEditor] = useState(false);
+
+  // --- Persistence Logic ---
+  useEffect(() => {
+    // Restore from sessionStorage on mount
+    const savedForm = sessionStorage.getItem('kova_register_form');
+    const savedStep = sessionStorage.getItem('kova_register_step');
+
+    if (savedForm) {
+      try {
+        const parsed = JSON.parse(savedForm);
+        setFormData(prev => ({ ...prev, ...parsed, image: null })); // Cannot restore File object
+      } catch (e) {
+        console.error("Failed to restore registration form", e);
+      }
+    }
+    if (savedStep) {
+      setStep(parseInt(savedStep));
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save to sessionStorage on change
+    const { image, ...rest } = formData; // Exclude File object
+    sessionStorage.setItem('kova_register_form', JSON.stringify(rest));
+    sessionStorage.setItem('kova_register_step', step.toString());
+  }, [formData, step]);
+
+  // --- Autofocus Logic ---
+  useEffect(() => {
+    // Small timeout to ensure DOM render
+    const timer = setTimeout(() => {
+      if (step === 0 && fullNameRef.current) {
+        fullNameRef.current.focus();
+      } else if (step === 1 && dobRef.current) {
+        dobRef.current.focus();
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [step]);
+
+  // --- Formatting Helper ---
+  const capitalizeName = (name: string) => {
+    return name.toLowerCase().replace(/(?:^|\s|-|')\S/g, (c) => c.toUpperCase());
+  };
+
+  const handleNameBlur = () => {
+    setFormData(prev => ({
+      ...prev,
+      fullName: capitalizeName(prev.fullName)
+    }));
+  };
 
   const generateKovaId = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -106,6 +165,65 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     }
   };
 
+  // --- Location Validation (Nominatim) ---
+  const validateLocation = async (city: string, state: string): Promise<boolean> => {
+    // If no city, we can't validate yet (but empty check handled by step validation)
+    if (!city.trim()) {
+      setIsLocationVerified(false);
+      return false;
+    }
+
+    setIsValidatingLocation(true);
+    setLocationError('');
+    setIsLocationVerified(false);
+
+    try {
+      let url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&city=${encodeURIComponent(city.trim())}&country=USA`;
+      if (state) {
+        url += `&state=${encodeURIComponent(state)}`;
+      }
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Location check failed');
+      const data = await res.json();
+
+      if (Array.isArray(data) && data.length > 0) {
+        setIsLocationVerified(true);
+        setIsValidatingLocation(false);
+        return true;
+      } else {
+        setLocationError("We couldn't find that city. Please check spelling.");
+        setIsValidatingLocation(false);
+        return false;
+      }
+    } catch (err) {
+      console.error("Geocoding error", err);
+      // In case of API failure, we might want to be lenient or strict. 
+      // Requirement says "app must verify", but blocking on API failure is bad UX.
+      // We'll show a generic error asking to retry.
+      setLocationError("Could not verify location. Please try again.");
+      setIsValidatingLocation(false);
+      return false;
+    }
+  };
+
+  const handleCityBlur = () => {
+    if (formData.city) {
+      validateLocation(formData.city, formData.state);
+    }
+  };
+
+  const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newState = e.target.value;
+    setFormData(prev => ({ ...prev, state: newState }));
+    // If city is already typed, re-validate with new state
+    if (formData.city) {
+      // Small timeout to allow state update to settle if strictly needed, 
+      // though passing newState directly works best.
+      validateLocation(formData.city, newState);
+    }
+  };
+
   const validateStep = (currentStep: number) => {
     const newErrors: {email?: string, password?: string, confirmPassword?: string, general?: string} = {};
     let isValid = true;
@@ -135,8 +253,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
         newErrors.general = "You must be at least 16 years old to use Kova.";
         isValid = false;
       }
-      if (!formData.city.trim() || !formData.state) {
-        newErrors.general = "Please provide your location.";
+      if (!formData.city.trim()) {
+        newErrors.general = "Please enter your city.";
+        isValid = false;
+      } else if (!formData.state) {
+        newErrors.general = "Please select your state.";
         isValid = false;
       }
     } else if (currentStep === 2) { // Step 2: Final & Consent
@@ -153,18 +274,21 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
+    // Auto-capitalize one last time just in case
+    const finalName = capitalizeName(formData.fullName);
+
     // Default Avatar if no image uploaded
-    const safeImageUrl = `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(formData.fullName)}`;
+    const safeImageUrl = `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(finalName)}`;
 
     const newUser: User = {
       id: '', // Assigned by DB/App
       kovaId: generateKovaId(),
-      name: formData.fullName,
+      name: finalName,
       email: formData.email,
       password: formData.password,
       role: formData.title === 'Other' ? formData.customTitle : formData.title,
       industry: 'Tech',
-      bio: `Hi, I'm ${formData.fullName}. I'm currently in the ${formData.stage} stage looking to ${formData.mainGoal === 'Other' ? formData.customGoal : formData.mainGoal}.`,
+      bio: `Hi, I'm ${finalName}. I'm currently in the ${formData.stage} stage looking to ${formData.mainGoal === 'Other' ? formData.customGoal : formData.mainGoal}.`,
       imageUrl: safeImageUrl,
       tags: [formData.stage],
       badges: [],
@@ -187,21 +311,39 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     onRegister(newUser, formData.image || undefined);
   };
 
-  const handleNext = (e?: React.FormEvent) => {
+  const handleNext = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     
-    if (validateStep(step)) {
-      if (step < TOTAL_STEPS - 1) {
-        setStep(prev => prev + 1);
-        if (onClearError) onClearError();
-      } else {
-        handleSubmit(e);
-      }
+    // Auto-capitalize name when moving from Step 0
+    if (step === 0) {
+      setFormData(prev => ({ ...prev, fullName: capitalizeName(prev.fullName) }));
+    }
+
+    // Sync Validation First
+    if (!validateStep(step)) return;
+
+    // Step 1: Async Location Check
+    if (step === 1) {
+      // Even if already "verified" via blur, re-check if user changed text quickly without blurring
+      // or to ensure state matches.
+      const isValidLoc = await validateLocation(formData.city, formData.state);
+      if (!isValidLoc) return; // Error will be set by validateLocation
+    }
+
+    // Proceed
+    if (step < TOTAL_STEPS - 1) {
+      setStep(prev => prev + 1);
+      if (onClearError) onClearError();
+    } else {
+      handleSubmit(e);
     }
   };
 
   const handleBack = () => {
     if (step === 0) {
+      // Clear persistence on explicit back to login
+      sessionStorage.removeItem('kova_register_form');
+      sessionStorage.removeItem('kova_register_step');
       onBack();
     } else {
       setStep(prev => prev - 1);
@@ -218,7 +360,15 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
           <div className="space-y-4 animate-in fade-in slide-in-from-right duration-300">
             <div>
               <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Full Name</label>
-              <input type="text" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none" placeholder="e.g. John Doe" />
+              <input 
+                ref={fullNameRef}
+                type="text" 
+                value={formData.fullName} 
+                onChange={e => setFormData({...formData, fullName: e.target.value})} 
+                onBlur={handleNameBlur}
+                className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none" 
+                placeholder="e.g. John Doe" 
+              />
             </div>
             
             <div>
@@ -277,7 +427,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                   <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Date of Birth</label>
                   <div className="relative">
                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
-                     <input type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none" />
+                     <input ref={dobRef} type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none" />
                   </div>
                </div>
                <div>
@@ -319,14 +469,46 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
              <div>
                 <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1">Location</label>
                 <div className="grid grid-cols-2 gap-2">
-                   <input type="text" value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} className="bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none" placeholder="City" />
                    <div className="relative">
-                      <select value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main appearance-none focus:border-gold/50 outline-none text-sm">
+                      <input 
+                        type="text" 
+                        value={formData.city} 
+                        onChange={(e) => {
+                          setFormData({ ...formData, city: e.target.value });
+                          setIsLocationVerified(false);
+                          setLocationError('');
+                        }}
+                        onBlur={handleCityBlur}
+                        className={`w-full bg-background border rounded-xl px-4 py-3 text-text-main focus:border-gold/50 outline-none ${locationError ? 'border-red-500/50' : isLocationVerified ? 'border-green-500/50' : 'border-white/10'}`} 
+                        placeholder="City" 
+                        autoComplete="off"
+                      />
+                   </div>
+
+                   <div className="relative">
+                      <select value={formData.state} onChange={handleStateChange} className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main appearance-none focus:border-gold/50 outline-none text-sm">
                          <option value="">Select State</option>
                          {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <MapPin className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" size={18} />
                    </div>
+                </div>
+                
+                {/* Location Feedback Line */}
+                <div className="min-h-[20px] mt-1 ml-1">
+                  {isValidatingLocation ? (
+                    <div className="flex items-center gap-1.5 text-xs text-text-muted animate-pulse">
+                      <Loader2 size={12} className="animate-spin" /> Validating location...
+                    </div>
+                  ) : locationError ? (
+                    <p className="text-xs text-red-400 flex items-center gap-1">
+                      <AlertCircle size={12} /> {locationError}
+                    </p>
+                  ) : isLocationVerified ? (
+                    <p className="text-xs text-green-500 flex items-center gap-1">
+                      <Check size={12} /> Location verified
+                    </p>
+                  ) : null}
                 </div>
              </div>
 
@@ -394,6 +576,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
              <div className="w-full bg-surface border border-white/10 rounded-xl p-4 space-y-3">
                <label className="flex items-start gap-3 cursor-pointer">
                  <input 
+                   // Use ref here to focus the checkbox as it's the first interactive element besides upload
+                   autoFocus 
                    type="checkbox" 
                    checked={formData.acceptTerms}
                    onChange={(e) => setFormData({...formData, acceptTerms: e.target.checked})}
@@ -488,10 +672,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
          <div className="p-6 border-t border-white/5 bg-surface shrink-0">
             <button 
               onClick={handleNext}
-              disabled={isLoading}
+              disabled={isLoading || isValidatingLocation}
               className="w-full py-4 rounded-xl bg-gradient-to-r from-primary to-primary-hover text-white font-bold shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed group"
             >
-               {isLoading ? <Loader2 className="animate-spin" size={20} /> : (
+               {isLoading || isValidatingLocation ? <Loader2 className="animate-spin" size={20} /> : (
                  step === TOTAL_STEPS - 1 ? (
                    <>Complete Registration <Check size={20} /></>
                  ) : (

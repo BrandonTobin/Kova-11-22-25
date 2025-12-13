@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -361,6 +362,10 @@ function App() {
               password: '',
               securityQuestion: '',
               securityAnswer: '',
+              // Map DB columns to camelCase for local use
+              avatarZoom: callerData.avatar_zoom,
+              avatarOffsetX: callerData.avatar_offset_x,
+              avatarOffsetY: callerData.avatar_offset_y
             };
 
             setIncomingCall({
@@ -467,6 +472,10 @@ function App() {
           lastSeenAt: data.last_seen_at,
           securityQuestion: '',
           securityAnswer: '',
+          // Map DB columns to camelCase
+          avatarZoom: data.avatar_zoom,
+          avatarOffsetX: data.avatar_offset_x,
+          avatarOffsetY: data.avatar_offset_y
         };
         setUser(mappedUser);
       }
@@ -559,6 +568,10 @@ function App() {
             securityQuestion: '',
             securityAnswer: '',
             superLikedMe: superLikerIds.has(c.id),
+            // Map DB columns
+            avatarZoom: c.avatar_zoom,
+            avatarOffsetX: c.avatar_offset_x,
+            avatarOffsetY: c.avatar_offset_y
           })) as User[];
 
         const randomized = weightedShuffle(filtered, (u) => {
@@ -639,6 +652,10 @@ function App() {
             securityQuestion: '',
             securityAnswer: '',
             superLikedMe: superLikerIds.has(otherUserRaw.id),
+            // Map DB columns
+            avatarZoom: otherUserRaw.avatar_zoom,
+            avatarOffsetX: otherUserRaw.avatar_offset_x,
+            avatarOffsetY: otherUserRaw.avatar_offset_y
           };
 
           let lastMessageText = null;
@@ -819,6 +836,10 @@ function App() {
             security_answer: newUser.securityAnswer,
             subscription_tier: 'free',
             last_seen_at: new Date().toISOString(),
+            // Save Avatar Positioning
+            avatar_zoom: newUser.avatarZoom,
+            avatar_offset_x: newUser.avatarOffsetX,
+            avatar_offset_y: newUser.avatarOffsetY
           },
         ])
         .select()
@@ -1026,6 +1047,10 @@ function App() {
         goals_list: updatedUser.goalsList,
         links: updatedUser.links,
         subscription_tier: encodeTierForDb(updatedUser.subscriptionTier),
+        // Update Avatar Positioning
+        avatar_zoom: updatedUser.avatarZoom,
+        avatar_offset_x: updatedUser.avatarOffsetX,
+        avatar_offset_y: updatedUser.avatarOffsetY
       })
       .eq('id', user.id);
 

@@ -1,9 +1,10 @@
 
+
 import React, { useState, useRef } from 'react';
-import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check } from 'lucide-react';
-import { User, ViewState } from '../types';
+import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check, Crop } from 'lucide-react';
+import { User, ViewState, getAvatarStyle } from '../types';
 import { SECURITY_QUESTIONS } from '../constants';
-import LegalFooter from './LegalFooter';
+import PhotoPositionEditor from './PhotoPositionEditor';
 
 interface RegisterScreenProps {
   onRegister: (user: User, imageFile?: File) => void;
@@ -51,12 +52,19 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     customGoal: '',
     image: null as File | null,
     imagePreview: '',
+    // Avatar Positioning
+    avatarZoom: 1,
+    avatarOffsetX: 0,
+    avatarOffsetY: 0,
+    
     securityQuestion: SECURITY_QUESTIONS[0],
     securityAnswer: '',
     acceptTerms: false,
     acceptPrivacy: false,
     isSixteen: false
   });
+
+  const [showPhotoEditor, setShowPhotoEditor] = useState(false);
 
   const generateKovaId = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -83,11 +91,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      const previewUrl = URL.createObjectURL(file);
       setFormData({
         ...formData,
         image: file,
-        imagePreview: URL.createObjectURL(file)
+        imagePreview: previewUrl,
+        // Reset zoom/offset on new image
+        avatarZoom: 1,
+        avatarOffsetX: 0,
+        avatarOffsetY: 0
       });
+      // Automatically open editor when new image is selected
+      setShowPhotoEditor(true);
     }
   };
 
@@ -162,7 +177,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       securityQuestion: formData.securityQuestion,
       securityAnswer: formData.securityAnswer,
       subscriptionTier: 'free',
-      proExpiresAt: null
+      proExpiresAt: null,
+      // Avatar Settings
+      avatarZoom: formData.avatarZoom,
+      avatarOffsetX: formData.avatarOffsetX,
+      avatarOffsetY: formData.avatarOffsetY
     };
 
     onRegister(newUser, formData.image || undefined);
@@ -328,10 +347,22 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       case 2: // Profile Image & Consent
         return (
           <div className="flex flex-col items-center justify-start space-y-6 animate-in fade-in zoom-in duration-300 py-4">
-             <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                <div className="w-40 h-40 rounded-full border-4 border-dashed border-white/20 flex items-center justify-center bg-background hover:bg-white/5 transition-colors overflow-hidden">
+             <div className="relative group cursor-pointer">
+                <div 
+                  className="w-40 h-40 rounded-full border-4 border-dashed border-white/20 flex items-center justify-center bg-background hover:bg-white/5 transition-colors overflow-hidden"
+                  onClick={() => fileInputRef.current?.click()}
+                >
                    {formData.imagePreview ? (
-                     <img src={formData.imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                     <img 
+                       src={formData.imagePreview} 
+                       alt="Preview" 
+                       className="w-full h-full object-cover" 
+                       style={getAvatarStyle({
+                         avatarZoom: formData.avatarZoom,
+                         avatarOffsetX: formData.avatarOffsetX,
+                         avatarOffsetY: formData.avatarOffsetY
+                       })}
+                     />
                    ) : (
                      <div className="text-center text-text-muted">
                         <Upload size={32} className="mx-auto mb-2 opacity-50" />
@@ -339,11 +370,17 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                      </div>
                    )}
                 </div>
+                
                 {formData.imagePreview && (
-                  <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                     <span className="text-white text-xs font-bold uppercase">Change</span>
-                  </div>
+                  <button 
+                    onClick={() => setShowPhotoEditor(true)}
+                    className="absolute -bottom-2 -right-2 bg-surface text-text-main border border-white/20 p-2 rounded-full shadow-lg hover:bg-white/10 transition-colors"
+                    title="Adjust Photo"
+                  >
+                    <Crop size={16} />
+                  </button>
                 )}
+
                 <input 
                   type="file" 
                   ref={fileInputRef} 
@@ -464,6 +501,25 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
             </button>
          </div>
       </div>
+
+      {showPhotoEditor && formData.imagePreview && (
+        <PhotoPositionEditor 
+          imageSrc={formData.imagePreview}
+          initialZoom={formData.avatarZoom}
+          initialOffsetX={formData.avatarOffsetX}
+          initialOffsetY={formData.avatarOffsetY}
+          onCancel={() => setShowPhotoEditor(false)}
+          onSave={(settings) => {
+            setFormData({
+              ...formData,
+              avatarZoom: settings.zoom,
+              avatarOffsetX: settings.offsetX,
+              avatarOffsetY: settings.offsetY
+            });
+            setShowPhotoEditor(false);
+          }}
+        />
+      )}
     </div>
   );
 };

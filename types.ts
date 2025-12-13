@@ -101,6 +101,11 @@ export interface User {
   links?: UserLinks;
   lastSeenAt?: string | null; // ISO string from Supabase
 
+  // Avatar Positioning
+  avatarZoom?: number;
+  avatarOffsetX?: number;
+  avatarOffsetY?: number;
+
   // Interaction State
   superLikedMe?: boolean; // True if this user super liked the current user
 
@@ -155,4 +160,14 @@ export const hasProAccess = (user: User | null): boolean => {
 // Legacy helper for backward compatibility, mapping to Pro features
 export const isProUser = (user: User | null): boolean => {
   return hasProAccess(user);
+};
+
+// Helper to get consistent avatar styles
+export const getAvatarStyle = (user: Partial<User>) => {
+  const zoom = user.avatarZoom || 1;
+  const x = user.avatarOffsetX || 0;
+  const y = user.avatarOffsetY || 0;
+  return {
+    transform: `translate(${x}%, ${y}%) scale(${zoom})`
+  };
 };

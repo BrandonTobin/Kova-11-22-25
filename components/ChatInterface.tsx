@@ -189,7 +189,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         .eq('is_active', true);
 
       if (isMounted && !error && data) {
-        const activeSet = new Set(data.map((item: any) => item.match_id as string));
+        const activeSet = new Set<string>(data.map((item: any) => item.match_id as string));
         setActiveVoiceMatchIds(activeSet);
       }
     };
@@ -228,11 +228,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             .eq('is_active', true);
 
           setActiveVoiceMatchIds(prev => {
-            const next = new Set(prev);
+            const next = new Set<string>(prev);
             if (sessions && sessions.length > 0) {
-              next.add(matchId);
+              next.add(matchId as string);
             } else {
-              next.delete(matchId);
+              next.delete(matchId as string);
             }
             return next;
           });

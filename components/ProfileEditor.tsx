@@ -1,13 +1,15 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { User, Match, SubscriptionTier } from '../types';
+import { User, Match, SubscriptionTier, getAvatarStyle } from '../types';
 import { 
   Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, 
   Crown, MapPin, Link as LinkIcon, Briefcase, 
-  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check, Lock, Trash2, AlertTriangle
+  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check, Lock, Trash2, AlertTriangle, Crop
 } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
 import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
+import PhotoPositionEditor from './PhotoPositionEditor';
 
 interface ProfileEditorProps {
   user: User;
@@ -90,13 +92,18 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
     lookingFor: user.lookingFor || [],
     availability: user.availability || [],
     goalsList: user.goalsList || [],
-    links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' }
+    links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' },
+    // Ensure avatar fields are present
+    avatarZoom: user.avatarZoom || 1,
+    avatarOffsetX: user.avatarOffsetX || 0,
+    avatarOffsetY: user.avatarOffsetY || 0
   });
 
   const [isEditing, setIsEditing] = useState(false);
   const [isEnhancing, setIsEnhancing] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [showPhotoEditor, setShowPhotoEditor] = useState(false);
   
   // Track the raw file for upload
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -128,7 +135,10 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
       lookingFor: user.lookingFor || [],
       availability: user.availability || [],
       goalsList: user.goalsList || [],
-      links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' }
+      links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' },
+      avatarZoom: user.avatarZoom || 1,
+      avatarOffsetX: user.avatarOffsetX || 0,
+      avatarOffsetY: user.avatarOffsetY || 0
     });
     setImageFile(null);
   }, [user]);
@@ -159,8 +169,16 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
       setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        // Show local preview immediately
-        setFormData(prev => ({ ...prev, imageUrl: reader.result as string }));
+        // Show local preview immediately and reset zoom/pan for new image
+        setFormData(prev => ({ 
+          ...prev, 
+          imageUrl: reader.result as string,
+          avatarZoom: 1,
+          avatarOffsetX: 0,
+          avatarOffsetY: 0
+        }));
+        // Optional: Auto open editor on new image
+        setShowPhotoEditor(true);
       };
       reader.readAsDataURL(file);
     }
@@ -196,6 +214,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
   };
 
   const handleCancel = () => {
+    // Reset to initial props
     setFormData({
       ...user,
       location: user.location || { city: '', state: '' },
@@ -203,7 +222,10 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
       lookingFor: user.lookingFor || [],
       availability: user.availability || [],
       goalsList: user.goalsList || [],
-      links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' }
+      links: user.links || { linkedin: '', website: '', twitter: '', portfolio: '' },
+      avatarZoom: user.avatarZoom || 1,
+      avatarOffsetX: user.avatarOffsetX || 0,
+      avatarOffsetY: user.avatarOffsetY || 0
     }); 
     setImageFile(null);
     setIsEditing(false);
@@ -239,14 +261,30 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                   alt="Profile" 
                   className="w-full h-full object-cover"
                   onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+                  style={getAvatarStyle({
+                    avatarZoom: formData.avatarZoom,
+                    avatarOffsetX: formData.avatarOffsetX,
+                    avatarOffsetY: formData.avatarOffsetY
+                  })}
                 />
+                
                 {isEditing && (
-                  <div 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                  >
-                    <Camera size={24} className="text-white mb-1" />
-                    <span className="text-[10px] uppercase font-bold text-white tracking-widest">Change</span>
+                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mb-2 flex flex-col items-center"
+                    >
+                      <Camera size={24} className="text-white mb-1" />
+                      <span className="text-[10px] uppercase font-bold text-white tracking-widest">Change</span>
+                    </button>
+                    
+                    <button 
+                      onClick={() => setShowPhotoEditor(true)}
+                      className="mt-1 bg-white/20 p-2 rounded-full hover:bg-white/30 transition-colors"
+                      title="Adjust Position"
+                    >
+                      <Crop size={16} className="text-white" />
+                    </button>
                   </div>
                 )}
              </div>
@@ -789,6 +827,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
                     onError={(e) => {
                       e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
                     }}
+                    style={getAvatarStyle(u)}
                   />
                   <div>
                     <p className="font-bold text-sm text-text-main">
@@ -843,6 +882,26 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
              </div>
           </div>
         </div>
+      )}
+
+      {/* Photo Position Editor Modal */}
+      {showPhotoEditor && formData.imageUrl && (
+        <PhotoPositionEditor 
+          imageSrc={formData.imageUrl}
+          initialZoom={formData.avatarZoom}
+          initialOffsetX={formData.avatarOffsetX}
+          initialOffsetY={formData.avatarOffsetY}
+          onCancel={() => setShowPhotoEditor(false)}
+          onSave={(settings) => {
+            setFormData(prev => ({
+              ...prev,
+              avatarZoom: settings.zoom,
+              avatarOffsetX: settings.offsetX,
+              avatarOffsetY: settings.offsetY
+            }));
+            setShowPhotoEditor(false);
+          }}
+        />
       )}
     </div>
   );

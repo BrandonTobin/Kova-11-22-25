@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   motion, 
@@ -7,7 +8,7 @@ import {
   PanInfo, 
   AnimatePresence 
 } from 'framer-motion';
-import { User, SubscriptionTier } from '../types';
+import { User, SubscriptionTier, getAvatarStyle } from '../types';
 import { 
   X, 
   Check, 
@@ -597,6 +598,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
             src={nextUser.imageUrl || DEFAULT_PROFILE_IMAGE}
             alt="Next"
             className="w-full h-full object-cover"
+            style={getAvatarStyle(nextUser)}
           />
         </div>
       )}
@@ -672,6 +674,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
             alt={activeUser.name}
             className="w-full h-full object-cover pointer-events-none"
             onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
+            style={getAvatarStyle(activeUser)}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent opacity-90" />
           

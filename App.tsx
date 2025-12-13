@@ -116,6 +116,7 @@ function App() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [swipedUserIds, setSwipedUserIds] = useState<Set<string>>(new Set());
   const [dailySwipes, setDailySwipes] = useState(0);
+  const [isDeckLoading, setIsDeckLoading] = useState(false);
 
   // 🔹 Track which match rows should show "NEW"/"NEW MATCH!"
   const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
@@ -272,10 +273,17 @@ function App() {
   // Fetch data when user changes
   useEffect(() => {
     if (user) {
+      // Prevent stale data flicker on user change/login
+      setUsersToSwipe([]);
+      
       fetchMatches();
       fetchUsersToSwipe();
       const interval = setInterval(fetchMatches, 30000);
       return () => clearInterval(interval);
+    } else {
+      // Clear data on logout/null
+      setUsersToSwipe([]);
+      setMatches([]);
     }
   }, [user?.id]);
 
@@ -484,105 +492,110 @@ function App() {
 
   const fetchUsersToSwipe = async () => {
     if (!user) return;
+    setIsDeckLoading(true);
 
-    // 1. Get IDs already swiped
-    const { data: swipes } = await supabase
-      .from('swipes')
-      .select('swiped_id')
-      .eq('swiper_id', user.id);
+    try {
+      // 1. Get IDs already swiped
+      const { data: swipes } = await supabase
+        .from('swipes')
+        .select('swiped_id')
+        .eq('swiper_id', user.id);
 
-    const swipedIds = new Set<string>(
-      (swipes?.map((s: any) => s.swiped_id) as string[]) || []
-    );
-    swipedIds.add(user.id); // Always exclude self
-    setSwipedUserIds(swipedIds);
+      const swipedIds = new Set<string>(
+        (swipes?.map((s: any) => s.swiped_id) as string[]) || []
+      );
+      swipedIds.add(user.id); // Always exclude self
+      setSwipedUserIds(swipedIds);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const { count } = await supabase
-      .from('swipes')
-      .select('*', { count: 'exact', head: true })
-      .eq('swiper_id', user.id)
-      .gte('created_at', today.toISOString());
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('swipes')
+        .select('*', { count: 'exact', head: true })
+        .eq('swiper_id', user.id)
+        .gte('created_at', today.toISOString());
 
-    setDailySwipes(count || 0);
+      setDailySwipes(count || 0);
 
-    // 2. Fetch candidates excluding swiped ones
-    let query = supabase
-      .from('users')
-      .select('*')
-      .neq('id', user.id);
+      // 2. Fetch candidates excluding swiped ones
+      let query = supabase
+        .from('users')
+        .select('*')
+        .neq('id', user.id);
 
-    if (swipedIds.size > 0) {
-      // Create a list of IDs to exclude.
-      const excludedIds = Array.from(swipedIds);
-      query = query.not('id', 'in', `(${excludedIds.map(id => `"${id}"`).join(',')})`);
-    }
-
-    const { data: candidates } = await query.limit(50);
-
-    if (candidates) {
-      // Fetch incoming superlikes from these candidates
-      const candidateIds = candidates.map((c: any) => c.id);
-      let superLikerIds = new Set<string>();
-
-      if (candidateIds.length > 0) {
-        const { data: incomingSuperLikes } = await supabase
-          .from('swipes')
-          .select('swiper_id')
-          .eq('swiped_id', user.id)
-          .eq('direction', 'superlike')
-          .in('swiper_id', candidateIds);
-        
-        if (incomingSuperLikes) {
-          superLikerIds = new Set(incomingSuperLikes.map((s: any) => s.swiper_id));
-        }
+      if (swipedIds.size > 0) {
+        // Create a list of IDs to exclude.
+        const excludedIds = Array.from(swipedIds);
+        query = query.not('id', 'in', `(${excludedIds.map(id => `"${id}"`).join(',')})`);
       }
 
-      // 3. Filter out swiped & deduplicate (Client-side safety check)
-      const seenIds = new Set<string>();
-      
-      const filtered = candidates
-        .filter((c: any) => {
-          if (seenIds.has(c.id)) return false; // Dedupe within batch
-          if (swipedIds.has(c.id)) return false; // Remove swiped
-          seenIds.add(c.id);
-          return true;
-        })
-        .map((c: any) => ({
-          ...c,
-          imageUrl: c.image_url || DEFAULT_PROFILE_IMAGE,
-          kovaId: c.kova_id,
-          mainGoal: c.main_goal,
-          location: { city: c.city, state: c.state },
-          subscriptionTier: normalizeTierFromDb(c.subscription_tier),
-          proExpiresAt: c.pro_expires_at,
-          experienceLevel: c.experience_level,
-          communicationStyle: c.communication_style,
-          skills: c.skills,
-          lookingFor: c.looking_for,
-          availability: c.availability,
-          goalsList: c.goals_list,
-          links: c.links,
-          lastSeenAt: c.last_seen_at,
-          // Explicitly set missing properties to satisfy User type
-          badges: c.badges || [],
-          tags: c.tags || [],
-          password: '',
-          securityQuestion: '',
-          securityAnswer: '',
-          superLikedMe: superLikerIds.has(c.id) // Populate superLikedMe
-        })) as User[];
+      const { data: candidates } = await query.limit(50);
 
-      // 4. Randomize the order with weighted shuffle
-      // Prioritize super likers
-      const randomized = weightedShuffle(filtered, (user) => {
-        let weight = getTierWeight(user.subscriptionTier);
-        if (user.superLikedMe) weight += 10; // High priority for superlikes
-        return weight;
-      });
+      if (candidates) {
+        // Fetch incoming superlikes from these candidates
+        const candidateIds = candidates.map((c: any) => c.id);
+        let superLikerIds = new Set<string>();
 
-      setUsersToSwipe(randomized);
+        if (candidateIds.length > 0) {
+          const { data: incomingSuperLikes } = await supabase
+            .from('swipes')
+            .select('swiper_id')
+            .eq('swiped_id', user.id)
+            .eq('direction', 'superlike')
+            .in('swiper_id', candidateIds);
+          
+          if (incomingSuperLikes) {
+            superLikerIds = new Set(incomingSuperLikes.map((s: any) => s.swiper_id));
+          }
+        }
+
+        // 3. Filter out swiped & deduplicate (Client-side safety check)
+        const seenIds = new Set<string>();
+        
+        const filtered = candidates
+          .filter((c: any) => {
+            if (seenIds.has(c.id)) return false; // Dedupe within batch
+            if (swipedIds.has(c.id)) return false; // Remove swiped
+            seenIds.add(c.id);
+            return true;
+          })
+          .map((c: any) => ({
+            ...c,
+            imageUrl: c.image_url || DEFAULT_PROFILE_IMAGE,
+            kovaId: c.kova_id,
+            mainGoal: c.main_goal,
+            location: { city: c.city, state: c.state },
+            subscriptionTier: normalizeTierFromDb(c.subscription_tier),
+            proExpiresAt: c.pro_expires_at,
+            experienceLevel: c.experience_level,
+            communicationStyle: c.communication_style,
+            skills: c.skills,
+            lookingFor: c.looking_for,
+            availability: c.availability,
+            goalsList: c.goals_list,
+            links: c.links,
+            lastSeenAt: c.last_seen_at,
+            // Explicitly set missing properties to satisfy User type
+            badges: c.badges || [],
+            tags: c.tags || [],
+            password: '',
+            securityQuestion: '',
+            securityAnswer: '',
+            superLikedMe: superLikerIds.has(c.id) // Populate superLikedMe
+          })) as User[];
+
+        // 4. Randomize the order with weighted shuffle
+        // Prioritize super likers
+        const randomized = weightedShuffle(filtered, (user) => {
+          let weight = getTierWeight(user.subscriptionTier);
+          if (user.superLikedMe) weight += 10; // High priority for superlikes
+          return weight;
+        });
+
+        setUsersToSwipe(randomized);
+      }
+    } finally {
+      setIsDeckLoading(false);
     }
   };
 
@@ -736,6 +749,10 @@ function App() {
       localStorage.setItem('kova_current_user_id', profile.id);
       await fetchUserProfile(profile.id);
 
+      // Clear swipe state and trigger loading to prevent flicker
+      setUsersToSwipe([]);
+      setIsDeckLoading(true);
+
       // Force navigation to Discover screen upon successful login
       setCurrentView(ViewState.DISCOVER);
 
@@ -872,6 +889,14 @@ function App() {
     localStorage.removeItem('kova_current_view');
     setUser(null);
     setCurrentView(ViewState.LOGIN);
+    
+    // Clear all user-specific data states to prevent stale flicker on next login
+    setUsersToSwipe([]);
+    setMatches([]);
+    setSwipedUserIds(new Set());
+    setDailySwipes(0);
+    setNewMatchIds([]);
+    setIsDeckLoading(false);
   };
 
   const handleDeleteAccount = async () => {
@@ -1680,6 +1705,7 @@ function App() {
               onOutOfSwipes={() => setShowOutOfSwipesModal(true)}
               currentUserId={user.id}
               onRefresh={fetchUsersToSwipe}
+              isLoading={isDeckLoading}
             />
           )}
 

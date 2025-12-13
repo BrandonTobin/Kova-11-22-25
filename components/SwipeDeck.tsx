@@ -16,12 +16,13 @@ import {
   Gem, 
   RotateCcw, 
   ThumbsUp,
-  Lock,
-  RefreshCw,
-  Star,
-  Flag,
-  AlertTriangle,
-  ShieldOff
+  Lock, 
+  RefreshCw, 
+  Star, 
+  Flag, 
+  AlertTriangle, 
+  ShieldOff,
+  Loader2 
 } from 'lucide-react';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
@@ -36,6 +37,7 @@ interface SwipeDeckProps {
   onOutOfSwipes?: () => void;
   currentUserId?: string;
   onRefresh?: () => void;
+  isLoading?: boolean;
 }
 
 const REPORT_REASONS = [
@@ -54,7 +56,8 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   onUpgrade, 
   onOutOfSwipes,
   currentUserId,
-  onRefresh
+  onRefresh,
+  isLoading = false
 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const controls = useAnimation();
@@ -403,6 +406,16 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
       glow: false
     };
   };
+
+  // --- Loading State ---
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full animate-in fade-in">
+        <Loader2 className="w-10 h-10 text-gold animate-spin mb-4" />
+        <p className="text-text-muted text-sm animate-pulse">Finding matches...</p>
+      </div>
+    );
+  }
 
   // End of Deck
   if (currentIndex >= sortedUsers.length) {

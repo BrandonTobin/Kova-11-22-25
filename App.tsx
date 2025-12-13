@@ -11,11 +11,13 @@ import Dashboard from './components/Dashboard';
 import ProfileEditor from './components/ProfileEditor';
 import Notes from './components/Notes';
 import PaymentSuccess from './components/PaymentSuccess';
-// Import Legal Page Components
+
+// Legal Pages
 import PrivacyPolicy from './components/legal/PrivacyPolicy';
 import TermsOfService from './components/legal/TermsOfService';
 import RefundPolicy from './components/legal/RefundPolicy';
 import ContactPage from './components/legal/ContactPage';
+
 import IncomingCallPopup from './components/IncomingCallPopup';
 
 import { User, Match, ViewState, SubscriptionTier, IncomingCall, CallType } from './types';
@@ -29,24 +31,22 @@ import {
   Search,
   Sun,
   Moon,
-  Notebook,
   Lock,
   Sparkles,
   Loader2,
   Check,
   Gem
 } from 'lucide-react';
+
 import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from './constants';
 import TimerOverlay from './components/TimerOverlay';
-import { getDisplayName } from './utils/nameUtils';
 
 // ✅ Your Supabase audio URL
 const NOTIFICATION_SOUND_URL =
   'https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/notifications.mp3';
 
 /**
- * Normalize what comes from the DB (free | plus | pro | null)
- * into our front-end SubscriptionTier type (free | kova_plus | kova_pro)
+ * Normalize DB (free | plus | pro | null) -> FE (free | kova_plus | kova_pro)
  */
 const normalizeTierFromDb = (dbTier?: string | null): SubscriptionTier => {
   if (dbTier === 'plus') return 'kova_plus';
@@ -55,8 +55,7 @@ const normalizeTierFromDb = (dbTier?: string | null): SubscriptionTier => {
 };
 
 /**
- * Encode our front-end SubscriptionTier back into the DB format.
- * This prevents writing kova_plus / kova_pro into the users table.
+ * Encode FE tier (free | kova_plus | kova_pro) -> DB (free | plus | pro)
  */
 const encodeTierForDb = (tier: SubscriptionTier): string => {
   if (tier === 'kova_plus') return 'plus';
@@ -64,35 +63,44 @@ const encodeTierForDb = (tier: SubscriptionTier): string => {
   return 'free';
 };
 
-// Helper to compute tier weight for shuffling
 const getTierWeight = (tier: SubscriptionTier): number => {
-  if (tier === 'kova_pro') return 3;   // highest priority
-  if (tier === 'kova_plus') return 2;  // medium priority
-  return 1;                            // free
+  if (tier === 'kova_pro') return 3;
+  if (tier === 'kova_plus') return 2;
+  return 1;
 };
 
 // Weighted shuffle helper (Efraimidis and Spirakis A-Res)
-const weightedShuffle = <T,>(
-  items: T[],
-  getWeight: (item: T) => number
-): T[] => {
-  // Create a copy so we don’t mutate the original array
+const weightedShuffle = <T,>(items: T[], getWeight: (item: T) => number): T[] => {
   const arr = [...items];
 
-  // Assign a random key with weight bias
   const scored = arr.map((item) => {
     const w = Math.max(getWeight(item), 1);
-    // randomKey = -log(random) / weight (smaller = more priority)
     const r = Math.random();
     const key = -Math.log(r) / w;
     return { item, key };
   });
 
-  // Sort ascending by key (higher weight tends to float earlier,
-  // but still looks random)
   scored.sort((a, b) => a.key - b.key);
-
   return scored.map((x) => x.item);
+};
+
+// ✅ Password recovery detection (FIX)
+const isRecoveryUrl = (): boolean => {
+  if (typeof window === 'undefined') return false;
+
+  const path = window.location.pathname || '';
+  if (path === '/reset-password') return true;
+
+  const hash = window.location.hash || '';
+  const search = window.location.search || '';
+
+  // Supabase commonly provides access_token/type=recovery in hash
+  const blob = `${hash} ${search}`.toLowerCase();
+  if (blob.includes('type=recovery')) return true;
+  if (blob.includes('access_token=')) return true;
+  if (blob.includes('refresh_token=')) return true;
+
+  return false;
 };
 
 function App() {
@@ -118,15 +126,14 @@ function App() {
   const [dailySwipes, setDailySwipes] = useState(0);
   const [isDeckLoading, setIsDeckLoading] = useState(false);
 
-  // 🔹 Track which match rows should show "NEW"/"NEW MATCH!"
+  // NEW tags for matches
   const [newMatchIds, setNewMatchIds] = useState<string[]>([]);
 
   // --- State: UI/Navigation ---
-  // Set default view to DISCOVER (always valid on first render)
   const [currentView, setCurrentView] = useState<ViewState>(() => {
     if (typeof window !== 'undefined') {
       const path = window.location.pathname;
-      // Priority check for URL routing
+
       if (path === '/privacy') return ViewState.PRIVACY;
       if (path === '/terms') return ViewState.TERMS;
       if (path === '/refunds') return ViewState.REFUND;
@@ -134,7 +141,7 @@ function App() {
       if (path === '/payment-success') return ViewState.PAYMENT_SUCCESS;
 
       const stored = localStorage.getItem('kova_current_view') as ViewState;
-      // Only restore main navigable views to avoid stuck states (like Video Room without a match)
+
       if (
         [
           ViewState.DISCOVER,
@@ -150,15 +157,14 @@ function App() {
     return ViewState.DISCOVER;
   });
 
-  // Stores the tier we want to upsell (kova_plus or kova_pro)
   const [upgradeTargetTier, setUpgradeTargetTier] = useState<SubscriptionTier | null>(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
-  // New Global Modals State
+  // Global modals
   const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
   const [showOutOfSwipesModal, setShowOutOfSwipesModal] = useState(false);
 
-  // --- State: Theme ---
+  // --- Theme ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('kova_theme');
@@ -168,17 +174,17 @@ function App() {
     return true;
   });
 
-  // --- State: Interaction ---
+  // --- Interaction ---
   const [newMatch, setNewMatch] = useState<User | null>(null);
   const [showMatchPopup, setShowMatchPopup] = useState(false);
   const [activeVideoMatch, setActiveVideoMatch] = useState<Match | null>(null);
   const [activeCallType, setActiveCallType] = useState<CallType>('video');
   const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null);
 
-  // --- State: Notification Sound ---
+  // --- Notification Sound ---
   const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // --- State: Tab Notification Badges ---
+  // --- Tab Notification Badges ---
   const [tabNotifications, setTabNotifications] =
     useState<Partial<Record<ViewState, number>>>({});
 
@@ -207,9 +213,7 @@ function App() {
     setTabNotifications((prev) => {
       const next = { ...prev };
       const list = Array.isArray(views) ? views : [views];
-      for (const v of list) {
-        next[v] = (next[v] ?? 0) + 1;
-      }
+      for (const v of list) next[v] = (next[v] ?? 0) + 1;
       return next;
     });
   };
@@ -227,10 +231,18 @@ function App() {
   // Session + Theme Effects
   // -----------------------------
   useEffect(() => {
-    // Listen for Password Recovery event
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // ✅ FIX: If user lands directly on /reset-password (or has recovery tokens),
+    // force recovery mode even if Supabase event doesn’t fire yet.
+    if (isRecoveryUrl()) {
+      setIsPasswordRecoveryMode(true);
+      // ensure we’re in the auth flow so the LoginScreen can show reset UI
+      setCurrentView(ViewState.LOGIN);
+    }
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecoveryMode(true);
+        setCurrentView(ViewState.LOGIN);
       }
     });
 
@@ -239,6 +251,7 @@ function App() {
     return () => {
       authListener.subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -273,21 +286,20 @@ function App() {
   // Fetch data when user changes
   useEffect(() => {
     if (user) {
-      // Prevent stale data flicker on user change/login
       setUsersToSwipe([]);
-      
       fetchMatches();
       fetchUsersToSwipe();
+
       const interval = setInterval(fetchMatches, 30000);
       return () => clearInterval(interval);
     } else {
-      // Clear data on logout/null
       setUsersToSwipe([]);
       setMatches([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Use a ref to track current view in realtime callback without re-subscribing
+  // Track current view for realtime callbacks
   const currentViewRef = useRef(currentView);
   useEffect(() => {
     currentViewRef.current = currentView;
@@ -311,25 +323,15 @@ function App() {
           const newSession = payload.new;
           if (!newSession) return;
 
-          // VOICE CHANNEL LOGIC:
-          // Discord-style voice channels do NOT trigger a popup.
-          // They are drop-in/drop-out.
-          if (newSession.call_type !== 'video') {
-            return;
-          }
+          // Voice channels do not trigger popup
+          if (newSession.call_type !== 'video') return;
 
-          // VIDEO CALL LOGIC:
-          // Proceed with popup ONLY for video calls.
-
-          // Only accept sessions started very recently (e.g., last 60 seconds)
           const startTime = new Date(newSession.started_at).getTime();
           const now = Date.now();
           if (now - startTime > 60000) return;
 
-          // Don't show popup if already in a call
           if (currentViewRef.current === ViewState.VIDEO_ROOM) return;
 
-          // Fetch caller details
           const callerId = newSession.host_id;
           const { data: callerData } = await supabase
             .from('users')
@@ -358,14 +360,13 @@ function App() {
               tags: callerData.tags || [],
               password: '',
               securityQuestion: '',
-              securityAnswer: ''
+              securityAnswer: '',
             };
 
-            const callType = 'video';
             setIncomingCall({
               sessionId: newSession.id,
               caller,
-              callType
+              callType: 'video',
             });
             playNotificationSound();
           }
@@ -389,38 +390,29 @@ function App() {
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'messages'
+          table: 'messages',
         },
         (payload: any) => {
           const newMsg = payload.new;
           if (!newMsg) return;
 
-          // Update matches state: Update last message & Move conversation to top
           setMatches((prevMatches) => {
             const matchIndex = prevMatches.findIndex((m) => m.id === newMsg.match_id);
             if (matchIndex === -1) return prevMatches;
 
-            // Clone the match and update its message info
             const updatedMatch = {
               ...prevMatches[matchIndex],
               lastMessageText: newMsg.text,
-              lastMessageAt: newMsg.created_at || new Date().toISOString()
+              lastMessageAt: newMsg.created_at || new Date().toISOString(),
             };
 
-            // Remove the match from its current position
             const otherMatches = prevMatches.filter((_, idx) => idx !== matchIndex);
-
-            // Prepend updated match to the top
             return [updatedMatch, ...otherMatches];
           });
 
-          // Notification Logic (only for received messages)
           if (newMsg.sender_id === user.id) return;
-
-          // Don't badge if user is already on the MATCHES tab
           if (currentViewRef.current === ViewState.MATCHES) return;
 
-          // 🔔 Bump MATCHES tab badge
           addTabNotification([ViewState.MATCHES]);
         }
       )
@@ -453,12 +445,7 @@ function App() {
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
+      const { data, error } = await supabase.from('users').select('*').eq('id', userId).single();
       if (error) throw error;
 
       if (data) {
@@ -479,7 +466,7 @@ function App() {
           links: data.links,
           lastSeenAt: data.last_seen_at,
           securityQuestion: '',
-          securityAnswer: ''
+          securityAnswer: '',
         };
         setUser(mappedUser);
       }
@@ -495,20 +482,18 @@ function App() {
     setIsDeckLoading(true);
 
     try {
-      // 1. Get IDs already swiped
       const { data: swipes } = await supabase
         .from('swipes')
         .select('swiped_id')
         .eq('swiper_id', user.id);
 
-      const swipedIds = new Set<string>(
-        (swipes?.map((s: any) => s.swiped_id) as string[]) || []
-      );
-      swipedIds.add(user.id); // Always exclude self
+      const swipedIds = new Set<string>((swipes?.map((s: any) => s.swiped_id) as string[]) || []);
+      swipedIds.add(user.id);
       setSwipedUserIds(swipedIds);
 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+
       const { count } = await supabase
         .from('swipes')
         .select('*', { count: 'exact', head: true })
@@ -517,22 +502,16 @@ function App() {
 
       setDailySwipes(count || 0);
 
-      // 2. Fetch candidates excluding swiped ones
-      let query = supabase
-        .from('users')
-        .select('*')
-        .neq('id', user.id);
+      let query = supabase.from('users').select('*').neq('id', user.id);
 
       if (swipedIds.size > 0) {
-        // Create a list of IDs to exclude.
         const excludedIds = Array.from(swipedIds);
-        query = query.not('id', 'in', `(${excludedIds.map(id => `"${id}"`).join(',')})`);
+        query = query.not('id', 'in', `(${excludedIds.map((id) => `"${id}"`).join(',')})`);
       }
 
       const { data: candidates } = await query.limit(50);
 
       if (candidates) {
-        // Fetch incoming superlikes from these candidates
         const candidateIds = candidates.map((c: any) => c.id);
         let superLikerIds = new Set<string>();
 
@@ -543,19 +522,18 @@ function App() {
             .eq('swiped_id', user.id)
             .eq('direction', 'superlike')
             .in('swiper_id', candidateIds);
-          
+
           if (incomingSuperLikes) {
             superLikerIds = new Set(incomingSuperLikes.map((s: any) => s.swiper_id));
           }
         }
 
-        // 3. Filter out swiped & deduplicate (Client-side safety check)
         const seenIds = new Set<string>();
-        
+
         const filtered = candidates
           .filter((c: any) => {
-            if (seenIds.has(c.id)) return false; // Dedupe within batch
-            if (swipedIds.has(c.id)) return false; // Remove swiped
+            if (seenIds.has(c.id)) return false;
+            if (swipedIds.has(c.id)) return false;
             seenIds.add(c.id);
             return true;
           })
@@ -575,20 +553,17 @@ function App() {
             goalsList: c.goals_list,
             links: c.links,
             lastSeenAt: c.last_seen_at,
-            // Explicitly set missing properties to satisfy User type
             badges: c.badges || [],
             tags: c.tags || [],
             password: '',
             securityQuestion: '',
             securityAnswer: '',
-            superLikedMe: superLikerIds.has(c.id) // Populate superLikedMe
+            superLikedMe: superLikerIds.has(c.id),
           })) as User[];
 
-        // 4. Randomize the order with weighted shuffle
-        // Prioritize super likers
-        const randomized = weightedShuffle(filtered, (user) => {
-          let weight = getTierWeight(user.subscriptionTier);
-          if (user.superLikedMe) weight += 10; // High priority for superlikes
+        const randomized = weightedShuffle(filtered, (u) => {
+          let weight = getTierWeight(u.subscriptionTier);
+          if (u.superLikedMe) weight += 10;
           return weight;
         });
 
@@ -620,10 +595,7 @@ function App() {
     }
 
     if (data) {
-      // Get all partner IDs to check for incoming superlikes
-      const partnerIds = data.map((m: any) => 
-        m.user1.id === user.id ? m.user2.id : m.user1.id
-      );
+      const partnerIds = data.map((m: any) => (m.user1.id === user.id ? m.user2.id : m.user1.id));
 
       let superLikerIds = new Set<string>();
       if (partnerIds.length > 0) {
@@ -633,7 +605,7 @@ function App() {
           .eq('swiped_id', user.id)
           .eq('direction', 'superlike')
           .in('swiper_id', partnerIds);
-        
+
         if (superLikes) {
           superLikerIds = new Set(superLikes.map((s: any) => s.swiper_id));
         }
@@ -661,13 +633,12 @@ function App() {
             goalsList: otherUserRaw.goals_list,
             links: otherUserRaw.links,
             lastSeenAt: otherUserRaw.last_seen_at,
-            // Explicitly set missing properties to satisfy User type
             badges: otherUserRaw.badges || [],
             tags: otherUserRaw.tags || [],
             password: '',
             securityQuestion: '',
             securityAnswer: '',
-            superLikedMe: superLikerIds.has(otherUserRaw.id)
+            superLikedMe: superLikerIds.has(otherUserRaw.id),
           };
 
           let lastMessageText = null;
@@ -692,19 +663,24 @@ function App() {
             timestamp: new Date(m.created_at),
             unread: 0,
             lastMessageText,
-            lastMessageAt
+            lastMessageAt,
           } as Match;
         })
       );
 
-      const validMatches = formattedMatchesResults.filter(
-        (m): m is Match => m !== null
-      );
+      const validMatches = formattedMatchesResults.filter((m): m is Match => m !== null);
 
-      // Sort matches by last message time (descending) so most recent is top
       validMatches.sort((a, b) => {
-        const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
-        const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+        const timeA = a.lastMessageAt
+          ? new Date(a.lastMessageAt).getTime()
+          : a.timestamp
+          ? new Date(a.timestamp).getTime()
+          : 0;
+        const timeB = b.lastMessageAt
+          ? new Date(b.lastMessageAt).getTime()
+          : b.timestamp
+          ? new Date(b.timestamp).getTime()
+          : 0;
         return timeB - timeA;
       });
 
@@ -720,14 +696,13 @@ function App() {
     setAuthError('');
 
     try {
-      const { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password: pass
-        });
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass,
+      });
 
-      if (authError || !authData.user) {
-        console.error('Supabase auth error:', authError);
+      if (authErr || !authData.user) {
+        console.error('Supabase auth error:', authErr);
         setAuthError('Invalid email or password.');
         setIsLoading(false);
         return;
@@ -749,11 +724,8 @@ function App() {
       localStorage.setItem('kova_current_user_id', profile.id);
       await fetchUserProfile(profile.id);
 
-      // Clear swipe state and trigger loading to prevent flicker
       setUsersToSwipe([]);
       setIsDeckLoading(true);
-
-      // Force navigation to Discover screen upon successful login
       setCurrentView(ViewState.DISCOVER);
 
       setIsLoading(false);
@@ -788,14 +760,14 @@ function App() {
         return;
       }
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: authErr } = await supabase.auth.signUp({
         email: newUser.email,
-        password
+        password,
       });
 
-      if (authError || !authData.user) {
-        console.error('Supabase signUp error:', authError);
-        setAuthError(authError?.message ?? 'Failed to create account.');
+      if (authErr || !authData.user) {
+        console.error('Supabase signUp error:', authErr);
+        setAuthError(authErr?.message ?? 'Failed to create account.');
         setIsLoading(false);
         return;
       }
@@ -809,21 +781,13 @@ function App() {
 
           const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(fileName, profileImage, {
-              cacheControl: '3600',
-              upsert: true
-            });
+            .upload(fileName, profileImage, { cacheControl: '3600', upsert: true });
 
           if (uploadError) {
             console.error('Failed to upload profile image:', uploadError);
           } else {
-            const { data: publicUrlData } = supabase.storage
-              .from('avatars')
-              .getPublicUrl(fileName);
-
-            if (publicUrlData) {
-              finalImageUrl = publicUrlData.publicUrl;
-            }
+            const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            if (publicUrlData) finalImageUrl = publicUrlData.publicUrl;
           }
         } catch (uploadErr) {
           console.error('Exception during image upload:', uploadErr);
@@ -854,8 +818,8 @@ function App() {
             security_question: newUser.securityQuestion,
             security_answer: newUser.securityAnswer,
             subscription_tier: 'free',
-            last_seen_at: new Date().toISOString()
-          }
+            last_seen_at: new Date().toISOString(),
+          },
         ])
         .select()
         .single();
@@ -865,8 +829,7 @@ function App() {
       if (createdUser) {
         localStorage.setItem('kova_current_user_id', createdUser.id);
         await fetchUserProfile(createdUser.id);
-        
-        // Show Welcome Overlay after registration
+
         setShowWelcomeOverlay(true);
         setCurrentView(ViewState.DISCOVER);
       }
@@ -885,12 +848,13 @@ function App() {
     } catch (e) {
       console.error('Error signing out of Supabase auth', e);
     }
+
     localStorage.removeItem('kova_current_user_id');
     localStorage.removeItem('kova_current_view');
+
     setUser(null);
     setCurrentView(ViewState.LOGIN);
-    
-    // Clear all user-specific data states to prevent stale flicker on next login
+
     setUsersToSwipe([]);
     setMatches([]);
     setSwipedUserIds(new Set());
@@ -904,12 +868,9 @@ function App() {
     setIsLoading(true);
 
     try {
-      // Use our backend endpoint to securely delete the user via admin API
       const response = await fetch('/api/delete-account', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id }),
       });
 
@@ -918,11 +879,10 @@ function App() {
         throw new Error(data.error || 'Failed to delete account');
       }
 
-      // Cleanup local state
       localStorage.removeItem('kova_current_user_id');
       localStorage.removeItem('kova_current_view');
       localStorage.removeItem('kova_seen_onboarding');
-      
+
       setUser(null);
       setCurrentView(ViewState.LOGIN);
     } catch (err) {
@@ -936,30 +896,21 @@ function App() {
   // -----------------------------
   // Swipes / Matches
   // -----------------------------
-  
-  // UNIFIED HELPER: Handles both normal likes and superlikes uniformly for matching
   const handleSwipe = async (direction: 'left' | 'right' | 'superlike', swipedUser: User) => {
     if (!user) return;
 
-    // 1. Counters & Local State
     if (direction === 'right' || direction === 'superlike') {
       setDailySwipes((prev) => prev + 1);
     }
 
-    setSwipedUserIds(prev => {
-        const next = new Set(prev);
-        next.add(swipedUser.id);
-        return next;
+    setSwipedUserIds((prev) => {
+      const next = new Set(prev);
+      next.add(swipedUser.id);
+      return next;
     });
 
-    // 2. Insert Swipe Record
-    // We store the specific direction ('right' or 'superlike') so UI knows IF it was a superlike.
     const { error: swipeError } = await supabase.from('swipes').insert([
-      {
-        swiper_id: user.id,
-        swiped_id: swipedUser.id,
-        direction: direction
-      }
+      { swiper_id: user.id, swiped_id: swipedUser.id, direction },
     ]);
 
     if (swipeError) {
@@ -967,69 +918,56 @@ function App() {
       return;
     }
 
-    // 3. Check for Match (Mutual Connection)
-    // A match happens if I swiped 'right' OR 'superlike', AND they swiped 'right' OR 'superlike'.
     if (direction === 'right' || direction === 'superlike') {
-        
-        // Check reciprocal: Did they swipe 'right' or 'superlike' on me?
-        const { data: reciprocal, error: reciprocalError } = await supabase
-          .from('swipes')
+      const { data: reciprocal, error: reciprocalError } = await supabase
+        .from('swipes')
+        .select('id')
+        .eq('swiper_id', swipedUser.id)
+        .eq('swiped_id', user.id)
+        .in('direction', ['right', 'superlike'])
+        .maybeSingle();
+
+      if (reciprocalError) {
+        console.error('Error checking reciprocal swipe:', reciprocalError);
+        return;
+      }
+
+      if (reciprocal) {
+        const { data: existingMatch } = await supabase
+          .from('matches')
           .select('id')
-          .eq('swiper_id', swipedUser.id)
-          .eq('swiped_id', user.id)
-          .in('direction', ['right', 'superlike']) // TREAT SUPERLIKE AS A VALID LIKE FOR MATCHING
+          .or(
+            `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`
+          )
           .maybeSingle();
 
-        if (reciprocalError) {
-          console.error('Error checking reciprocal swipe:', reciprocalError);
+        if (existingMatch) {
+          setNewMatch(swipedUser);
+          setShowMatchPopup(true);
           return;
         }
 
-        // If mutual like found -> Create Match
-        if (reciprocal) {
-            
-            // Double check match doesn't already exist (idempotency)
-            const { data: existingMatch } = await supabase
-              .from('matches')
-              .select('id')
-              .or(
-                `and(user1_id.eq.${user.id},user2_id.eq.${swipedUser.id}),and(user1_id.eq.${swipedUser.id},user2_id.eq.${user.id})`
-              )
-              .maybeSingle();
+        const { data: matchData, error: matchError } = await supabase
+          .from('matches')
+          .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
+          .select()
+          .single();
 
-            if (existingMatch) {
-               // Match already exists, just show UI if needed (rare case if swiping again)
-               setNewMatch(swipedUser);
-               setShowMatchPopup(true);
-               return; 
-            }
-
-            // Create the match row
-            const { data: matchData, error: matchError } = await supabase
-              .from('matches')
-              .insert([{ user1_id: user.id, user2_id: swipedUser.id }])
-              .select()
-              .single();
-
-            if (matchError) {
-              console.error('Error creating match:', matchError);
-              return;
-            }
-
-            if (matchData) {
-              // Successful new match
-              setNewMatch(swipedUser);
-              setShowMatchPopup(true);
-              playNotificationSound();
-              addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
-
-              setNewMatchIds((prev) =>
-                prev.includes(matchData.id) ? prev : [...prev, matchData.id]
-              );
-
-              fetchMatches();
-            }
+        if (matchError) {
+          console.error('Error creating match:', matchError);
+          return;
         }
+
+        if (matchData) {
+          setNewMatch(swipedUser);
+          setShowMatchPopup(true);
+          playNotificationSound();
+          addTabNotification([ViewState.MATCHES, ViewState.DASHBOARD]);
+
+          setNewMatchIds((prev) => (prev.includes(matchData.id) ? prev : [...prev, matchData.id]));
+          fetchMatches();
+        }
+      }
     }
   };
 
@@ -1046,21 +984,13 @@ function App() {
 
         const { error: uploadError } = await supabase.storage
           .from('avatars')
-          .upload(fileName, profileImage, {
-            cacheControl: '3600',
-            upsert: true
-          });
+          .upload(fileName, profileImage, { cacheControl: '3600', upsert: true });
 
         if (uploadError) {
           console.error('Failed to upload profile image:', uploadError);
         } else {
-          const { data: publicUrlData } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(fileName);
-
-          if (publicUrlData) {
-            finalImageUrl = publicUrlData.publicUrl;
-          }
+          const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+          if (publicUrlData) finalImageUrl = publicUrlData.publicUrl;
         }
       } catch (uploadErr) {
         console.error('Exception during image upload:', uploadErr);
@@ -1095,8 +1025,7 @@ function App() {
         availability: updatedUser.availability,
         goals_list: updatedUser.goalsList,
         links: updatedUser.links,
-        // encode front-end tier back into DB format
-        subscription_tier: encodeTierForDb(updatedUser.subscriptionTier)
+        subscription_tier: encodeTierForDb(updatedUser.subscriptionTier),
       })
       .eq('id', user.id);
 
@@ -1105,16 +1034,19 @@ function App() {
     } else {
       console.error('Profile update failed:', error);
     }
+
     setIsLoading(false);
   };
 
   const handleConnectById = async (targetUser: User) => {
     if (!user) return;
+
     const existing = matches.find((m) => m.user.id === targetUser.id);
     if (existing) {
       alert('You are already matched!');
       return;
     }
+
     const { data, error } = await supabase
       .from('matches')
       .insert([{ user1_id: user.id, user2_id: targetUser.id }])
@@ -1122,10 +1054,7 @@ function App() {
       .single();
 
     if (!error && data) {
-      // new manual connection should also show as "new"
-      setNewMatchIds((prev) =>
-        prev.includes(data.id) ? prev : [...prev, data.id]
-      );
+      setNewMatchIds((prev) => (prev.includes(data.id) ? prev : [...prev, data.id]));
       fetchMatches();
       setCurrentView(ViewState.MATCHES);
     } else if (error) {
@@ -1137,29 +1066,16 @@ function App() {
     try {
       console.log('[UNMATCH] Starting unmatch for matchId =', matchId);
 
-      // 1) Delete all messages that belong to this match
-      const { error: msgError } = await supabase
-        .from('messages')
-        .delete()
-        .eq('match_id', matchId);
+      const { error: msgError } = await supabase.from('messages').delete().eq('match_id', matchId);
+      if (msgError) console.error('[UNMATCH] Failed to delete messages for match:', msgError);
 
-      if (msgError) {
-        console.error('[UNMATCH] Failed to delete messages for match:', msgError);
-      }
-
-      // 2) Delete the match row itself
-      const { error: matchError } = await supabase
-        .from('matches')
-        .delete()
-        .eq('id', matchId);
-
+      const { error: matchError } = await supabase.from('matches').delete().eq('id', matchId);
       if (matchError) {
         console.error('[UNMATCH] Failed to delete match row:', matchError);
         alert('Failed to unmatch. Please check the console for details.');
         return;
       }
 
-      // 3) Update local React state so it disappears immediately from UI
       setMatches((prev) => prev.filter((m) => m.id !== matchId));
       setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
     } catch (err) {
@@ -1168,7 +1084,6 @@ function App() {
     }
   };
 
-  // 🔹 called from ChatInterface when user opens a match that had the "NEW" tag
   const handleMatchSeen = (matchId: string) => {
     setNewMatchIds((prev) => prev.filter((id) => id !== matchId));
   };
@@ -1180,24 +1095,11 @@ function App() {
     { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
     { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
     { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
-    {
-      id: 'KOVA_AI',
-      label: 'KOVA AI',
-      icon: Sparkles,
-      isLocked: true,
-      onClick: () => {} // Disable click functionality
-    },
-    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon }
+    { id: 'KOVA_AI', label: 'KOVA AI', icon: Sparkles, isLocked: true, onClick: () => {} },
+    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
   ];
 
   const handleNavClick = (view: ViewState) => {
-    // If routing to a legal page, update URL history so back button works correctly
-    if ([ViewState.PRIVACY, ViewState.TERMS, ViewState.REFUND, ViewState.CONTACT].includes(view)) {
-       // Just update view for SPA feel
-    } else {
-       // Clear URL when going back to app flow if needed, or rely on state. 
-       // For this simple implementation we just rely on state.
-    }
     setCurrentView(view);
     clearTabNotification(view);
   };
@@ -1206,12 +1108,15 @@ function App() {
     setCurrentView(view);
   };
 
-  // Persist currentView to localStorage whenever it changes
   useEffect(() => {
     if (!user) return;
     try {
-      if (currentView !== ViewState.PAYMENT_SUCCESS && 
-          ![ViewState.PRIVACY, ViewState.TERMS, ViewState.REFUND, ViewState.CONTACT].includes(currentView)) {
+      if (
+        currentView !== ViewState.PAYMENT_SUCCESS &&
+        ![ViewState.PRIVACY, ViewState.TERMS, ViewState.REFUND, ViewState.CONTACT].includes(
+          currentView
+        )
+      ) {
         localStorage.setItem('kova_current_view', currentView);
       }
     } catch (e) {
@@ -1233,30 +1138,20 @@ function App() {
     if (tier === 'kova_plus') {
       setIsProcessingPayment(true);
       try {
-        // Use backend to create a Checkout Session with the live key
         const response = await fetch('/api/stripe/create-checkout-session', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                plan: tier,
-                userId: user.id,
-            }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan: tier, userId: user.id }),
         });
-        
+
         if (!response.ok) {
-            const errData = await response.json();
-            throw new Error(errData.error || 'Payment initiation failed');
+          const errData = await response.json();
+          throw new Error(errData.error || 'Payment initiation failed');
         }
 
         const { url } = await response.json();
-        if (url) {
-            // Redirect to the Stripe Checkout page
-            window.location.href = url;
-        } else {
-             throw new Error('No payment URL returned');
-        }
+        if (url) window.location.href = url;
+        else throw new Error('No payment URL returned');
       } catch (error: any) {
         console.error('Payment Error:', error);
         alert('Failed to start payment. Please try again later.');
@@ -1265,31 +1160,23 @@ function App() {
     }
   };
 
-  // Handle successful return from Stripe
   const handlePaymentSuccessContinue = () => {
-    // Refresh user profile to get new tier from DB (updated by webhook)
-    if (user) {
-      fetchUserProfile(user.id);
-    }
-    // Clear URL param if we want, or just navigate
+    if (user) fetchUserProfile(user.id);
     window.history.replaceState({}, document.title, '/');
     setCurrentView(ViewState.DASHBOARD);
   };
 
   // --- Call Handlers ---
-  
   const handleIncomingCallAccept = () => {
     if (incomingCall && matches) {
-      // Find the match object for the caller
-      const callerMatch = matches.find(m => m.user.id === incomingCall.caller.id);
-      
+      const callerMatch = matches.find((m) => m.user.id === incomingCall.caller.id);
+
       if (callerMatch) {
         setActiveVideoMatch(callerMatch);
         setActiveCallType(incomingCall.callType);
         setCurrentView(ViewState.VIDEO_ROOM);
         setIncomingCall(null);
       } else {
-        // Fallback if match not found in local state (should be rare)
         alert('Could not find match data for this call.');
         setIncomingCall(null);
       }
@@ -1298,80 +1185,88 @@ function App() {
 
   const handleIncomingCallDecline = () => {
     setIncomingCall(null);
-    // Optional: Could notify backend, but for now just clear local state
   };
 
   // -----------------------------
   // Render
   // -----------------------------
-  
-  // High-priority legal views render regardless of auth state
   if (currentView === ViewState.PRIVACY) {
     return (
       <>
         <button
-        onClick={toggleTheme}
-        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
-      >
-        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-      </button>
-        <PrivacyPolicy onBack={() => {
-           window.history.replaceState({}, document.title, '/');
-           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
-        }} />
-      </>
-    );
-  }
-  if (currentView === ViewState.TERMS) {
-    return (
-      <>
-        <button
-        onClick={toggleTheme}
-        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
-      >
-        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-      </button>
-        <TermsOfService onBack={() => {
-           window.history.replaceState({}, document.title, '/');
-           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
-        }} />
-      </>
-    );
-  }
-  if (currentView === ViewState.REFUND) {
-    return (
-      <>
-        <button
-        onClick={toggleTheme}
-        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
-      >
-        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-      </button>
-        <RefundPolicy onBack={() => {
-           window.history.replaceState({}, document.title, '/');
-           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
-        }} />
-      </>
-    );
-  }
-  if (currentView === ViewState.CONTACT) {
-    return (
-      <>
-        <button
-        onClick={toggleTheme}
-        className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
-      >
-        {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-      </button>
-        <ContactPage onBack={() => {
-           window.history.replaceState({}, document.title, '/');
-           setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
-        }} />
+          onClick={toggleTheme}
+          className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+        <PrivacyPolicy
+          onBack={() => {
+            window.history.replaceState({}, document.title, '/');
+            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+          }}
+        />
       </>
     );
   }
 
-  let content;
+  if (currentView === ViewState.TERMS) {
+    return (
+      <>
+        <button
+          onClick={toggleTheme}
+          className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+        <TermsOfService
+          onBack={() => {
+            window.history.replaceState({}, document.title, '/');
+            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+          }}
+        />
+      </>
+    );
+  }
+
+  if (currentView === ViewState.REFUND) {
+    return (
+      <>
+        <button
+          onClick={toggleTheme}
+          className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+        <RefundPolicy
+          onBack={() => {
+            window.history.replaceState({}, document.title, '/');
+            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+          }}
+        />
+      </>
+    );
+  }
+
+  if (currentView === ViewState.CONTACT) {
+    return (
+      <>
+        <button
+          onClick={toggleTheme}
+          className="fixed top-4 right-4 z-[100] p-2.5 rounded-full bg-surface/80 border border-text-muted/20 backdrop-blur-md shadow-lg text-text-main hover:bg-surface hover:scale-105 transition-all"
+        >
+          {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+        <ContactPage
+          onBack={() => {
+            window.history.replaceState({}, document.title, '/');
+            setCurrentView(user ? ViewState.DASHBOARD : ViewState.LOGIN);
+          }}
+        />
+      </>
+    );
+  }
+
+  let content: React.ReactNode;
 
   if (isLoading && !user) {
     content = (
@@ -1381,23 +1276,20 @@ function App() {
       </div>
     );
   } else if (isPasswordRecoveryMode) {
-    // Password Recovery View (Even if user is technically logged in via magic link)
     content = (
-        <LoginScreen
-          onLogin={handleLogin}
-          onRegisterClick={() => setShowRegister(true)}
-          error={authError}
-          isLoading={isLoading}
-          onNavigateLegal={handleNavigateLegal}
-          isPasswordRecovery={true}
-          onPasswordUpdated={() => {
-             setIsPasswordRecoveryMode(false);
-             // User is already logged in via recovery link, so just navigate to dashboard
-             setCurrentView(ViewState.DASHBOARD);
-             // Clear URL fragments
-             window.history.replaceState({}, document.title, '/');
-          }}
-        />
+      <LoginScreen
+        onLogin={handleLogin}
+        onRegisterClick={() => setShowRegister(true)}
+        error={authError}
+        isLoading={isLoading}
+        onNavigateLegal={handleNavigateLegal}
+        isPasswordRecovery={true}
+        onPasswordUpdated={() => {
+          setIsPasswordRecoveryMode(false);
+          setCurrentView(ViewState.DASHBOARD);
+          window.history.replaceState({}, document.title, '/');
+        }}
+      />
     );
   } else if (!user) {
     if (!hasSeenOnboarding) {
@@ -1432,18 +1324,12 @@ function App() {
       );
     }
   } else {
-    // Helper to get modal content based on tier
-    const upgradeModalContent = upgradeTargetTier
-      ? SUBSCRIPTION_PLANS[upgradeTargetTier]
-      : null;
+    const upgradeModalContent = upgradeTargetTier ? SUBSCRIPTION_PLANS[upgradeTargetTier] : null;
 
     content = (
       <div className="h-screen w-full bg-background flex flex-col overflow-hidden relative">
-        {/* Global Modals */}
-        
-        {/* Incoming Call Popup */}
         {incomingCall && (
-          <IncomingCallPopup 
+          <IncomingCallPopup
             caller={incomingCall.caller}
             callType={incomingCall.callType}
             onAccept={handleIncomingCallAccept}
@@ -1451,7 +1337,6 @@ function App() {
           />
         )}
 
-        {/* Match Popup */}
         {showMatchPopup && newMatch && (
           <MatchPopup
             matchedUser={newMatch}
@@ -1468,7 +1353,6 @@ function App() {
           />
         )}
 
-        {/* Welcome Overlay */}
         {showWelcomeOverlay && (
           <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-500">
             <div className="bg-surface rounded-3xl border border-white/10 max-w-md w-full p-8 text-center shadow-2xl relative">
@@ -1488,17 +1372,16 @@ function App() {
           </div>
         )}
 
-        {/* Out of Swipes Modal */}
         {showOutOfSwipesModal && user.subscriptionTier === 'free' && (
-          <div 
+          <div
             className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-300"
             onClick={() => setShowOutOfSwipesModal(false)}
           >
-            <div 
+            <div
               className="bg-surface rounded-3xl border border-white/10 max-w-4xl w-full p-6 md:p-8 shadow-2xl relative overflow-y-auto max-h-[90vh]"
               onClick={(e) => e.stopPropagation()}
             >
-              <button 
+              <button
                 onClick={() => setShowOutOfSwipesModal(false)}
                 className="absolute top-4 right-4 text-text-muted hover:text-white"
               >
@@ -1506,42 +1389,61 @@ function App() {
               </button>
 
               <div className="text-center mb-8">
-                <h2 className="text-2xl md:text-3xl font-bold text-text-main mb-2">You're out of swipes for today</h2>
-                <p className="text-text-muted">Free accounts get 30 swipes per day. Upgrade to continue connecting.</p>
+                <h2 className="text-2xl md:text-3xl font-bold text-text-main mb-2">
+                  You're out of swipes for today
+                </h2>
+                <p className="text-text-muted">
+                  Free accounts get 30 swipes per day. Upgrade to continue connecting.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                {/* Free Plan */}
                 <div className="border border-white/10 bg-white/5 p-6 rounded-2xl flex flex-col relative opacity-80 shadow-sm">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white/10 border border-white/10 text-text-muted text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                     Current Plan
                   </div>
                   <h3 className="text-xl font-bold text-text-main mt-2 mb-4 text-center">Free</h3>
                   <ul className="space-y-3 mb-6 flex-1 text-sm text-text-muted">
-                    <li className="flex items-center gap-2"><Check size={14} /> 30 swipes per day</li>
-                    <li className="flex items-center gap-2"><Check size={14} /> Basic matching</li>
-                    <li className="flex items-center gap-2"><Check size={14} /> Chat & video rooms</li>
+                    <li className="flex items-center gap-2">
+                      <Check size={14} /> 30 swipes per day
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check size={14} /> Basic matching
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check size={14} /> Chat & video rooms
+                    </li>
                   </ul>
-                  <button disabled className="w-full py-3 rounded-xl border border-white/10 text-text-muted text-xs font-bold cursor-default">
+                  <button
+                    disabled
+                    className="w-full py-3 rounded-xl border border-white/10 text-text-muted text-xs font-bold cursor-default"
+                  >
                     Active
                   </button>
                 </div>
 
-                {/* Kova Plus (Hero) */}
                 <div className="border-2 border-emerald-500 bg-surface p-6 rounded-2xl flex flex-col relative shadow-[0_0_20px_rgba(16,185,129,0.2)] transform scale-105 z-10">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider shadow-lg">
                     Recommended
                   </div>
                   <div className="text-center mb-4 mt-2">
                     <h3 className="text-xl font-bold text-emerald-400">Kova Plus</h3>
-                    <p className="text-2xl font-bold text-text-main mt-1">$9.99<span className="text-sm font-normal text-text-muted">/mo</span></p>
+                    <p className="text-2xl font-bold text-text-main mt-1">
+                      $9.99<span className="text-sm font-normal text-text-muted">/mo</span>
+                    </p>
                   </div>
                   <ul className="space-y-3 mb-6 flex-1 text-sm text-text-main">
-                    <li className="flex items-center gap-2"><Gem size={14} className="text-emerald-400" /> Unlimited Swipes</li>
-                    <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400" /> See who liked you</li>
-                    <li className="flex items-center gap-2"><Check size={14} className="text-emerald-400" /> Daily Profile Boost</li>
+                    <li className="flex items-center gap-2">
+                      <Gem size={14} className="text-emerald-400" /> Unlimited Swipes
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check size={14} className="text-emerald-400" /> See who liked you
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check size={14} className="text-emerald-400" /> Daily Profile Boost
+                    </li>
                   </ul>
-                  <button 
+                  <button
                     onClick={() => {
                       setShowOutOfSwipesModal(false);
                       handleUpgradeSubscription('kova_plus');
@@ -1553,34 +1455,36 @@ function App() {
                   </button>
                 </div>
 
-                {/* Kova Pro (Locked State) */}
                 <div className="relative border border-gold/30 bg-gold/5 p-6 rounded-2xl flex flex-col overflow-hidden pointer-events-none select-none">
-                   {/* Blur Overlay - Increased blur strength */}
-                   <div className="opacity-30 blur-[6px] flex flex-col h-full">
-                      <h3 className="text-xl font-bold text-gold mt-2 mb-4 text-center">Kova Pro</h3>
-                      <ul className="space-y-3 mb-6 flex-1 text-sm text-text-muted">
-                        <li className="flex items-center gap-2"><Crown size={14} className="text-gold" /> All Plus features</li>
-                        <li className="flex items-center gap-2"><Check size={14} className="text-gold" /> AI Insights</li>
-                        <li className="flex items-center gap-2"><Check size={14} className="text-gold" /> Consistency Heatmap</li>
-                      </ul>
-                      {/* Placeholder for layout */}
-                      <div className="w-full py-3 rounded-xl border border-transparent"></div>
-                   </div>
+                  <div className="opacity-30 blur-[6px] flex flex-col h-full">
+                    <h3 className="text-xl font-bold text-gold mt-2 mb-4 text-center">Kova Pro</h3>
+                    <ul className="space-y-3 mb-6 flex-1 text-sm text-text-muted">
+                      <li className="flex items-center gap-2">
+                        <Crown size={14} className="text-gold" /> All Plus features
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check size={14} className="text-gold" /> AI Insights
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <Check size={14} className="text-gold" /> Consistency Heatmap
+                      </li>
+                    </ul>
+                    <div className="w-full py-3 rounded-xl border border-transparent"></div>
+                  </div>
 
-                   {/* Pill Overlay */}
-                   <div className="absolute inset-0 flex items-center justify-center z-10">
-                      <div className="px-3 py-1.5 rounded-full bg-black/90 border border-gold/30 flex items-center gap-2 shadow-xl">
-                         <Lock size={12} className="text-zinc-400" />
-                         <span className="text-[10px] font-bold text-gold tracking-wider uppercase">
-                           Kova Pro | Coming Soon
-                         </span>
-                      </div>
-                   </div>
+                  <div className="absolute inset-0 flex items-center justify-center z-10">
+                    <div className="px-3 py-1.5 rounded-full bg-black/90 border border-gold/30 flex items-center gap-2 shadow-xl">
+                      <Lock size={12} className="text-zinc-400" />
+                      <span className="text-[10px] font-bold text-gold tracking-wider uppercase">
+                        Kova Pro | Coming Soon
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="text-center">
-                <button 
+                <button
                   onClick={() => setShowOutOfSwipesModal(false)}
                   className="text-sm text-text-muted hover:text-white transition-colors"
                 >
@@ -1591,7 +1495,6 @@ function App() {
           </div>
         )}
 
-        {/* Existing General Upgrade Modal */}
         {upgradeTargetTier && upgradeModalContent && !showOutOfSwipesModal && (
           <div
             className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1611,35 +1514,43 @@ function App() {
                 <X />
               </button>
 
-              <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg ${
-                upgradeTargetTier === 'kova_plus' ? 'bg-emerald-500' : 'bg-gradient-to-br from-gold to-amber-600'
-              }`}>
-                {upgradeTargetTier === 'kova_plus' ? <Gem size={32} fill="currentColor" /> : <Crown size={32} fill="currentColor" />}
+              <div
+                className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center text-white shadow-lg ${
+                  upgradeTargetTier === 'kova_plus'
+                    ? 'bg-emerald-500'
+                    : 'bg-gradient-to-br from-gold to-amber-600'
+                }`}
+              >
+                {upgradeTargetTier === 'kova_plus' ? (
+                  <Gem size={32} fill="currentColor" />
+                ) : (
+                  <Crown size={32} fill="currentColor" />
+                )}
               </div>
 
-              <h2 className={`text-2xl font-bold mb-2 ${upgradeTargetTier === 'kova_plus' ? 'text-emerald-400' : 'text-gold'}`}>
+              <h2
+                className={`text-2xl font-bold mb-2 ${
+                  upgradeTargetTier === 'kova_plus' ? 'text-emerald-400' : 'text-gold'
+                }`}
+              >
                 Upgrade to {upgradeModalContent.name}
               </h2>
 
-              <p className="text-text-muted mb-6">
-                {upgradeModalContent.description}
-              </p>
+              <p className="text-text-muted mb-6">{upgradeModalContent.description}</p>
 
               <button
                 onClick={() => handleUpgradeSubscription(upgradeTargetTier)}
                 disabled={isProcessingPayment}
                 className={`w-full py-3 text-white font-bold rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mb-4 ${
-                  upgradeTargetTier === 'kova_plus' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-gold hover:bg-gold-hover text-surface'
+                  upgradeTargetTier === 'kova_plus'
+                    ? 'bg-emerald-500 hover:bg-emerald-600'
+                    : 'bg-gold hover:bg-gold-hover text-surface'
                 }`}
               >
-                {isProcessingPayment ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : null}
-                Get {upgradeModalContent.name.replace('Kova ', '')} for{' '}
-                {upgradeModalContent.price}
+                {isProcessingPayment ? <Loader2 className="animate-spin" size={20} /> : null}
+                Get {upgradeModalContent.name.replace('Kova ', '')} for {upgradeModalContent.price}
               </button>
 
-              {/* Legal Text */}
               <div className="text-[10px] text-text-muted space-y-1">
                 <p>
                   No refunds. See our{' '}
@@ -1686,8 +1597,6 @@ function App() {
           </div>
         )}
 
-
-        {/* Main Content Area */}
         <main className="flex-1 relative overflow-hidden">
           {currentView === ViewState.PAYMENT_SUCCESS && (
             <PaymentSuccess onContinue={handlePaymentSuccessContinue} />
@@ -1697,9 +1606,7 @@ function App() {
             <SwipeDeck
               users={usersToSwipe}
               onSwipe={handleSwipe}
-              remainingLikes={
-                user.subscriptionTier === 'free' ? 30 - dailySwipes : null
-              }
+              remainingLikes={user.subscriptionTier === 'free' ? 30 - dailySwipes : null}
               userTier={user.subscriptionTier}
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
               onOutOfSwipes={() => setShowOutOfSwipesModal(true)}
@@ -1709,8 +1616,6 @@ function App() {
             />
           )}
 
-          {/* ChatInterface is ALWAYS mounted, just hidden when not on MATCHES.
-              This keeps voice channels alive when you switch tabs. */}
           <div className={currentView === ViewState.MATCHES ? 'h-full w-full' : 'hidden'}>
             <ChatInterface
               matches={matches}
@@ -1752,7 +1657,7 @@ function App() {
               onUpgrade={(tier) => setUpgradeTargetTier(tier)}
               onJoinSession={(match) => {
                 setActiveVideoMatch(match);
-                setActiveCallType('video'); // Default join type
+                setActiveCallType('video');
                 setCurrentView(ViewState.VIDEO_ROOM);
               }}
               onNavigateLegal={handleNavigateLegal}
@@ -1774,92 +1679,70 @@ function App() {
           )}
         </main>
 
-        {/* Floating per-user timer overlay + Notes Pill */}
-        {currentView !== ViewState.VIDEO_ROOM &&
-          currentView !== ViewState.PAYMENT_SUCCESS && (
-            <TimerOverlay
-              onNotesClick={() => handleNavClick(ViewState.NOTES)}
-              isNotesActive={currentView === ViewState.NOTES}
-            />
-          )}
+        {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
+          <TimerOverlay
+            onNotesClick={() => handleNavClick(ViewState.NOTES)}
+            isNotesActive={currentView === ViewState.NOTES}
+          />
+        )}
 
-        {/* Bottom Navigation Bar - Visible on all screens EXCEPT Video Room & Payment Success */}
-        {currentView !== ViewState.VIDEO_ROOM &&
-          currentView !== ViewState.PAYMENT_SUCCESS && (
-            <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0 z-50 transition-colors duration-300">
-              <div className="flex md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
-                {navItems.map((item: any) => {
-                  const count = !item.isLocked
-                    ? tabNotifications[item.id as ViewState] ?? 0
-                    : 0;
-                  const isActive = currentView === item.id;
+        {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
+          <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0 z-50 transition-colors duration-300">
+            <div className="flex md:justify-center md:gap-12 items-center h-20 w-full max-w-5xl mx-auto">
+              {navItems.map((item: any) => {
+                const count = !item.isLocked ? tabNotifications[item.id as ViewState] ?? 0 : 0;
+                const isActive = currentView === item.id;
 
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        if (item.id === 'KOVA_AI') return; // Disable click for locked item
-                        item.onClick ? item.onClick() : handleNavClick(item.id);
-                      }}
-                      title={
-                        item.isLocked ? 'Kova Pro • Coming Soon' : undefined
-                      }
-                      disabled={item.id === 'KOVA_AI'}
-                      className={`relative flex flex-col items-center justify-center flex-1 md:flex-none md:w-20 h-full gap-1.5 transition-all duration-200 ${
-                        isActive
-                          ? 'text-gold'
-                          : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
-                      } ${
-                        item.isLocked ? 'hover:!text-gold group' : ''
-                      } ${
-                        item.id === 'KOVA_AI'
-                          ? 'cursor-not-allowed opacity-80'
-                          : ''
-                      }`}
-                    >
-                      {count > 0 && (
-                        <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
-                          {count > 9 ? '9+' : count}
-                        </span>
-                      )}
-
-                      {/* NEW: Coming Soon Pill for Locked Items - CENTERED OVER ICON */}
-                      {item.isLocked && (
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-3/4 bg-black/90 backdrop-blur-md border border-white/15 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-[0_0_10px_rgba(0,0,0,0.5)] z-20 whitespace-nowrap pointer-events-none">
-                          <Lock size={8} className="text-zinc-400" />
-                          <span className="text-[8px] font-bold text-white tracking-wider">
-                            COMING SOON
-                          </span>
-                        </div>
-                      )}
-
-                      {/* icon on top */}
-                      <item.icon
-                        size={20}
-                        className={isActive ? 'stroke-[2.5px]' : 'stroke-2'}
-                      />
-
-                      {/* label below - always visible, NO LOCK ICON next to text */}
-                      <span className="text-[9px] md:text-[10px] font-bold tracking-widest flex items-center gap-0.5">
-                        {item.label}
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      if (item.id === 'KOVA_AI') return;
+                      item.onClick ? item.onClick() : handleNavClick(item.id);
+                    }}
+                    title={item.isLocked ? 'Kova Pro • Coming Soon' : undefined}
+                    disabled={item.id === 'KOVA_AI'}
+                    className={`relative flex flex-col items-center justify-center flex-1 md:flex-none md:w-20 h-full gap-1.5 transition-all duration-200 ${
+                      isActive
+                        ? 'text-gold'
+                        : 'text-gray-500 hover:text-gray-400 dark:text-gray-400 dark:hover:text-gray-200'
+                    } ${item.isLocked ? 'hover:!text-gold group' : ''} ${
+                      item.id === 'KOVA_AI' ? 'cursor-not-allowed opacity-80' : ''
+                    }`}
+                  >
+                    {count > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-[9px] text-white flex items-center justify-center">
+                        {count > 9 ? '9+' : count}
                       </span>
-                    </button>
-                  );
-                })}
+                    )}
 
-                {/* Logout button */}
-                <button
-                  onClick={handleLogout}
-                  className="flex flex-col items-center justify-center flex-1 md:flex-none md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
-                >
-                  <LogOut size={20} strokeWidth={2} />
-                  <span className="text-[9px] md:text-[10px] font-bold tracking-widest">
-                    LOGOUT
-                  </span>
-                </button>
-              </div>
-            </nav>
-          )}
+                    {item.isLocked && (
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-3/4 bg-black/90 backdrop-blur-md border border-white/15 px-2 py-0.5 rounded-full flex items-center gap-1 shadow-[0_0_10px_rgba(0,0,0,0.5)] z-20 whitespace-nowrap pointer-events-none">
+                        <Lock size={8} className="text-zinc-400" />
+                        <span className="text-[8px] font-bold text-white tracking-wider">
+                          COMING SOON
+                        </span>
+                      </div>
+                    )}
+
+                    <item.icon size={20} className={isActive ? 'stroke-[2.5px]' : 'stroke-2'} />
+                    <span className="text-[9px] md:text-[10px] font-bold tracking-widest flex items-center gap-0.5">
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={handleLogout}
+                className="flex flex-col items-center justify-center flex-1 md:flex-none md:w-20 h-full gap-1.5 text-gray-500 hover:text-red-400 dark:text-gray-400 dark:hover:text-red-300 transition-all duration-200"
+              >
+                <LogOut size={20} strokeWidth={2} />
+                <span className="text-[9px] md:text-[10px] font-bold tracking-widest">LOGOUT</span>
+              </button>
+            </div>
+          </nav>
+        )}
       </div>
     );
   }

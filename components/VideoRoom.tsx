@@ -35,14 +35,14 @@ const RTC_CONFIG = {
 
 const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, onEndCall, onReturnToDashboard, callType = 'video' }) => {
   // Call State
-  // participants list tracks active remote connections.
   const [participants, setParticipants] = useState<Match[]>([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
 
   // Media State
   const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(callType === 'video'); // Default based on call type
+  const [camOn, setCamOn] = useState(callType === 'video');
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -77,10 +77,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
   // --- 1. Initialize Session & Media ---
   useEffect(() => {
+    let mounted = true;
+
     // Start backend session tracking
     if (!sessionId && currentUser && match?.user) {
+      setIsSessionLoading(true);
       startSession(currentUser.id, match.user.id, callType).then((id) => {
-        if (id) setSessionId(id);
+        if (mounted) {
+          if (id) {
+            setSessionId(id);
+          } else {
+            console.error("Failed to start session. Chat may be disabled.");
+          }
+          setIsSessionLoading(false);
+        }
       });
     }
 
@@ -91,7 +101,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           video: callType === 'video'
         };
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        setLocalStream(stream);
+        if (mounted) setLocalStream(stream);
       } catch (err) {
         console.error("Error accessing media devices:", err);
       }
@@ -99,56 +109,141 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
     initMedia();
 
-    setChatMessages([{
-        id: 'system-1',
-        senderId: 'system',
-        senderName: 'System',
-        text: `Welcome to the ${callType} room! Connecting to secure channel...`,
-        timestamp: new Date()
-    }]);
-
     // Cleanup on unmount
     return () => {
+      mounted = false;
       cleanupCall();
     };
-  }, []); // Run once on mount
+  }, []); 
 
-  // --- 2. Attach Local Stream to Video Element ---
+  // --- Sync Data with Supabase ---
+  useEffect(() => {
+    // 1. MATCH GOALS (Always available via match.id)
+    const fetchGoals = async () => {
+      const { data: goalsData } = await supabase
+        .from('match_goals')
+        .select('*')
+        .eq('match_id', match.id)
+        .order('created_at', { ascending: true });
+      
+      if (goalsData) {
+        setGoals(goalsData.map((g: any) => ({
+          id: g.id,
+          text: g.text,
+          completed: g.is_done
+        })));
+      }
+    };
+    fetchGoals();
+
+    const goalsChannel = supabase
+      .channel(`match_goals_video:${match.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_goals', filter: `match_id=eq.${match.id}` }, (payload) => {
+         if (payload.eventType === 'INSERT') {
+            const newG = payload.new;
+            setGoals(prev => [...prev, { id: newG.id, text: newG.text, completed: newG.is_done }]);
+         } else if (payload.eventType === 'UPDATE') {
+            const updated = payload.new;
+            setGoals(prev => prev.map(g => g.id === updated.id ? { ...g, completed: updated.is_done } : g));
+         } else if (payload.eventType === 'DELETE') {
+            setGoals(prev => prev.filter(g => g.id !== payload.old.id));
+         }
+      })
+      .subscribe();
+
+    // 2. SESSION CHAT (Requires sessionId)
+    let msgChannel: any = null;
+    
+    if (sessionId) {
+        const fetchMessages = async () => {
+          const { data: msgData } = await supabase
+            .from('session_messages')
+            .select('*')
+            .eq('session_id', sessionId)
+            .order('created_at', { ascending: true });
+
+          if (msgData) {
+            const mapped: ChatMessage[] = await Promise.all(msgData.map(async (m: any) => {
+               let name = 'Unknown';
+               // Using sender_id (standard)
+               if (m.sender_id === currentUser.id) name = 'You';
+               else if (m.sender_id === match.user.id) name = getDisplayName(match.user.name);
+               else name = 'Guest';
+
+               return {
+                 id: m.id,
+                 senderId: m.sender_id,
+                 senderName: name,
+                 text: m.text,
+                 timestamp: new Date(m.created_at)
+               };
+            }));
+            setChatMessages(mapped);
+          }
+        };
+        fetchMessages();
+
+        msgChannel = supabase
+          .channel(`session_chat:${sessionId}`)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_messages', filter: `session_id=eq.${sessionId}` }, (payload) => {
+             const m = payload.new;
+             let name = 'User';
+             if (m.sender_id === currentUser.id) name = 'You';
+             else if (m.sender_id === match.user.id) name = getDisplayName(match.user.name);
+             
+             const newMsg: ChatMessage = {
+                id: m.id,
+                senderId: m.sender_id,
+                senderName: name,
+                text: m.text,
+                timestamp: new Date(m.created_at)
+             };
+             setChatMessages(prev => {
+                if (prev.find(x => x.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+             });
+          })
+          .subscribe();
+    }
+
+    return () => {
+      supabase.removeChannel(goalsChannel);
+      if (msgChannel) supabase.removeChannel(msgChannel);
+    };
+
+  }, [match.id, sessionId]);
+
+
+  // --- Media & WebRTC Handling ---
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
     }
   }, [localStream]);
 
-  // --- 3. Attach Remote Stream to Video Element ---
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream]);
 
-  // --- 4. WebRTC Initialization (Once Local Stream is Ready) ---
   useEffect(() => {
     if (localStream && !peerConnection.current) {
       initializePeerConnection(localStream);
     }
   }, [localStream]);
 
-  // --- WebRTC Logic ---
   const initializePeerConnection = (stream: MediaStream) => {
-    // Determine initiator based on ID comparison (lower ID initiates)
     isInitiator.current = currentUser.id < match.user.id;
     console.log(`[WebRTC] Initializing. Am I initiator? ${isInitiator.current}. Room ID: video-signaling:${match.id}`);
 
     const pc = new RTCPeerConnection(RTC_CONFIG);
     peerConnection.current = pc;
 
-    // Add local tracks
     stream.getTracks().forEach(track => {
       pc.addTrack(track, stream);
     });
 
-    // Handle ICE candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         channelRef.current?.send({
@@ -159,27 +254,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
       }
     };
 
-    // Handle Remote Stream
-    // IMPORTANT: This is the ONLY place we add the participant for the UI grid
-    // This ensures the tile only appears when video/audio is actually received.
     pc.ontrack = (event) => {
       console.log("[WebRTC] Remote track received", event.streams[0]);
       setRemoteStream(event.streams[0]);
       setParticipants(prev => prev.find(p => p.id === match.id) ? prev : [...prev, match]);
     };
 
-    // Handle Connection State
     pc.oniceconnectionstatechange = () => {
-      console.log(`[WebRTC] ICE State: ${pc.iceConnectionState}`);
       if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') {
         console.log("[WebRTC] Peer disconnected");
         setRemoteStream(null);
-        // Remove participant so the tile disappears
         setParticipants(prev => prev.filter(p => p.id !== match.id));
       }
     };
 
-    // Set up Signaling Channel
     const channel = supabase.channel(`video-signaling:${match.id}`);
     channelRef.current = channel;
 
@@ -194,64 +282,36 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
       })
       .on('broadcast', { event: 'offer' }, async ({ payload }: any) => {
         if (!peerConnection.current) return;
-        console.log("[WebRTC] Received offer");
-
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        
         while (iceCandidatesQueue.current.length > 0) {
             const c = iceCandidatesQueue.current.shift();
             if(c) await peerConnection.current.addIceCandidate(new RTCIceCandidate(c));
         }
-
         const answer = await peerConnection.current.createAnswer();
         await peerConnection.current.setLocalDescription(answer);
-        
-        channel.send({
-          type: 'broadcast',
-          event: 'answer',
-          payload: { sdp: answer }
-        });
+        channel.send({ type: 'broadcast', event: 'answer', payload: { sdp: answer } });
       })
       .on('broadcast', { event: 'answer' }, async ({ payload }: any) => {
         if (!peerConnection.current) return;
-        console.log("[WebRTC] Received answer");
-
         await peerConnection.current.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        
         while (iceCandidatesQueue.current.length > 0) {
             const c = iceCandidatesQueue.current.shift();
             if(c) await peerConnection.current.addIceCandidate(new RTCIceCandidate(c));
         }
       })
-      // SIGNAL: 'join' -> Peer entering the room
       .on('broadcast', { event: 'join' }, () => {
-        console.log("[WebRTC] Peer joined (received 'join' signal)");
-        
-        // Note: We DO NOT add to participants here anymore. 
-        // We wait for the 'ontrack' event to add them to the UI grid.
-
         channel.send({ type: 'broadcast', event: 'ack', payload: {} });
-
-        if (isInitiator.current) {
-            createAndSendOffer();
-        }
+        if (isInitiator.current) createAndSendOffer();
       })
-      // SIGNAL: 'ack' -> Peer confirming they are already in the room
       .on('broadcast', { event: 'ack' }, () => {
-        console.log("[WebRTC] Peer ack received");
-        
-        if (isInitiator.current) {
-            createAndSendOffer();
-        }
+        if (isInitiator.current) createAndSendOffer();
       })
       .on('broadcast', { event: 'leave' }, () => {
-        console.log("[WebRTC] Peer left (received 'leave' signal)");
         setRemoteStream(null);
         setParticipants(prev => prev.filter(p => p.id !== match.id));
       })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          console.log("[WebRTC] Channel subscribed. Sending join signal.");
           channel.send({ type: 'broadcast', event: 'join', payload: {} });
         }
       });
@@ -259,31 +319,15 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
   const createAndSendOffer = async () => {
     const pc = peerConnection.current;
-    if (!pc) return;
-    
-    if (pc.signalingState !== "stable") {
-        console.log("[WebRTC] Skipping offer creation, signaling state is:", pc.signalingState);
-        return;
-    }
-
-    console.log("[WebRTC] Creating offer...");
+    if (!pc || pc.signalingState !== "stable") return;
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-
-    channelRef.current?.send({
-      type: 'broadcast',
-      event: 'offer',
-      payload: { sdp: offer }
-    });
+    channelRef.current?.send({ type: 'broadcast', event: 'offer', payload: { sdp: offer } });
   };
 
   const cleanupCall = () => {
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-    }
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-    }
+    if (localStream) localStream.getTracks().forEach(track => track.stop());
+    if (screenStreamRef.current) screenStreamRef.current.getTracks().forEach(track => track.stop());
     if (peerConnection.current) {
       peerConnection.current.close();
       peerConnection.current = null;
@@ -302,7 +346,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     }
   };
 
-  // --- UI & Logic Handlers ---
+  // --- Handlers ---
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -315,41 +359,59 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     }
   }, [camOn, micOn, localStream]);
 
-  const toggleGoal = (id: string) => {
+  const toggleGoal = async (id: string) => {
+    const goal = goals.find(g => g.id === id);
+    if (!goal) return;
     setGoals(goals.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
+    await supabase.from('match_goals').update({ is_done: !goal.completed }).eq('id', id);
   };
 
-  const addGoal = () => {
+  const addGoal = async () => {
     if (!newGoal.trim()) return;
-    setGoals([...goals, { id: Date.now().toString(), text: newGoal, completed: false }]);
+    const text = newGoal.trim();
     setNewGoal('');
+    await supabase.from('match_goals').insert({
+        match_id: match.id,
+        text: text,
+        is_done: false
+    });
   };
 
   const handleAiGoals = async () => {
       setAiSuggesting(true);
       const suggestions = await generateSharedGoals("SaaS Growth Strategy");
-      const newGoals = suggestions.map(text => ({
-          id: Math.random().toString(36).substr(2, 9),
+      const toInsert = suggestions.map(text => ({
+          match_id: match.id,
           text,
-          completed: false
+          is_done: false
       }));
-      setGoals(prev => [...prev, ...newGoals]);
+      await supabase.from('match_goals').insert(toInsert);
       setAiSuggesting(false);
   };
 
-  const handleSendChatMessage = () => {
+  const handleSendChatMessage = async () => {
     if (!chatInput.trim()) return;
     
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      senderId: currentUser.id,
-      senderName: getDisplayName(currentUser.name),
-      text: chatInput,
-      timestamp: new Date()
-    };
+    // Only block sending if session isn't ready, but UI should show loading
+    if (!sessionId) {
+      console.warn("Session ID not ready yet.");
+      return;
+    }
 
-    setChatMessages(prev => [...prev, newMessage]);
+    const text = chatInput.trim();
     setChatInput('');
+    
+    // Use sender_id (Standard)
+    const { error } = await supabase.from('session_messages').insert({
+        session_id: sessionId,
+        sender_id: currentUser.id, 
+        text: text
+    });
+
+    if (error) {
+        console.error("Failed to send message:", error);
+        alert("Failed to send message. Please try again.");
+    }
   };
 
   const toggleScreenShare = async () => {
@@ -422,18 +484,15 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
     onReturnToDashboard();
   };
 
-  const inviteParticipant = (newMatch: Match) => {
-    if (!participants.find(p => p.id === newMatch.id)) {
-      setParticipants([...participants, newMatch]);
-    }
+  const inviteParticipant = (targetMatch: Match) => {
+    alert(`Invite sent to ${getDisplayName(targetMatch.user.name)}`);
     setShowInviteModal(false);
   };
 
-  // Determine grid layout based on number of visible tiles
-  const totalVisible = 1 + (participants.length > 0 ? participants.length : 0); // Me + (Remote Users only if streams active)
   const getGridClass = () => {
-    if (totalVisible === 1) return 'grid-cols-1';
-    if (totalVisible === 2) return 'grid-cols-1 md:grid-cols-2';
+    const totalVideos = 1 + participants.length;
+    if (totalVideos <= 1) return 'grid-cols-1';
+    if (totalVideos === 2) return 'grid-cols-1 md:grid-cols-2';
     return 'grid-cols-2';
   };
 
@@ -528,7 +587,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
       {/* Main Video Section */}
       <div className="flex-1 flex flex-col relative h-full min-h-0">
-        
         {/* Mobile Top Bar */}
         <div className="md:hidden h-14 bg-surface border-b border-white/5 flex items-center justify-between px-4 shrink-0 z-10 pr-20">
            <button onClick={handleReturnToDashboard} className="p-2 text-text-muted hover:text-white">
@@ -583,7 +641,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
           </div>
 
           {/* 2. Remote Participant (Partner) */}
-          {/* Tile only renders if participant exists in state, which only happens on 'ontrack' now */}
           {participants.find(p => p.id === match.id) && (
             <div className="relative bg-surface rounded-2xl overflow-hidden shadow-lg border border-white/10 min-h-[180px]">
                 <video 
@@ -593,7 +650,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                   className={`w-full h-full object-cover ${(!remoteStream || remoteStream.getVideoTracks().length === 0) ? 'hidden' : ''}`}
                 />
               
-              {/* Show avatar if remote stream has no video (audio only) */}
               {(!remoteStream || remoteStream.getVideoTracks().length === 0) && (
                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-background gap-3">
                     <div className="w-24 h-24 rounded-full border-4 border-primary/20 overflow-hidden shadow-xl relative">
@@ -763,9 +819,16 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
 
         {/* BOTTOM HALF: Chat */}
         <div className="h-[45%] md:h-[50%] flex flex-col bg-background/50 border-t border-white/10 shrink-0">
-             <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2 shrink-0 bg-surface/30">
-                 <MessageSquare size={14} className="text-text-muted" />
-                 <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Session Chat</span>
+             <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2 shrink-0 bg-surface/30 justify-between">
+                 <div className="flex items-center gap-2">
+                    <MessageSquare size={14} className="text-text-muted" />
+                    <span className="text-xs font-bold text-text-muted uppercase tracking-wider">Session Chat</span>
+                 </div>
+                 {isSessionLoading && (
+                    <span className="text-[10px] text-gold flex items-center gap-1">
+                       <Loader2 size={10} className="animate-spin" /> Connecting...
+                    </span>
+                 )}
              </div>
 
              <div className="flex-1 overflow-y-auto space-y-3 p-4">
@@ -820,10 +883,10 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ match, allMatches, currentUser, o
                    />
                    <button 
                      onClick={handleSendChatMessage}
-                     disabled={!chatInput.trim()}
+                     disabled={!chatInput.trim() || !sessionId}
                      className="bg-primary/10 text-primary hover:bg-primary hover:text-white p-2 rounded-xl transition-colors disabled:opacity-50"
                    >
-                     <Send size={16} />
+                     {isSessionLoading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
                    </button>
                 </div>
              </div>

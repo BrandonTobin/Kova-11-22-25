@@ -669,13 +669,14 @@ function App() {
           let lastMessageText = null;
           let lastMessageAt = null;
 
+          // FIX: Use maybeSingle() to avoid 406 errors when no messages exist yet
           const { data: lastMsgData } = await supabase
             .from('messages')
             .select('text, created_at')
             .eq('match_id', m.id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           if (lastMsgData) {
             lastMessageText = lastMsgData.text;

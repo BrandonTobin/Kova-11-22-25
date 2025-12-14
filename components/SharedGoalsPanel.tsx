@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
-import { Lock, Target, CheckCircle, Plus, Trash2, Circle } from 'lucide-react';
+import { Lock, Target, CheckCircle, Plus, Trash2, Circle, Loader2 } from 'lucide-react';
 import { SubscriptionTier } from '../types';
 import { getDisplayName } from '../utils/nameUtils';
+import { supabase } from '../supabaseClient';
 
 interface SharedGoal {
   id: string;
   text: string;
-  completed: boolean;
+  is_done: boolean;
 }
 
 interface SharedGoalsPanelProps {
@@ -20,49 +22,77 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
   const firstName = partnerName ? getDisplayName(partnerName).split(' ')[0] : 'Partner';
   const [goals, setGoals] = useState<SharedGoal[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Load goals for this match from localStorage
+  // --- Realtime Sync with Supabase ---
   useEffect(() => {
-    const key = `kova_shared_goals_${matchId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) {
-      try {
-        setGoals(JSON.parse(saved));
-      } catch (e) {
-        setGoals([]);
-      }
-    } else {
-      setGoals([]);
-    }
-  }, [matchId]);
+    if (!matchId || !isPlusOrPro) return;
 
-  // Save goals whenever they change
-  useEffect(() => {
-    if (matchId) {
-      const key = `kova_shared_goals_${matchId}`;
-      localStorage.setItem(key, JSON.stringify(goals));
-    }
-  }, [goals, matchId]);
+    const fetchGoals = async () => {
+      setIsLoading(true);
+      const { data } = await supabase
+        .from('match_goals')
+        .select('*')
+        .eq('match_id', matchId)
+        .order('created_at', { ascending: true });
+      
+      if (data) setGoals(data);
+      setIsLoading(false);
+    };
 
-  const addGoal = (e?: React.MouseEvent) => {
+    fetchGoals();
+
+    const channel = supabase
+      .channel(`match_goals:${matchId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_goals', filter: `match_id=eq.${matchId}` }, (payload) => {
+         if (payload.eventType === 'INSERT') {
+            setGoals(prev => [...prev, payload.new as SharedGoal]);
+         } else if (payload.eventType === 'UPDATE') {
+            setGoals(prev => prev.map(g => g.id === payload.new.id ? payload.new as SharedGoal : g));
+         } else if (payload.eventType === 'DELETE') {
+            setGoals(prev => prev.filter(g => g.id !== payload.old.id));
+         }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [matchId, isPlusOrPro]);
+
+  const addGoal = async (e?: React.MouseEvent) => {
     if (e) e.preventDefault();
     if (!inputValue.trim()) return;
     
-    const newGoal: SharedGoal = {
-      id: Date.now().toString(),
-      text: inputValue.trim(),
-      completed: false
-    };
-    setGoals(prev => [...prev, newGoal]);
-    setInputValue('');
+    const text = inputValue.trim();
+    setInputValue(''); // Optimistic clear
+
+    // Optimistic Add (optional, but UI feels snappier)
+    // Actual insert happens below
+    const { error } = await supabase.from('match_goals').insert({
+      match_id: matchId,
+      text: text,
+      is_done: false
+    });
+
+    if (error) {
+      console.error("Error adding goal:", error);
+      // Revert input if failed (simplified here)
+    }
   };
 
-  const toggleGoal = (id: string) => {
-    setGoals(prev => prev.map(g => g.id === id ? { ...g, completed: !g.completed } : g));
+  const toggleGoal = async (id: string, currentStatus: boolean) => {
+    // Optimistic update
+    setGoals(prev => prev.map(g => g.id === id ? { ...g, is_done: !currentStatus } : g));
+
+    await supabase.from('match_goals').update({ is_done: !currentStatus }).eq('id', id);
   };
 
-  const deleteGoal = (id: string) => {
+  const deleteGoal = async (id: string) => {
+    // Optimistic delete
     setGoals(prev => prev.filter(g => g.id !== id));
+
+    await supabase.from('match_goals').delete().eq('id', id);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -115,7 +145,11 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
 
             {/* List */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-              {goals.length === 0 && (
+              {isLoading && goals.length === 0 && (
+                 <div className="flex justify-center p-4"><Loader2 className="animate-spin text-gold" size={20} /></div>
+              )}
+              
+              {!isLoading && goals.length === 0 && (
                 <div className="flex flex-col items-center justify-center h-40 text-text-muted opacity-50 text-sm text-center border-2 border-dashed border-white/5 rounded-2xl mx-1">
                   <Target size={24} className="mb-2 opacity-50" />
                   <p>No goals yet.</p>
@@ -126,12 +160,12 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
               {goals.map(goal => (
                 <div key={goal.id} className="group bg-background/40 hover:bg-background/60 rounded-xl p-3 border border-white/5 hover:border-white/10 transition-all flex items-start gap-3 shadow-sm">
                   <button 
-                    onClick={() => toggleGoal(goal.id)}
-                    className={`mt-0.5 shrink-0 transition-colors ${goal.completed ? 'text-emerald-500' : 'text-text-muted hover:text-gold'}`}
+                    onClick={() => toggleGoal(goal.id, goal.is_done)}
+                    className={`mt-0.5 shrink-0 transition-colors ${goal.is_done ? 'text-emerald-500' : 'text-text-muted hover:text-gold'}`}
                   >
-                    {goal.completed ? <CheckCircle size={18} /> : <Circle size={18} />}
+                    {goal.is_done ? <CheckCircle size={18} /> : <Circle size={18} />}
                   </button>
-                  <p className={`flex-1 text-sm leading-relaxed ${goal.completed ? 'text-text-muted line-through opacity-70' : 'text-text-main'}`}>
+                  <p className={`flex-1 text-sm leading-relaxed ${goal.is_done ? 'text-text-muted line-through opacity-70' : 'text-text-main'}`}>
                     {goal.text}
                   </p>
                   <button 

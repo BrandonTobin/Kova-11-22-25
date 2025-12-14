@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lock, Target, CheckCircle, Plus, Trash2, Circle, Loader2 } from 'lucide-react';
 import { SubscriptionTier } from '../types';
 import { getDisplayName } from '../utils/nameUtils';
@@ -23,6 +23,12 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
   const [goals, setGoals] = useState<SharedGoal[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   // --- Realtime Sync with Supabase ---
   useEffect(() => {
@@ -36,19 +42,34 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
         .eq('match_id', matchId)
         .order('created_at', { ascending: true });
       
-      if (data) setGoals(data);
-      setIsLoading(false);
+      if (isMountedRef.current && data) {
+        setGoals(data);
+      }
+      if (isMountedRef.current) setIsLoading(false);
     };
 
     fetchGoals();
 
     const channel = supabase
-      .channel(`match_goals:${matchId}`)
+      .channel(`match_goals_panel:${matchId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'match_goals', filter: `match_id=eq.${matchId}` }, (payload) => {
+         if (!isMountedRef.current) return;
+
          if (payload.eventType === 'INSERT') {
-            setGoals(prev => [...prev, payload.new as SharedGoal]);
+            const newGoal = payload.new as SharedGoal;
+            setGoals(prev => {
+              // Deduplication: If we already have this ID, ignore.
+              if (prev.some(g => g.id === newGoal.id)) return prev;
+              
+              // NOTE: We do NOT remove optimistic goals here by text matching because it's risky.
+              // We rely on the `addGoal` function to swap the ID.
+              // However, if this event comes in BEFORE `addGoal` finishes, we might have duplicates temporarily.
+              // The `key` prop in React will handle rendering, but let's be clean.
+              return [...prev, newGoal];
+            });
          } else if (payload.eventType === 'UPDATE') {
-            setGoals(prev => prev.map(g => g.id === payload.new.id ? payload.new as SharedGoal : g));
+            const updated = payload.new as SharedGoal;
+            setGoals(prev => prev.map(g => g.id === updated.id ? updated : g));
          } else if (payload.eventType === 'DELETE') {
             setGoals(prev => prev.filter(g => g.id !== payload.old.id));
          }
@@ -65,25 +86,39 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
     if (!inputValue.trim()) return;
     
     const text = inputValue.trim();
-    setInputValue(''); // Optimistic clear
+    setInputValue(''); // Clear input immediately
 
-    // Optimistic Add (optional, but UI feels snappier)
-    // Actual insert happens below
-    const { error } = await supabase.from('match_goals').insert({
+    // 1. Optimistic Update
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const optimisticGoal = { id: tempId, text, is_done: false };
+    
+    setGoals(prev => [...prev, optimisticGoal]);
+
+    // 2. Save to Database
+    const { data, error } = await supabase.from('match_goals').insert({
       match_id: matchId,
       text: text,
       is_done: false
-    });
+    }).select().single();
+
+    if (!isMountedRef.current) return;
 
     if (error) {
       console.error("Error adding goal:", error);
-      // Revert input if failed (simplified here)
+      setGoals(prev => prev.filter(g => g.id !== tempId)); // Revert
+      alert("Failed to save goal. Please check your connection.");
+    } else if (data) {
+      // 3. Swap Temp ID with Real ID
+      setGoals(prev => prev.map(g => g.id === tempId ? data : g));
     }
   };
 
   const toggleGoal = async (id: string, currentStatus: boolean) => {
     // Optimistic update
     setGoals(prev => prev.map(g => g.id === id ? { ...g, is_done: !currentStatus } : g));
+    
+    // Don't send DB update for temp goals
+    if (id.startsWith('temp-')) return;
 
     await supabase.from('match_goals').update({ is_done: !currentStatus }).eq('id', id);
   };
@@ -91,6 +126,9 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
   const deleteGoal = async (id: string) => {
     // Optimistic delete
     setGoals(prev => prev.filter(g => g.id !== id));
+
+    // Don't send DB delete for temp goals
+    if (id.startsWith('temp-')) return;
 
     await supabase.from('match_goals').delete().eq('id', id);
   };

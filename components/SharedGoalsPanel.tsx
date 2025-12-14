@@ -9,6 +9,7 @@ interface SharedGoal {
   id: string;
   text: string;
   is_done: boolean;
+  match_id?: string;
 }
 
 interface SharedGoalsPanelProps {
@@ -34,6 +35,7 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
   useEffect(() => {
     if (!matchId || !isPlusOrPro) return;
 
+    // 1. Initial Fetch
     const fetchGoals = async () => {
       setIsLoading(true);
       const { data } = await supabase
@@ -50,31 +52,43 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
 
     fetchGoals();
 
+    // 2. Realtime Subscription
+    // Using a unique channel name per mount prevents conflicts
+    const channelName = `goals:${matchId}:${Date.now()}`;
     const channel = supabase
-      .channel(`match_goals_panel:${matchId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'match_goals', filter: `match_id=eq.${matchId}` }, (payload) => {
-         if (!isMountedRef.current) return;
+      .channel(channelName)
+      .on(
+        'postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'match_goals',
+          filter: `match_id=eq.${matchId}` // Explicit filter is more efficient with correct RLS
+        }, 
+        (payload) => {
+           if (!isMountedRef.current) return;
 
-         if (payload.eventType === 'INSERT') {
-            const newGoal = payload.new as SharedGoal;
-            setGoals(prev => {
-              // Deduplication: If we already have this ID, ignore.
-              if (prev.some(g => g.id === newGoal.id)) return prev;
-              
-              // NOTE: We do NOT remove optimistic goals here by text matching because it's risky.
-              // We rely on the `addGoal` function to swap the ID.
-              // However, if this event comes in BEFORE `addGoal` finishes, we might have duplicates temporarily.
-              // The `key` prop in React will handle rendering, but let's be clean.
-              return [...prev, newGoal];
-            });
-         } else if (payload.eventType === 'UPDATE') {
-            const updated = payload.new as SharedGoal;
-            setGoals(prev => prev.map(g => g.id === updated.id ? updated : g));
-         } else if (payload.eventType === 'DELETE') {
-            setGoals(prev => prev.filter(g => g.id !== payload.old.id));
-         }
-      })
-      .subscribe();
+           console.log('Realtime Event Received:', payload.eventType); // Debug log
+
+           if (payload.eventType === 'INSERT') {
+              const newGoal = payload.new as SharedGoal;
+              setGoals(prev => {
+                if (prev.some(g => g.id === newGoal.id)) return prev;
+                return [...prev, newGoal];
+              });
+           } else if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as SharedGoal;
+              setGoals(prev => prev.map(g => g.id === updated.id ? updated : g));
+           } else if (payload.eventType === 'DELETE') {
+              setGoals(prev => prev.filter(g => g.id !== payload.old.id));
+           }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`Subscribed to goals for match ${matchId}`);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -90,7 +104,7 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
 
     // 1. Optimistic Update
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const optimisticGoal = { id: tempId, text, is_done: false };
+    const optimisticGoal = { id: tempId, text, is_done: false, match_id: matchId };
     
     setGoals(prev => [...prev, optimisticGoal]);
 
@@ -117,7 +131,6 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
     // Optimistic update
     setGoals(prev => prev.map(g => g.id === id ? { ...g, is_done: !currentStatus } : g));
     
-    // Don't send DB update for temp goals
     if (id.startsWith('temp-')) return;
 
     await supabase.from('match_goals').update({ is_done: !currentStatus }).eq('id', id);
@@ -127,7 +140,6 @@ const SharedGoalsPanel: React.FC<SharedGoalsPanelProps> = ({ isPlusOrPro, partne
     // Optimistic delete
     setGoals(prev => prev.filter(g => g.id !== id));
 
-    // Don't send DB delete for temp goals
     if (id.startsWith('temp-')) return;
 
     await supabase.from('match_goals').delete().eq('id', id);

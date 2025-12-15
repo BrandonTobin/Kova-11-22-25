@@ -510,8 +510,9 @@ function App() {
           goalsList: data.goals_list,
           links: data.links,
           lastSeenAt: data.last_seen_at,
-          securityQuestion: '',
-          securityAnswer: '',
+          // IMPORTANT: Map Security Q/A for deletion logic
+          securityQuestion: data.security_question || '',
+          securityAnswer: data.security_answer || '',
           // Map DB columns to camelCase
           avatarZoom: data.avatar_zoom,
           avatarOffsetX: data.avatar_offset_x,
@@ -1770,13 +1771,6 @@ function App() {
             </div>
           )}
         </main>
-
-        {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
-          <TimerOverlay
-            onNotesClick={() => handleNavClick(ViewState.NOTES)}
-            isNotesActive={currentView === ViewState.NOTES}
-          />
-        )}
 
         {currentView !== ViewState.VIDEO_ROOM && currentView !== ViewState.PAYMENT_SUCCESS && (
           <nav className="bg-white dark:bg-surface border-t border-black/5 dark:border-white/10 px-4 md:px-6 pb-[max(1rem,env(safe-area-inset-bottom))] shrink-0 z-50 transition-colors duration-300">

@@ -1,15 +1,15 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, Match, SubscriptionTier, getAvatarStyle } from '../types';
 import { 
   Save, Sparkles, X, Copy, CheckCircle, Loader2, Camera, Edit2, 
   Crown, MapPin, Link as LinkIcon, Briefcase, 
-  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check, Lock, Trash2, AlertTriangle, Crop
+  Target, MessageCircle, Clock, Globe, Share2, Plus, Hash, Users, Check, Lock, Trash2, AlertTriangle, Crop, ShieldCheck, KeyRound, ArrowRight
 } from 'lucide-react';
 import { enhanceBio } from '../services/geminiService';
 import { DEFAULT_PROFILE_IMAGE, SUBSCRIPTION_PLANS } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
 import PhotoPositionEditor from './PhotoPositionEditor';
+import { supabase } from '../supabaseClient';
 
 interface ProfileEditorProps {
   user: User;
@@ -114,6 +114,11 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
 
   // Delete Modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteStep, setDeleteStep] = useState(0); // 0: Warning, 1: Security Q, 2: Password
+  const [deleteSecurityAnswer, setDeleteSecurityAnswer] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isVerifyingDelete, setIsVerifyingDelete] = useState(false);
 
   // Derive connections from matches
   const connections = useMemo(() => {
@@ -229,6 +234,61 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
     }); 
     setImageFile(null);
     setIsEditing(false);
+  };
+
+  // --- DELETE ACCOUNT LOGIC ---
+  const resetDeleteModal = () => {
+    setShowDeleteModal(false);
+    setDeleteStep(0);
+    setDeleteSecurityAnswer('');
+    setDeletePassword('');
+    setDeleteError('');
+    setIsVerifyingDelete(false);
+  };
+
+  const handleStartDeleteFlow = () => {
+    // Skip Step 1 (Security Question) if the user doesn't have one set (legacy users)
+    if (user.securityQuestion && user.securityAnswer) {
+      setDeleteStep(1);
+    } else {
+      setDeleteStep(2);
+    }
+  };
+
+  const handleVerifySecurityQuestion = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (deleteSecurityAnswer.trim().toLowerCase() === user.securityAnswer.trim().toLowerCase()) {
+      setDeleteStep(2);
+      setDeleteError('');
+    } else {
+      setDeleteError('Incorrect answer. Please try again.');
+    }
+  };
+
+  const handleVerifyPasswordAndDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeleteError('');
+    setIsVerifyingDelete(true);
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: deletePassword
+      });
+
+      if (error) {
+        setDeleteError('Incorrect password.');
+        setIsVerifyingDelete(false);
+        return;
+      }
+
+      // Password verified, trigger actual delete
+      if (onDeleteAccount) onDeleteAccount();
+      
+    } catch (err) {
+      setDeleteError('An error occurred. Please try again.');
+      setIsVerifyingDelete(false);
+    }
   };
 
   const addToArray = (field: keyof User, item: string) => {
@@ -844,42 +904,134 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ user, onSave, onUpgrade, 
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Confirmation Modal (Multi-step) */}
       {showDeleteModal && onDeleteAccount && (
         <div 
           className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setShowDeleteModal(false)}
+          onClick={() => { if(!isVerifyingDelete) resetDeleteModal(); }}
         >
           <div 
             className="bg-surface w-full max-w-md rounded-2xl border border-red-500/30 shadow-2xl p-6 animate-in fade-in zoom-in duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-             <div className="flex items-center gap-3 mb-4 text-red-500">
-                <AlertTriangle size={24} />
-                <h3 className="text-xl font-bold">Delete Account?</h3>
+             <div className="flex justify-between items-start mb-4">
+                <div className="flex items-center gap-3 text-red-500">
+                    <AlertTriangle size={24} />
+                    <h3 className="text-xl font-bold">Delete Account?</h3>
+                </div>
+                <button 
+                  onClick={resetDeleteModal} 
+                  disabled={isVerifyingDelete}
+                  className="text-text-muted hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
              </div>
              
-             <p className="text-text-muted mb-6 leading-relaxed">
-                Are you sure? This permanently deletes your account and all data, including matches, messages, and notes. This action cannot be undone.
-             </p>
+             {/* Step 0: Warning */}
+             {deleteStep === 0 && (
+                <>
+                  <p className="text-text-muted mb-6 leading-relaxed">
+                      Are you sure? This permanently deletes your account and all data, including matches, messages, and notes. This action cannot be undone.
+                  </p>
+                  <div className="flex gap-3 justify-end">
+                      <button 
+                        onClick={resetDeleteModal}
+                        className="px-4 py-2 rounded-xl border border-white/10 text-text-main hover:bg-white/5 transition-colors font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={handleStartDeleteFlow}
+                        className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg flex items-center gap-2"
+                      >
+                        <Trash2 size={16} /> Continue
+                      </button>
+                  </div>
+                </>
+             )}
 
-             <div className="flex gap-3 justify-end">
-                <button 
-                  onClick={() => setShowDeleteModal(false)}
-                  className="px-4 py-2 rounded-xl border border-white/10 text-text-main hover:bg-white/5 transition-colors font-medium"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={() => {
-                    setShowDeleteModal(false);
-                    onDeleteAccount();
-                  }}
-                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg flex items-center gap-2"
-                >
-                  <Trash2 size={16} /> Confirm Delete
-                </button>
-             </div>
+             {/* Step 1: Security Question */}
+             {deleteStep === 1 && (
+                <form onSubmit={handleVerifySecurityQuestion}>
+                   <div className="mb-4">
+                      <p className="text-sm font-bold text-text-main mb-1 flex items-center gap-2">
+                        <ShieldCheck size={16} className="text-gold" /> Security Check 1/2
+                      </p>
+                      <p className="text-xs text-text-muted mb-3">Please answer your security question to proceed.</p>
+                      
+                      <div className="bg-black/20 p-3 rounded-lg border border-white/10 mb-3">
+                         <p className="text-sm font-medium text-text-main">{user.securityQuestion}</p>
+                      </div>
+
+                      <input 
+                        type="text" 
+                        autoFocus
+                        value={deleteSecurityAnswer}
+                        onChange={(e) => setDeleteSecurityAnswer(e.target.value)}
+                        placeholder="Your Answer"
+                        className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-gold/50"
+                      />
+                      {deleteError && <p className="text-red-400 text-xs mt-2">{deleteError}</p>}
+                   </div>
+                   <div className="flex gap-3 justify-end">
+                      <button 
+                        type="button"
+                        onClick={resetDeleteModal}
+                        className="px-4 py-2 rounded-xl border border-white/10 text-text-main hover:bg-white/5 transition-colors font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="submit"
+                        disabled={!deleteSecurityAnswer.trim()}
+                        className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold shadow-lg flex items-center gap-2 disabled:opacity-50"
+                      >
+                        Next <ArrowRight size={16} />
+                      </button>
+                   </div>
+                </form>
+             )}
+
+             {/* Step 2: Password */}
+             {deleteStep === 2 && (
+                <form onSubmit={handleVerifyPasswordAndDelete}>
+                   <div className="mb-4">
+                      <p className="text-sm font-bold text-text-main mb-1 flex items-center gap-2">
+                        <KeyRound size={16} className="text-gold" /> Security Check {user.securityQuestion ? '2/2' : '1/1'}
+                      </p>
+                      <p className="text-xs text-text-muted mb-3">Please enter your password to confirm deletion.</p>
+                      
+                      <input 
+                        type="password" 
+                        autoFocus
+                        value={deletePassword}
+                        onChange={(e) => setDeletePassword(e.target.value)}
+                        placeholder="Password"
+                        className="w-full bg-background border border-white/10 rounded-xl px-4 py-3 text-text-main focus:outline-none focus:border-red-500/50"
+                      />
+                      {deleteError && <p className="text-red-400 text-xs mt-2">{deleteError}</p>}
+                   </div>
+                   <div className="flex gap-3 justify-end">
+                      <button 
+                        type="button"
+                        onClick={resetDeleteModal}
+                        disabled={isVerifyingDelete}
+                        className="px-4 py-2 rounded-xl border border-white/10 text-text-main hover:bg-white/5 transition-colors font-medium disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="submit"
+                        disabled={!deletePassword || isVerifyingDelete}
+                        className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg flex items-center gap-2 disabled:opacity-70"
+                      >
+                        {isVerifyingDelete ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />} 
+                        {isVerifyingDelete ? "Deleting..." : "Confirm Delete"}
+                      </button>
+                   </div>
+                </form>
+             )}
           </div>
         </div>
       )}

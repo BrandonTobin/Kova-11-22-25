@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
@@ -31,7 +30,10 @@ import {
   Volume2,
   Shield,
   AlertCircle,
-  Lock
+  Lock,
+  PauseCircle,
+  XCircle,
+  ShieldCheck
 } from 'lucide-react';
 import { User, Match, Message, SubscriptionTier, hasPlusAccess, CallType, MatchStatus } from '../types';
 import { supabase } from '../supabaseClient';
@@ -132,6 +134,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [connectionsModalOpen, setConnectionsModalOpen] = useState(false);
   const [connectionsList, setConnectionsList] = useState<User[]>([]);
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
+
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement | null>(null);
@@ -717,12 +721,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const handleUnmatchClick = () => {
+  const handleLeaveClick = () => {
     if (!selectedMatchId) return;
-    if (window.confirm('Are you sure you want to unmatch? This conversation will be removed.')) {
+    setShowLeaveModal(true);
+  };
+
+  const handleConfirmFreeLeave = () => {
+    if (selectedMatchId) {
       onUnmatch(selectedMatchId);
+      setShowLeaveModal(false);
       setSelectedMatchId(null);
     }
+  };
+
+  const handleManagedAction = async (action: MatchStatus) => {
+    if (!selectedMatchId) return;
+    
+    // Update DB status (including 'ended')
+    await handleUpdateStatus(action);
+
+    // If ending respectfully, trigger immediate local cleanup (same as Unmatch)
+    if (action === 'ended') {
+       onUnmatch(selectedMatchId); 
+       // This calls the parent handleUnmatch in App.tsx which 
+       // updates the 'matches' state and clears newMatchIds immediately.
+       setSelectedMatchId(null);
+    }
+
+    setShowLeaveModal(false);
   };
 
   const handleDeleteChat = async () => {
@@ -955,10 +981,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleUpdateStatus = async (newStatus: MatchStatus) => {
     if (!selectedMatchId) return;
-    // Assume backend handler exists or direct update
-    // For now, we simulate UI update but real backend call would be:
-    // await supabase.from('matches').update({ status: newStatus }).eq('id', selectedMatchId);
-    console.log(`[Status Update] ${selectedMatchId} -> ${newStatus}`);
+    const { error } = await supabase.from('matches').update({ status: newStatus }).eq('id', selectedMatchId);
+    if (error) {
+      alert(`Could not update status: ${error.message}`);
+    }
   };
 
   const isInputDisabled = useMemo(() => {
@@ -1067,6 +1093,91 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className="flex h-full w-full bg-background overflow-hidden relative">
       <audio ref={voiceAudioRef} autoPlay style={{display: 'none'}} />
+
+      {/* Leave Partnership Modal */}
+      {showLeaveModal && selectedMatch && (
+        <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-surface w-full max-w-sm rounded-2xl border border-white/10 shadow-2xl p-6 relative overflow-hidden flex flex-col">
+             <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
+                  {hasPlusAccess(currentUser) ? (
+                    <>
+                      <ShieldCheck size={20} className="text-emerald-400" /> Manage Partnership
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle size={20} className="text-red-400" /> Leave partnership?
+                    </>
+                  )}
+                </h3>
+                <button 
+                  onClick={() => setShowLeaveModal(false)}
+                  className="text-text-muted hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+             </div>
+
+             {hasPlusAccess(currentUser) ? (
+                <div className="space-y-3">
+                   <p className="text-sm text-text-muted mb-2">
+                     As a Plus member, you can pause this partnership to take a break, or end it respectfully without losing history.
+                   </p>
+                   
+                   {selectedMatch.status !== 'paused' && (
+                     <button 
+                       onClick={() => handleManagedAction('paused')}
+                       className="w-full flex items-center gap-3 px-4 py-3 bg-surface border border-white/10 hover:bg-white/5 rounded-xl text-sm font-medium text-text-main transition-colors"
+                     >
+                       <PauseCircle size={18} className="text-amber-400" />
+                       Pause Partnership
+                     </button>
+                   )}
+
+                   {selectedMatch.status !== 'ended' && (
+                     <button 
+                       onClick={() => handleManagedAction('ended')}
+                       className="w-full flex items-center gap-3 px-4 py-3 bg-surface border border-white/10 hover:border-red-500/30 hover:bg-red-500/5 rounded-xl text-sm font-medium text-text-muted hover:text-red-400 transition-colors"
+                     >
+                       <XCircle size={18} />
+                       End Partnership Respectfully
+                     </button>
+                   )}
+
+                   <button 
+                     onClick={() => setShowLeaveModal(false)}
+                     className="w-full py-2.5 text-xs font-bold text-text-muted hover:text-white transition-colors mt-2"
+                   >
+                     Cancel
+                   </button>
+                </div>
+             ) : (
+                <div className="space-y-4">
+                   <p className="text-sm text-text-muted leading-relaxed">
+                     Leaving will end this partnership immediately with no closure or resolution. Messages will be removed.
+                   </p>
+                   
+                   <button 
+                     onClick={() => {
+                        setShowLeaveModal(false);
+                        onUpgrade('kova_plus');
+                     }}
+                     className="w-full py-3 bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-bold rounded-xl shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 text-sm"
+                   >
+                     <Lock size={14} /> Upgrade to manage
+                   </button>
+
+                   <button 
+                     onClick={handleConfirmFreeLeave}
+                     className="w-full py-3 border border-red-500/30 text-red-400 font-medium rounded-xl hover:bg-red-500/10 transition-colors text-sm"
+                   >
+                     Leave now
+                   </button>
+                </div>
+             )}
+          </div>
+        </div>
+      )}
 
       {/* Ghost Prevention Modal */}
       {showGhostModal && (
@@ -1226,7 +1337,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                       <button onClick={handleDeleteChat} className="p-2 text-text-muted hover:text-white hover:bg-white/5 rounded-lg transition-colors flex items-center justify-center gap-1.5" title="Delete Chat"><Trash2 size={16} /><span className="hidden xl:inline text-xs font-medium">Delete</span></button>
-                      <button onClick={handleUnmatchClick} className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-1.5" title="Unmatch"><UserMinus size={16} /><span className="hidden xl:inline text-xs font-medium">Unmatch</span></button>
+                      <button onClick={handleLeaveClick} className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-1.5" title="Leave Partnership"><UserMinus size={16} /><span className="hidden xl:inline text-xs font-medium">Leave</span></button>
                   </div>
                 </div>
               </div>

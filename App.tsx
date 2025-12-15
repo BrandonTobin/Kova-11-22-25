@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import LoginScreen from './components/LoginScreen';
@@ -21,7 +20,7 @@ import ContactPage from './components/legal/ContactPage';
 
 import IncomingCallPopup from './components/IncomingCallPopup';
 
-import { User, Match, ViewState, SubscriptionTier, IncomingCall, CallType } from './types';
+import { User, Match, ViewState, SubscriptionTier, IncomingCall, CallType, MatchStatus } from './types';
 import {
   LayoutGrid,
   MessageSquare,
@@ -393,12 +392,13 @@ function App() {
     };
   }, [user?.id]);
 
-  // 🔔 Realtime listener for unread message notifications
+  // 🔔 Realtime listener for MATCH UPDATES (Status & Messages)
   useEffect(() => {
     if (!user) return;
 
     const channel = supabase
-      .channel(`message_notifications:${user.id}`)
+      .channel(`match_updates:${user.id}`)
+      // Listen for new messages
       .on(
         'postgres_changes',
         {
@@ -428,6 +428,37 @@ function App() {
           if (currentViewRef.current === ViewState.MATCHES) return;
 
           addTabNotification([ViewState.MATCHES]);
+        }
+      )
+      // Listen for match STATUS updates (paused, ended, active)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'matches',
+        },
+        (payload: any) => {
+          const updatedMatch = payload.new;
+          if (!updatedMatch) return;
+
+          // If status is ended, remove it from list immediately
+          if (updatedMatch.status === 'ended') {
+            setMatches((prev) => prev.filter(m => m.id !== updatedMatch.id));
+            return;
+          }
+
+          setMatches((prevMatches) => {
+            return prevMatches.map(m => {
+              if (m.id === updatedMatch.id) {
+                return {
+                  ...m,
+                  status: updatedMatch.status as MatchStatus // Update the status locally
+                };
+              }
+              return m;
+            });
+          });
         }
       )
       .subscribe();
@@ -607,11 +638,13 @@ function App() {
         `
         id,
         created_at,
+        status, 
         user1:user1_id(*),
         user2:user2_id(*)
       `
       )
-      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`);
+      .or(`user1_id.eq.${user.id},user2_id.eq.${user.id}`)
+      .neq('status', 'ended'); // Filter out ended matches
 
     if (error) {
       console.error('Error fetching matches:', error);
@@ -694,6 +727,7 @@ function App() {
             unread: 0,
             lastMessageText,
             lastMessageAt,
+            status: m.status // Ensure status is mapped
           } as Match;
         })
       );

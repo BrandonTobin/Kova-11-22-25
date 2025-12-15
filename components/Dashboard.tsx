@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, Badge, Goal, hasProAccess, Match, SubscriptionTier, ViewState } from '../types';
 import { supabase } from '../supabaseClient';
@@ -366,7 +365,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [heatmapMode, setHeatmapMode] = useState<'productivity' | 'consistency' | 'goals'>('productivity');
+  const [heatmapMode, setHeatmapMode] = useState<'productivity'>('productivity');
   const [refreshKey, setRefreshKey] = useState(0);
   
   // Local state to hide cancelled or joined sessions immediately
@@ -380,11 +379,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
   const CELL_GAP = 4;
   const GRID_OFFSET = CELL_SIZE + CELL_GAP;
   const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-  const handleHeatmapModeChange = (mode: 'productivity' | 'consistency' | 'goals') => {
-    // Allow selecting any mode to show the locked overlay if not pro
-    setHeatmapMode(mode);
-  };
 
   const handleScheduleComplete = () => {
     setRefreshKey(prev => prev + 1);
@@ -618,6 +612,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
         const startIso = startOfYear.toISOString();
         const endIso = endOfYear.toISOString();
 
+        // Note: Swipes and Messages are used for other potential heatmap modes, keeping logic for robustness
         const { data: recentSwipes } = await supabase
           .from('swipes')
           .select('created_at')
@@ -655,7 +650,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
           productivityCounts.set(dateKey, (productivityCounts.get(dateKey) || 0) + minutes);
         });
 
-        // 4.2 Consistency Mode
+        // 4.2 Consistency Mode (kept in background data but not displayed in tabs)
         const recordConsistency = (isoDate: string) => {
           const dateKey = new Date(isoDate).toLocaleDateString('en-CA');
           consistencyCounts.set(dateKey, (consistencyCounts.get(dateKey) || 0) + 1);
@@ -664,7 +659,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
         recentMsgs?.forEach((m: any) => recordConsistency(m.created_at));
         recentSessions?.forEach((s: any) => recordConsistency(s.started_at));
 
-        // 4.3 Deep-Work Quality Mode (replaces Goal Progress logic)
+        // 4.3 Deep-Work Quality Mode (kept in background)
         sessions?.forEach((s: any) => {
           const startTime = new Date(s.started_at);
           const endTime = s.ended_at ? new Date(s.ended_at) : null;
@@ -781,13 +776,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
     }
   }, [user.id, refreshKey]);
 
-  const calendarDays = metrics
-    ? heatmapMode === 'productivity'
-      ? metrics.calendarDaysProductivity
-      : heatmapMode === 'consistency'
-      ? metrics.calendarDaysConsistency
-      : metrics.calendarDaysGoals
-    : [];
+  const calendarDays = metrics ? metrics.calendarDaysProductivity : [];
 
   const monthLabels: { month: number; colIndex: number }[] = [];
   if (calendarDays.length > 0) {
@@ -859,9 +848,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
   const confidence = Math.round(60 + completionRatio * 35);
   // -------------------------------------------------------------------------
 
-  // Locked check for heatmaps (Pro Only)
-  const isLockedHeatmap = !isPro && (heatmapMode === 'consistency' || heatmapMode === 'goals');
-
   return (
     <div className="h-full w-full overflow-y-auto p-4 md:p-8 bg-background text-text-main relative flex flex-col">
       {/* Schedule Modal */}
@@ -928,46 +914,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
         <p className="text-text-muted">Here's your growth overview.</p>
       </header>
 
-      {/* AI Insight Banner – toned down, Pro-gated */}
-      <div className="mb-8">
-        <div className="relative flex items-start gap-3 rounded-2xl border border-white/10 bg-background/30 backdrop-blur-xl px-4 py-3 md:px-5 md:py-4 shadow-sm">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary shrink-0">
-            <Sparkles size={18} />
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-semibold text-text-main">Kova AI Insight</span>
-              <span className="text-[10px] uppercase tracking-wide text-text-muted border border-white/10 rounded-full px-2 py-0.5">
-                Beta
-              </span>
-              {!isPro && (
-                <span className="inline-flex items-center gap-1 text-[10px] text-text-muted ml-1">
-                  <Lock size={10} /> Pro
-                </span>
-              )}
-            </div>
-
-            <p
-              className={`text-xs md:text-sm text-text-muted transition-all ${
-                !isPro ? 'md:line-clamp-2 line-clamp-1 blur-[1px]' : ''
-              }`}
-            >
-              You’ve been crushing your morning sessions. Your focus score peaks between 9 AM and 11 AM—try blocking a
-              deep-work session mid-week to keep the streak alive.
-            </p>
-          </div>
-
-          {!isPro && (
-            <button
-              className="ml-3 inline-flex items-center whitespace-nowrap rounded-xl border border-gold/40 bg-background/60 px-3 py-1.5 text-[11px] font-semibold text-gold hover:bg-gold/10 transition-colors pointer-events-none"
-            >
-              <Crown size={12} className="mr-1" />
-              Upgrade
-            </button>
-          )}
-        </div>
-      </div>
+      {/* AI Insight Banner Removed as requested */}
 
       {/* Key Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -1070,26 +1017,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
 
               <div className="flex items-center gap-3 overflow-x-auto no-scrollbar max-w-full">
                 <div className="inline-flex items-center rounded-full bg-background/60 border border-white/5 text-[11px] overflow-hidden shrink-0">
-                  {[
-                    { key: 'productivity', label: 'Productivity', locked: false },
-                    { key: 'consistency', label: 'Consistency', locked: !isPro },
-                    { key: 'goals', label: 'Deep-Work Quality', locked: !isPro }
-                  ].map(mode => (
-                    <button
-                      key={mode.key}
-                      type="button"
-                      onClick={() => handleHeatmapModeChange(mode.key as any)}
-                      className={
-                        'px-3 py-1.5 transition-colors flex items-center gap-1 whitespace-nowrap ' +
-                        (heatmapMode === mode.key
-                          ? 'bg-primary text-white'
-                          : 'text-text-muted hover:bg-background')
-                      }
-                    >
-                      {mode.locked && <Lock size={10} className="text-text-muted/70" />}
-                      {mode.label}
-                    </button>
-                  ))}
+                  {/* Reduced tabs to Productivity only */}
+                  <button
+                    type="button"
+                    className='px-3 py-1.5 transition-colors flex items-center gap-1 whitespace-nowrap bg-primary text-white cursor-default'
+                  >
+                    Productivity
+                  </button>
                 </div>
                 <span className="text-xs text-text-muted shrink-0">{new Date().getFullYear()}</span>
               </div>
@@ -1097,22 +1031,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
 
             {/* Heatmap Container */}
             <div className="w-full pb-2 overflow-x-auto overflow-y-hidden relative flex justify-center">
-              {/* Overlay for locked modes */}
-              {isLockedHeatmap && (
-                <div 
-                   className="absolute inset-0 z-50 flex items-center justify-center bg-black pointer-events-auto cursor-pointer"
-                   onClick={() => onUpgrade('kova_pro')}
-                >
-                   <div className="px-4 py-2 rounded-full bg-black/80 flex items-center gap-2 border border-white/10 shadow-xl">
-                      <Lock size={12} className="text-zinc-400" />
-                      <span className="text-xs font-semibold tracking-wide text-white">
-                        Kova Pro | Coming Soon
-                      </span>
-                   </div>
-                </div>
-              )}
-
-              <div className={`origin-top-left sm:origin-top scale-[0.5] sm:scale-[0.6] md:scale-[0.7] lg:scale-[0.75] xl:scale-[0.9] 2xl:scale-100 ${isLockedHeatmap ? 'pointer-events-none' : ''}`}>
+              
+              <div className={`origin-top-left sm:origin-top scale-[0.5] sm:scale-[0.6] md:scale-[0.7] lg:scale-[0.75] xl:scale-[0.9] 2xl:scale-100`}>
                 <div className="flex items-start gap-4 w-full justify-center min-w-max">
                   {/* Y-axis labels */}
                   <div
@@ -1206,8 +1126,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, matches = [], onUpgrade, on
                                 <p className="font-bold mt-0.5">
                                   {day.count === 0
                                     ? 'No activity'
-                                    : heatmapMode === 'goals'
-                                    ? `Deep-Work Score: ${day.count}`
                                     : `${day.count} contribution${day.count !== 1 ? 's' : ''}`}
                                 </p>
                               </div>

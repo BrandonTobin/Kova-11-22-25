@@ -1,5 +1,4 @@
 
-
 export enum ViewState {
   DISCOVER = 'DISCOVER',
   MATCHES = 'MATCHES',
@@ -19,6 +18,7 @@ export enum ViewState {
 
 export type SubscriptionTier = 'free' | 'kova_plus' | 'kova_pro';
 export type CallType = 'video' | 'audio';
+export type MatchStatus = 'active' | 'paused' | 'pending' | 'inactive' | 'ended';
 
 export interface IncomingCall {
   sessionId: string;
@@ -101,6 +101,10 @@ export interface User {
   links?: UserLinks;
   lastSeenAt?: string | null; // ISO string from Supabase
 
+  // Reliability (Ghost Prevention)
+  reliabilityLabel?: 'Consistent' | 'Reliable' | 'New';
+  reliabilityScore?: number; // 0-100
+
   // Avatar Positioning
   avatarZoom?: number;
   avatarOffsetX?: number;
@@ -124,6 +128,10 @@ export interface Match {
   // New fields for sorting and preview
   lastMessageText?: string | null;
   lastMessageAt?: string | null; // ISO string
+  
+  // Partnership Status
+  status?: MatchStatus;
+  pendingActionUserId?: string; // ID of the user who needs to respond if pending
 }
 
 export interface Message {

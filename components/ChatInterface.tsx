@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Send,
@@ -27,13 +28,17 @@ import {
   Mic,
   MicOff,
   LogOut,
-  Volume2
+  Volume2,
+  Shield,
+  AlertCircle,
+  Lock
 } from 'lucide-react';
-import { User, Match, Message, SubscriptionTier, hasPlusAccess, CallType } from '../types';
+import { User, Match, Message, SubscriptionTier, hasPlusAccess, CallType, MatchStatus } from '../types';
 import { supabase } from '../supabaseClient';
 import { DEFAULT_PROFILE_IMAGE } from '../constants';
 import { getDisplayName } from '../utils/nameUtils';
-import SharedGoalsPanel from './SharedGoalsPanel';
+import PartnershipStatusPanel from './PartnershipStatusPanel';
+import GhostPreventionModal from './GhostPreventionModal';
 import AIRecapPanel from './AIRecapPanel';
 import { startSession, endSession } from '../services/sessionService';
 import { RealtimeChannel } from '@supabase/supabase-js';
@@ -100,7 +105,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(
     matches[0]?.id || null
   );
-  // Keep a ref to selectedMatchId for use in global subscriptions
   const selectedMatchIdRef = useRef(selectedMatchId);
 
   const [messages, setMessages] = useState<Message[]>([]);
@@ -112,27 +116,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     Record<string, { text: string; timestamp: Date }>
   >({});
 
-  // Local state for "NEW" badges on conversations (for new incoming messages)
   const [unreadConversationIds, setUnreadConversationIds] =
     useState<Set<string>>(new Set());
 
-  // Chats the current user has "deleted" (hidden) this session
   const [clearedChats, setClearedChats] = useState<Record<string, boolean>>({});
-
-  // Search
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Connect by ID modal
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [searchId, setSearchId] = useState('');
   const [foundUser, setFoundUser] = useState<User | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
 
-  // Profile modal
   const [showProfileModal, setShowProfileModal] = useState(false);
-
-  // Connections modal
   const [connectionsModalOpen, setConnectionsModalOpen] = useState(false);
   const [connectionsList, setConnectionsList] = useState<User[]>([]);
   const [isLoadingConnections, setIsLoadingConnections] = useState(false);
@@ -140,33 +136,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Emoji picker
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-
-  // Read receipts: what the OTHER person has seen
   const [otherUserLastReadAt, setOtherUserLastReadAt] = useState<Date | null>(
     null
   );
-
-  // Read state for *this* user (for "New messages" divider)
   const [lastReadAt, setLastReadAt] = useState<Date | null>(null);
 
-  // Typing indicator
   const [isOtherTyping, setIsOtherTyping] = useState(false);
-  const typingTimeoutRef = useRef<number | null>(null); // for our own typing status debounce
-  const otherTypingTimeoutRef = useRef<number | null>(null); // for auto-hiding "other is typing"
+  const typingTimeoutRef = useRef<number | null>(null);
+  const otherTypingTimeoutRef = useRef<number | null>(null);
 
-  // Reactions aggregated per message
   const [messageReactions, setMessageReactions] =
     useState<MessageReactionsState>({});
-
-  // Long-press / context-menu reaction picker state
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<
     string | null
   >(null);
   const longPressTimeoutRef = useRef<number | null>(null);
 
-  // --- Global Voice Presence (Sidebar Indicators) ---
   const [activeVoiceMatchIds, setActiveVoiceMatchIds] = useState<Set<string>>(new Set());
   const matchIdsRef = useRef<string[]>([]);
 
@@ -175,7 +161,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     matchIdsRef.current = matches.map(m => m.id);
   }, [matches]);
 
-  // Initial fetch of active voice sessions for all matches
+  // Initial fetch of active voice sessions
   useEffect(() => {
     if (!currentUser || matches.length === 0) return;
 
@@ -201,7 +187,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
   }, [matches, currentUser]);
 
-  // Realtime subscription for voice status changes across all matches
   useEffect(() => {
     if (!currentUser) return;
 
@@ -216,11 +201,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         async (payload: any) => {
           const matchId = payload.new?.match_id || payload.old?.match_id;
-          
-          // Only process if this is one of our matches
           if (!matchId || !matchIdsRef.current.includes(matchId)) return;
 
-          // Re-fetch status for this specific match to ensure accuracy
           const { data: sessions } = await supabase
             .from('voice_sessions')
             .select('match_id')
@@ -245,7 +227,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
   }, [currentUser.id]);
 
-  // --- Voice Channel State (Hook Integration for Selected Match) ---
   const { 
     voiceParticipants, 
     isInVoice, 
@@ -253,98 +234,42 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     leaveVoice 
   } = useVoiceChannel(selectedMatchId, currentUser.id);
 
-  // WebRTC Refs (Local Audio State)
-  // We keep the RTC connection independent of the UI render cycle to prevent drops
   const [voiceMicOn, setVoiceMicOn] = useState(true);
-  const activeVoiceChannelRef = useRef<RealtimeChannel | null>(null); // Signaling channel
+  const activeVoiceChannelRef = useRef<RealtimeChannel | null>(null);
   const activeVoiceConnectionRef = useRef<RTCPeerConnection | null>(null);
   const voiceLocalStream = useRef<MediaStream | null>(null);
-  const voiceAudioRef = useRef<HTMLAudioElement | null>(null); // Invisible audio element for playback
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceSessionId = useRef<string | null>(null);
 
-  const EMOJIS: string[] = [
-    '😀',
-    '😁',
-    '😂',
-    '🤣',
-    '😊',
-    '😍',
-    '🤝',
-    '🔥',
-    '👏',
-    '💡',
-    '📈',
-    '🎯',
-    '🚀',
-    '❤️',
-    '🤝🏻',
-    '💻',
-    '📅',
-    '🤔',
-    '😅',
-    '😎',
-    '🤝🏽',
-    '📊',
-    '📉',
-    '✅',
-  ];
-
-  // Emojis shown in the *reaction picker*
+  const EMOJIS: string[] = ['😀', '😁', '😂', '🤣', '😊', '😍', '🤝', '🔥', '👏', '💡', '📈', '🎯', '🚀', '❤️', '🤝🏻', '💻', '📅', '🤔', '😅', '😎', '🤝🏽', '📊', '📉', '✅'];
   const REACTION_EMOJIS: string[] = ['👍', '🔥', '💡', '✅', '😂'];
 
   const handleEmojiClick = (emoji: string) => {
     setInputText((prev) => {
       const next = (prev || '') + emoji;
-
-      // Make sure the cursor goes back to the input after the emoji is added
       requestAnimationFrame(() => {
         if (messageInputRef.current) {
           const input = messageInputRef.current;
           const len = next.length;
           input.focus();
-          input.setSelectionRange(len, len); // caret at end
+          input.setSelectionRange(len, len);
         }
       });
-
       return next;
     });
-
     setShowEmojiPicker(false);
   };
 
-  // Long-press helpers
-  const startLongPress = (messageId: string) => {
-    if (longPressTimeoutRef.current) {
-      window.clearTimeout(longPressTimeoutRef.current);
-    }
-    longPressTimeoutRef.current = window.setTimeout(() => {
-      setActiveReactionMessageId(messageId);
-    }, 450); // ~0.45s press
-  };
-
-  const cancelLongPress = () => {
-    if (longPressTimeoutRef.current) {
-      window.clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-  };
-
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (longPressTimeoutRef.current) {
         window.clearTimeout(longPressTimeoutRef.current);
       }
-      // If unmounting, kill active voice connection
-      // leaveActiveVoiceConnection(); // DISABLED AUTO-DISCONNECT ON UNMOUNT
     };
   }, []);
 
-  // Update ref whenever selectedMatchId changes
   useEffect(() => {
     selectedMatchIdRef.current = selectedMatchId;
-
-    // Clear "NEW" badge for the selected conversation
     if (selectedMatchId) {
       setUnreadConversationIds((prev) => {
         if (prev.has(selectedMatchId)) {
@@ -357,7 +282,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [selectedMatchId]);
 
-  // GLOBAL Subscription: Listen to ALL new messages to sort the list & show badges
   useEffect(() => {
     if (!currentUser) return;
 
@@ -369,7 +293,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          // RLS ensures we only receive messages we are part of
         },
         (payload) => {
           const newMsg = payload.new as any;
@@ -378,7 +301,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const msgText = newMsg.text;
           const msgCreatedAt = newMsg.created_at;
 
-          // 1. Update content & sort order via liveMessageUpdates
           setLiveMessageUpdates((prev) => ({
             ...prev,
             [msgMatchId]: {
@@ -387,8 +309,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             },
           }));
 
-          // 2. Handle "NEW" badge logic
-          // Only if message is incoming AND we are not currently viewing that chat
           if (msgSenderId !== currentUser.id) {
             if (selectedMatchIdRef.current !== msgMatchId) {
               setUnreadConversationIds((prev) => {
@@ -407,12 +327,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
   }, [currentUser.id]);
 
-  // Merge live updates into matches
   const mergedMatches = useMemo(() => {
     return matches.map((m) => {
       const update = liveMessageUpdates[m.id];
-
-      // If chat cleared this session, hide preview/lastMessageAt
       if (clearedChats[m.id]) {
         return {
           ...m,
@@ -420,7 +337,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           lastMessageAt: null,
         };
       }
-
       if (update) {
         return {
           ...m,
@@ -428,47 +344,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           lastMessageAt: update.timestamp.toISOString(),
         };
       }
-
       return m;
     });
   }, [matches, liveMessageUpdates, clearedChats]);
 
-  // Sort matches by activity, prioritizing active voice channels
   const sortedMatches = useMemo(() => {
     return [...mergedMatches].sort((a, b) => {
-      // 1) Voice channel priority
       const aInVoice = activeVoiceMatchIds.has(a.id);
       const bInVoice = activeVoiceMatchIds.has(b.id);
-
-      // If one is in voice and the other isn't, put the "in voice" one first
       if (aInVoice !== bInVoice) {
-        // true > false: voice matches float to the top
         return bInVoice ? 1 : -1;
       }
-
-      // 2) Existing time-based sort (most recent first)
       const timeA = a.lastMessageAt
         ? parseSupabaseTimestamp(a.lastMessageAt).getTime()
         : a.timestamp
         ? parseSupabaseTimestamp(a.timestamp as any).getTime()
         : 0;
-
       const timeB = b.lastMessageAt
         ? parseSupabaseTimestamp(b.lastMessageAt).getTime()
         : b.timestamp
         ? parseSupabaseTimestamp(b.timestamp as any).getTime()
         : 0;
-
       return timeB - timeA;
     });
   }, [mergedMatches, activeVoiceMatchIds]);
 
-  // Filter for search and cleared chats
   const filteredMatches = useMemo(
     () =>
       sortedMatches.filter((match) => {
         if (clearedChats[match.id]) return false;
-
         const rawName = match.user.name || '';
         const displayName = getDisplayName(rawName);
         return displayName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -476,7 +380,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     [sortedMatches, clearedChats, searchTerm]
   );
 
-  // Auto-select top match whenever there is no selection and matches exist
   useEffect(() => {
     if (!selectedMatchId && filteredMatches.length > 0) {
       setSelectedMatchId(filteredMatches[0].id);
@@ -487,19 +390,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     sortedMatches.find((m) => m.id === selectedMatchId) ||
     matches.find((m) => m.id === selectedMatchId);
 
-  // Presence helper
   const getPresenceStatus = (lastSeenAt?: string | null) => {
     if (!lastSeenAt) return 'offline';
     const last = parseSupabaseTimestamp(lastSeenAt).getTime();
     const now = Date.now();
     const diffMinutes = (now - last) / 1000 / 60;
-
     if (diffMinutes < 2) return 'online';
     if (diffMinutes < 15) return 'away';
     return 'offline';
   };
 
-  // Time formatting
   const formatLocalTime = (dateInput: Date | string) => {
     const date = parseSupabaseTimestamp(dateInput);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -508,37 +408,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const formatSidebarDate = (dateInput: Date | string) => {
     const date = parseSupabaseTimestamp(dateInput);
     const now = new Date();
-
     const isToday =
       date.getDate() === now.getDate() &&
       date.getMonth() === now.getMonth() &&
       date.getFullYear() === now.getFullYear();
-
     if (isToday) return formatLocalTime(date);
-
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   const getDateLabel = (dateInput: Date | string) => {
     const date = parseSupabaseTimestamp(dateInput);
     const now = new Date();
-
     const isToday =
       date.getDate() === now.getDate() &&
       date.getMonth() === now.getMonth() &&
       date.getFullYear() === now.getFullYear();
-
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-
     const isYesterday =
       date.getDate() === yesterday.getDate() &&
       date.getMonth() === yesterday.getMonth() &&
       date.getFullYear() === yesterday.getFullYear();
-
     if (isToday) return 'Today';
     if (isYesterday) return 'Yesterday';
-
     return date.toLocaleDateString([], {
       weekday: 'short',
       month: 'short',
@@ -556,22 +448,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return currDate.toDateString() !== prevDate.toDateString();
   };
 
-  // Which of *my* messages is the last one the other user has seen?
   const lastSeenMessageId = useMemo(() => {
     if (!otherUserLastReadAt) return null;
-
     const cutoff = otherUserLastReadAt.getTime();
     const sentByMe = messages.filter(
       (m) =>
         m.senderId === currentUser.id &&
         parseSupabaseTimestamp(m.timestamp as any).getTime() <= cutoff
     );
-
     if (sentByMe.length === 0) return null;
     return sentByMe[sentByMe.length - 1].id;
   }, [messages, otherUserLastReadAt, currentUser.id]);
 
-  // Index of first unread message (for this user) for the "New messages" divider
   const firstUnreadIndex = useMemo(() => {
     if (!lastReadAt || messages.length === 0) return -1;
     const cutoff = lastReadAt.getTime();
@@ -580,44 +468,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     );
   }, [messages, lastReadAt]);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedMatchId]);
 
-  // Focus input when switching conversations
   useEffect(() => {
     if (messageInputRef.current) {
       messageInputRef.current.focus();
     }
   }, [selectedMatchId]);
 
-  // If selected match disappears (unmatch), clear selection
   useEffect(() => {
     if (selectedMatchId && !matches.find((m) => m.id === selectedMatchId)) {
       setSelectedMatchId(null);
     }
   }, [matches, selectedMatchId]);
 
-  // Close emoji picker & reaction picker when changing conversations
   useEffect(() => {
     setShowEmojiPicker(false);
     setActiveReactionMessageId(null);
   }, [selectedMatchId]);
 
-  // Load messages + our own read state + realtime for messages
   useEffect(() => {
     if (!selectedMatchId) return;
-
     let isMounted = true;
 
     const loadMessages = async () => {
       setIsLoadingMessages(true);
-
-      // Reset "our" lastReadAt when switching matches
       setLastReadAt(null);
 
-      // Check if this chat has been cleared by the current user
       const { data: hiddenRow, error: hiddenError } = await supabase
         .from('hidden_chats')
         .select('cleared_at')
@@ -625,18 +504,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         .eq('match_id', selectedMatchId)
         .maybeSingle();
 
-      if (hiddenError) {
-        console.error('Error checking hidden_chats:', hiddenError);
-      }
-
-      // Base query for messages in this match
       let query = supabase
         .from('messages')
         .select('*')
         .eq('match_id', selectedMatchId)
         .order('created_at', { ascending: true });
 
-      // If user cleared the chat, only load messages after that time
       if (hiddenRow?.cleared_at) {
         query = query.gt('created_at', hiddenRow.cleared_at as string);
       }
@@ -645,9 +518,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       if (!isMounted) return;
 
-      if (error) {
-        console.error('Error loading messages:', error);
-      } else if (data) {
+      if (data) {
         const loadedMsgs: Message[] = data.map((msg: any) => ({
           id: msg.id,
           matchId: msg.match_id,
@@ -658,7 +529,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         setMessages(loadedMsgs);
       }
 
-      // Load our own last_read_at for this match to compute "New messages" divider
       try {
         const { data: readRow, error: readError } = await supabase
           .from('message_reads')
@@ -673,7 +543,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           setLastReadAt(null);
         }
       } catch (err) {
-        console.error('Failed to load read state for current user:', err);
         setLastReadAt(null);
       }
 
@@ -682,7 +551,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     loadMessages();
 
-    // Local subscription for the ACTIVE conversation (sound + update local message list)
     const messageChannel = supabase
       .channel(`match_messages:${selectedMatchId}`)
       .on(
@@ -695,20 +563,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         (payload) => {
           if (!isMounted) return;
-
           const newRow = payload.new as any;
           const timestamp = parseSupabaseTimestamp(
             newRow.created_at || newRow.timestamp
           );
 
-          // Only play sound if message is from the other user
           if (newRow.sender_id !== currentUser.id) {
             try {
               incomingMessageSound.currentTime = 0;
               incomingMessageSound.play().catch(() => {});
-            } catch (e) {
-              console.warn('Incoming message sound failed:', e);
-            }
+            } catch (e) {}
           }
 
           const newMsg: Message = {
@@ -724,8 +588,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             return [...prev, newMsg];
           });
 
-          // NOTE: liveMessageUpdates for sorting is now also handled by the GLOBAL subscription below,
-          // but updating here ensures immediate feedback for the active chat too.
           setLiveMessageUpdates((prev) => ({
             ...prev,
             [newRow.match_id]: {
@@ -743,15 +605,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     };
   }, [selectedMatchId, currentUser.id]);
 
-  // ... (Typing, Reads, Reactions logic remains the same) ...
-
   const handleSendMessage = async (text: string = inputText) => {
     if (!text.trim() || !selectedMatchId || !currentUser) return;
-
     const trimmedText = text.trim();
     const now = new Date();
-
-    // temporary optimistic message
     const tempId = `temp-${Date.now()}`;
     const optimisticMsg: Message = {
       id: tempId,
@@ -761,10 +618,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       timestamp: now,
     };
 
-    // show optimistically
     setMessages((prev) => [...prev, optimisticMsg]);
     setInputText('');
-
     setLiveMessageUpdates((prev) => ({
       ...prev,
       [selectedMatchId]: {
@@ -772,8 +627,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         timestamp: now,
       },
     }));
-
-    // user just sent, so they're no longer typing
     sendTypingStatus(false);
 
     try {
@@ -790,34 +643,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         .single();
 
       if (error || !data) {
-        console.error('Supabase insert error (messages):', error);
-        // remove the optimistic message if it failed
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
-        alert(
-          `Message failed to send. Please try again. ${
-            (error as any)?.message ? `Details: ${(error as any).message}` : ''
-          }`
-        );
+        alert('Message failed to send.');
         return;
       }
 
-      const realTimestamp = parseSupabaseTimestamp(
-        data.created_at || data.timestamp
-      );
-
-      // replace temp message with the real one from Supabase
+      const realTimestamp = parseSupabaseTimestamp(data.created_at || data.timestamp);
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === tempId
-            ? {
-                ...m,
-                id: data.id,
-                timestamp: realTimestamp,
-              }
-            : m
+          m.id === tempId ? { ...m, id: data.id, timestamp: realTimestamp } : m
         )
       );
-
       setLiveMessageUpdates((prev) => ({
         ...prev,
         [selectedMatchId]: {
@@ -826,9 +662,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
       }));
     } catch (err) {
-      console.error('Unexpected error sending message:', err);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      alert('Message failed to send. Please check the console for details.');
+      alert('Message failed to send.');
     }
   };
 
@@ -853,25 +688,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
              setSearchError("You are already matched with this user.");
          } else {
              const mappedUser: User = {
-                id: data.id,
-                kovaId: data.kova_id,
-                name: data.name,
-                role: data.role,
-                industry: data.industry,
+                ...data,
                 imageUrl: data.image_url || DEFAULT_PROFILE_IMAGE,
-                email: data.email,
-                password: '',
-                bio: data.bio || '',
-                tags: data.tags || [],
-                badges: data.badges || [],
+                kovaId: data.kova_id,
+                location: { city: data.city || '', state: data.state || '' },
+                mainGoal: data.main_goal,
                 subscriptionTier: 'free',
                 proExpiresAt: null,
-                dob: data.dob || '',
-                age: data.age || 0,
-                gender: data.gender || 'Male',
-                stage: data.stage || '',
-                location: { city: data.city || '', state: data.state || '' },
-                mainGoal: data.main_goal || '',
                 securityQuestion: '',
                 securityAnswer: ''
              };
@@ -896,26 +719,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const handleUnmatchClick = () => {
     if (!selectedMatchId) return;
-
-    if (
-      window.confirm(
-        'Are you sure you want to unmatch? This conversation will be removed.'
-      )
-    ) {
+    if (window.confirm('Are you sure you want to unmatch? This conversation will be removed.')) {
       onUnmatch(selectedMatchId);
       setSelectedMatchId(null);
     }
   };
 
-  // Delete chat only for current user (soft delete via hidden_chats)
   const handleDeleteChat = async () => {
     if (!selectedMatchId || !currentUser) return;
-
-    const confirmed = window.confirm(
-      'Delete this chat history on your side? The other person will still keep their messages.'
-    );
-
-    if (!confirmed) return;
+    if (!window.confirm('Delete this chat history on your side?')) return;
 
     try {
       const { error } = await supabase
@@ -924,32 +736,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {
             user_id: currentUser.id,
             match_id: selectedMatchId,
-            cleared_at: new Date().toISOString(), // store when the user cleared
+            cleared_at: new Date().toISOString(),
           },
           { onConflict: 'user_id,match_id' }
         );
 
       if (error) {
-        console.error('Error marking chat as.hidden for this user:', error.message);
-        alert('Failed to delete chat. Please try again.');
+        alert('Failed to delete chat.');
         return;
       }
 
       setMessages([]);
-
       setLiveMessageUpdates((prev) => {
         const next = { ...prev };
         delete next[selectedMatchId];
         return next;
       });
-
-      setClearedChats((prev) => ({
-        ...prev,
-        [selectedMatchId]: true,
-      }));
+      setClearedChats((prev) => ({ ...prev, [selectedMatchId]: true }));
     } catch (err) {
-      console.error('Unexpected error hiding chat:', err);
-      alert('Failed to delete chat. Please try again.');
+      alert('Failed to delete chat.');
     }
   };
 
@@ -960,15 +765,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     const { data, error } = await supabase
       .from('matches')
-      .select(`
-        user1:user1_id(id, name, image_url, role, industry),
-        user2:user2_id(id, name, image_url, role, industry)
-      `)
+      .select(`user1:user1_id(id, name, image_url, role, industry), user2:user2_id(id, name, image_url, role, industry)`)
       .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
 
-  if (error) {
-      console.error('Error fetching connections:', error);
-    } else if (data) {
+    if (data) {
       const connectedUsers = data.map((m: any) => {
         const other = m.user1.id === userId ? m.user2 : m.user1;
         return {
@@ -997,11 +797,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       });
       setConnectionsList(connectedUsers);
     }
-
     setIsLoadingConnections(false);
   };
 
-  // Helper functions missing in the abbreviated block
   const handleToggleReaction = async (messageId: string, emoji: string) => {
     if (!selectedMatchId) return;
     const alreadyReacted = messageReactions[messageId]?.[emoji]?.reactedByCurrentUser;
@@ -1029,64 +827,43 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     typingTimeoutRef.current = window.setTimeout(() => sendTypingStatus(false), 3000);
   };
 
-  // --- Voice Connection Logic (Audio + WebRTC) ---
   const joinActiveVoiceConnection = async (matchId: string, targetUser: User) => {
     try {
-      // 1. Get Media
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       voiceLocalStream.current = stream;
       setVoiceMicOn(true);
-
-      // 2. Start Backend Session (type: 'audio') for logging
       const sid = await startSession(currentUser.id, targetUser.id, 'audio');
       voiceSessionId.current = sid;
-
-      // 3. Initialize Signaling & PeerConnection for this specific match
       initializeVoicePeerConnection(stream, matchId, targetUser.id);
-
-      // 4. Update Database Presence (The Hook will reflect this in UI)
       joinVoice();
-
     } catch (err) {
-      console.error("Failed to join voice:", err);
-      alert("Could not access microphone. Please check permissions.");
+      alert("Could not access microphone.");
     }
   };
 
   const leaveActiveVoiceConnection = async () => {
-    // 1. Cleanup Streams
     if (voiceLocalStream.current) {
       voiceLocalStream.current.getTracks().forEach(t => t.stop());
       voiceLocalStream.current = null;
     }
-    
-    // 2. Close PeerConnection
     if (activeVoiceConnectionRef.current) {
       activeVoiceConnectionRef.current.close();
       activeVoiceConnectionRef.current = null;
     }
-
-    // 3. End Backend Session
     if (voiceSessionId.current) {
       await endSession(voiceSessionId.current);
       voiceSessionId.current = null;
     }
-
-    // 4. Leave Active Signaling Channel
     if (activeVoiceChannelRef.current) {
-        // Send leave signal for WebRTC cleanup on peer side
         await activeVoiceChannelRef.current.send({ type: 'broadcast', event: 'leave', payload: {} });
         await supabase.removeChannel(activeVoiceChannelRef.current);
         activeVoiceChannelRef.current = null;
     }
-
-    // 5. Update Database Presence
     leaveVoice();
   };
 
   const handleVoiceToggle = () => {
     if (!selectedMatchId || !selectedMatch) return;
-
     if (isInVoice) {
       leaveActiveVoiceConnection();
     } else {
@@ -1107,20 +884,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const initializeVoicePeerConnection = (stream: MediaStream, matchId: string, partnerId: string) => {
     const pc = new RTCPeerConnection(RTC_CONFIG);
     activeVoiceConnectionRef.current = pc;
-
-    // Add local tracks
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-    // Handle remote tracks
     pc.ontrack = (event) => {
-      // Play audio invisibly
       if (voiceAudioRef.current) {
         voiceAudioRef.current.srcObject = event.streams[0];
-        voiceAudioRef.current.play().catch(e => console.error("Audio play error", e));
+        voiceAudioRef.current.play().catch(() => {});
       }
     };
-
-    // ICE Candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         activeVoiceChannelRef.current?.send({
@@ -1130,12 +900,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         });
       }
     };
-
-    // Signaling Channel for Audio
     const channel = supabase.channel(`voice-audio:${matchId}`);
     activeVoiceChannelRef.current = channel;
-
-    // Is current user initiator? (Lower ID initiates)
     const isInitiator = currentUser.id < partnerId;
     const iceQueue: RTCIceCandidateInit[] = [];
 
@@ -1143,7 +909,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       .on('broadcast', { event: 'ice-candidate' }, ({ payload }: any) => {
         const candidate = new RTCIceCandidate(payload.candidate);
         if (pc.remoteDescription) {
-          pc.addIceCandidate(candidate).catch(e => console.error("Error adding voice candidate", e));
+          pc.addIceCandidate(candidate).catch(() => {});
         } else {
           iceQueue.push(payload.candidate);
         }
@@ -1151,9 +917,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       .on('broadcast', { event: 'offer' }, async ({ payload }: any) => {
         if (!pc) return;
         await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        while(iceQueue.length) {
-           await pc.addIceCandidate(new RTCIceCandidate(iceQueue.shift()!));
-        }
+        while(iceQueue.length) await pc.addIceCandidate(new RTCIceCandidate(iceQueue.shift()!));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         channel.send({ type: 'broadcast', event: 'answer', payload: { sdp: answer } });
@@ -1161,9 +925,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       .on('broadcast', { event: 'answer' }, async ({ payload }: any) => {
         if (!pc) return;
         await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        while(iceQueue.length) {
-           await pc.addIceCandidate(new RTCIceCandidate(iceQueue.shift()!));
-        }
+        while(iceQueue.length) await pc.addIceCandidate(new RTCIceCandidate(iceQueue.shift()!));
       })
       .on('broadcast', { event: 'join' }, () => {
          channel.send({ type: 'broadcast', event: 'ack', payload: {} });
@@ -1174,7 +936,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-           // Notify peer that I am ready for audio
            channel.send({ type: 'broadcast', event: 'join', payload: {} });
         }
       });
@@ -1188,33 +949,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   };
 
   const handleStartVideo = async (match: Match, type: CallType) => {
-     // If active in voice, leave first to release mic
-     if (isInVoice) {
-        await leaveActiveVoiceConnection();
-     }
+     if (isInVoice) await leaveActiveVoiceConnection();
      onStartVideoCall(match, type);
   };
 
-  // --- Render Components ---
+  const handleUpdateStatus = async (newStatus: MatchStatus) => {
+    if (!selectedMatchId) return;
+    // Assume backend handler exists or direct update
+    // For now, we simulate UI update but real backend call would be:
+    // await supabase.from('matches').update({ status: newStatus }).eq('id', selectedMatchId);
+    console.log(`[Status Update] ${selectedMatchId} -> ${newStatus}`);
+  };
 
-  // Profile details (right panel + modal)
+  const isInputDisabled = useMemo(() => {
+    if (!selectedMatch?.status) return false;
+    return ['paused', 'inactive', 'ended'].includes(selectedMatch.status);
+  }, [selectedMatch?.status]);
+
+  const showGhostModal = useMemo(() => {
+    return hasPlusAccess(currentUser) && 
+           selectedMatch?.status === 'pending' && 
+           selectedMatch?.pendingActionUserId === currentUser.id;
+  }, [currentUser, selectedMatch]);
+
   const ProfileDetailView = ({ match }: { match: Match }) => {
     const user = match.user;
-
-    const TagDisplay = ({
-      tags,
-      icon: Icon,
-    }: {
-      tags: string[];
-      icon?: React.ElementType;
-    }) => (
+    const TagDisplay = ({ tags, icon: Icon }: any) => (
       <div className="flex flex-wrap gap-2 mb-2">
         {tags && tags.length > 0 ? (
-          tags.map((tag, idx) => (
-            <span
-              key={idx}
-              className="bg-background border border-white/10 px-3 py-1 rounded-full text-xs text-text-main flex items-center gap-1"
-            >
+          tags.map((tag: any, idx: any) => (
+            <span key={idx} className="bg-background border border-white/10 px-3 py-1 rounded-full text-xs text-text-main flex items-center gap-1">
               {Icon && <Icon size={12} className="text-secondary" />}
               {tag}
             </span>
@@ -1227,18 +991,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     return (
       <div className="p-4 space-y-4">
-        {/* Header / Profile Pic Card */}
         <div className="bg-surface border border-white/10 rounded-2xl p-6 flex flex-col items-center text-center">
           <div className="relative group mb-4">
             <div className={`w-24 h-24 rounded-full border-4 ${user.superLikedMe ? 'border-[#00BFFF]' : 'border-background'} shadow-xl overflow-hidden relative`}>
-              <img
-                src={user.imageUrl || DEFAULT_PROFILE_IMAGE}
-                alt="Profile"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
-                }}
-              />
+              <img src={user.imageUrl || DEFAULT_PROFILE_IMAGE} alt="Profile" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} />
             </div>
             {user.superLikedMe && (
               <div className="absolute -top-2 -right-2 bg-[rgba(0,191,255,0.2)] border border-[#00BFFF]/50 p-1.5 rounded-full backdrop-blur-sm">
@@ -1246,222 +1002,62 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               </div>
             )}
           </div>
-          <h2 className="text-xl font-bold text-text-main">
-            {getDisplayName(user.name)}
-          </h2>
+          <h2 className="text-xl font-bold text-text-main">{getDisplayName(user.name)}</h2>
           <p className="text-sm text-text-muted mb-3">{user.role}</p>
-
           <div className="flex items-center gap-2 text-xs text-text-muted bg-background/50 px-3 py-1.5 rounded-lg border border-white/5 mb-3">
             <Hash size={12} className="text-gold" />
             <span className="font-mono">{user.kovaId || 'N/A'}</span>
           </div>
-
-          <button
-            onClick={() => handleViewConnections(user.id)}
-            className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group"
-          >
-            <Users
-              size={14}
-              className="group-hover:text-primary transition-colors"
-            />
-            View Connections
+          <button onClick={() => handleViewConnections(user.id)} className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-white/5 border border-white/10 rounded-xl text-xs font-medium transition-colors text-text-muted hover:text-primary group">
+            <Users size={14} className="group-hover:text-primary transition-colors" /> View Connections
           </button>
         </div>
 
-        {/* Professional Info Card */}
+        {/* Reliability Score (Plus Only) */}
+        {hasPlusAccess(currentUser) && (
+          <div className="bg-surface border border-emerald-500/20 rounded-2xl p-4 relative overflow-hidden">
+             <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl"></div>
+             <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Shield size={12} /> Reliability Score
+             </h3>
+             <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-text-main">{user.reliabilityScore ?? 'N/A'}</span>
+                <span className="text-xs text-text-muted">/ 100</span>
+             </div>
+             <p className="text-[10px] text-text-muted mt-2 leading-relaxed">
+               Based on attendance, responsiveness, and partnership duration.
+             </p>
+          </div>
+        )}
+
         <div className="bg-surface border border-white/10 rounded-2xl p-4">
-          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">
-            Professional Info
-          </h3>
-
+          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">Professional Info</h3>
           <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5">
-                <Briefcase size={12} /> Title / Role
-              </label>
-              <p className="text-sm text-text-main font-medium">{user.role}</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5">
-                <Globe size={12} /> Industry
-              </label>
-              <p className="text-sm text-text-main">{user.industry}</p>
-            </div>
-
+            <div><label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5"><Briefcase size={12} /> Title / Role</label><p className="text-sm text-text-main font-medium">{user.role}</p></div>
+            <div><label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5"><Globe size={12} /> Industry</label><p className="text-sm text-text-main">{user.industry}</p></div>
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">
-                  Stage
-                </label>
-                <span className="inline-block px-2.5 py-0.5 bg-primary/10 text-primary rounded text-xs font-bold border border-primary/20">
-                  {user.stage}
-                </span>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-text-muted mb-1">
-                  Experience
-                </label>
-                <p className="text-sm text-text-main">
-                  {user.experienceLevel || 'N/A'}
-                </p>
-              </div>
+              <div><label className="block text-xs font-medium text-text-muted mb-1">Stage</label><span className="inline-block px-2.5 py-0.5 bg-primary/10 text-primary rounded text-xs font-bold border border-primary/20">{user.stage}</span></div>
+              <div><label className="block text-xs font-medium text-text-muted mb-1">Experience</label><p className="text-sm text-text-main">{user.experienceLevel || 'N/A'}</p></div>
             </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5">
-                <MapPin size={12} /> Location
-              </label>
-              <p className="text-sm text-text-main">
-                {user.location && (user.location.city || user.location.state)
-                  ? `${user.location.city}${
-                      user.location.city && user.location.state ? ', ' : ''
-                    }${user.location.state}`
-                  : 'Not specified'}
-              </p>
-            </div>
+            <div><label className="block text-xs font-medium text-text-muted mb-1 flex items-center gap-1.5"><MapPin size={12} /> Location</label><p className="text-sm text-text-main">{user.location && (user.location.city || user.location.state) ? `${user.location.city}${user.location.city && user.location.state ? ', ' : ''}${user.location.state}` : 'Not specified'}</p></div>
           </div>
         </div>
-
-        {/* About Card */}
         <div className="bg-surface border border-white/10 rounded-2xl p-4">
-          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">
-            About
-          </h3>
-
+          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">About</h3>
           <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Bio
-              </label>
-              <p className="text-sm text-text-main leading-relaxed opacity-90">
-                {user.bio || 'No bio available.'}
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
-                <Target size={12} /> Goals
-              </label>
-              <ul className="space-y-1.5">
-                {user.goalsList && user.goalsList.filter(Boolean).length > 0 ? (
-                  user.goalsList
-                    .filter(Boolean)
-                    .map((goal, idx) => (
-                      <li
-                        key={idx}
-                        className="flex items-start gap-2 text-sm text-text-main"
-                      >
-                        <span className="text-gold mt-1.5">•</span>
-                        <span className="flex-1">{goal}</span>
-                      </li>
-                    ))
-                ) : (
-                  <li className="text-text-muted text-xs italic">
-                    No goals listed.
-                  </li>
-                )}
-              </ul>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-1">
-                Communication
-              </label>
-              <span className="inline-block px-2.5 py-1 bg-surface border border-white/10 rounded-full text-xs text-text-main">
-                {user.communicationStyle || 'Not specified'}
-              </span>
-            </div>
+            <div><label className="block text-xs font-medium text-text-muted mb-1">Bio</label><p className="text-sm text-text-main leading-relaxed opacity-90">{user.bio || 'No bio available.'}</p></div>
+            <div><label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5"><Target size={12} /> Goals</label><ul className="space-y-1.5">{user.goalsList && user.goalsList.filter(Boolean).length > 0 ? (user.goalsList.filter(Boolean).map((goal, idx) => (<li key={idx} className="flex items-start gap-2 text-sm text-text-main"><span className="text-gold mt-1.5">•</span><span className="flex-1">{goal}</span></li>))) : (<li className="text-text-muted text-xs italic">No goals listed.</li>)}</ul></div>
+            <div><label className="block text-xs font-medium text-text-muted mb-1">Communication</label><span className="inline-block px-2.5 py-1 bg-surface border border-white/10 rounded-full text-xs text-text-main">{user.communicationStyle || 'Not specified'}</span></div>
           </div>
         </div>
-
-        {/* Interests & Connect Card */}
         <div className="bg-surface border border-white/10 rounded-2xl p-4">
-          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">
-            Interests & Connect
-          </h3>
-
+          <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-4 pb-2 border-b border-white/5">Interests & Connect</h3>
           <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-2">
-                Skills / Strengths
-              </label>
-              <TagDisplay tags={user.skills || []} />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-2">
-                Interests
-              </label>
-              <TagDisplay tags={user.tags || []} />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
-                <Target size={12} /> Looking For
-              </label>
-              <TagDisplay tags={user.lookingFor || []} />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5">
-                <Clock size={12} /> Availability
-              </label>
-              <TagDisplay tags={user.availability || []} />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-text-muted mb-3 flex items-center gap-1.5">
-                <LinkIcon size={12} /> Links
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {user.links?.linkedin && (
-                  <a
-                    href={user.links.linkedin}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
-                  >
-                    LinkedIn
-                  </a>
-                )}
-                {user.links?.twitter && (
-                  <a
-                    href={user.links.twitter}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
-                  >
-                    Twitter / X
-                  </a>
-                )}
-                {user.links?.website && (
-                  <a
-                    href={user.links.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
-                  >
-                    Website
-                  </a>
-                )}
-                {user.links?.portfolio && (
-                  <a
-                    href={user.links.portfolio}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors"
-                  >
-                    Portfolio
-                  </a>
-                )}
-                {(!user.links || Object.values(user.links).every((v) => !v)) && (
-                  <span className="text-text-muted text-xs italic">
-                    No links added.
-                  </span>
-                )}
-              </div>
-            </div>
+            <div><label className="block text-xs font-medium text-text-muted mb-2">Skills / Strengths</label><TagDisplay tags={user.skills || []} /></div>
+            <div><label className="block text-xs font-medium text-text-muted mb-2">Interests</label><TagDisplay tags={user.tags || []} /></div>
+            <div><label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5"><Target size={12} /> Looking For</label><TagDisplay tags={user.lookingFor || []} /></div>
+            <div><label className="block text-xs font-medium text-text-muted mb-2 flex items-center gap-1.5"><Clock size={12} /> Availability</label><TagDisplay tags={user.availability || []} /></div>
+            <div><label className="block text-xs font-medium text-text-muted mb-3 flex items-center gap-1.5"><LinkIcon size={12} /> Links</label><div className="flex flex-wrap gap-2">{user.links?.linkedin && (<a href={user.links.linkedin} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">LinkedIn</a>)}{user.links?.twitter && (<a href={user.links.twitter} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Twitter / X</a>)}{user.links?.website && (<a href={user.links.website} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Website</a>)}{user.links?.portfolio && (<a href={user.links.portfolio} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 bg-background border border-white/10 rounded-lg text-xs text-text-main hover:text-primary hover:border-primary/50 transition-colors">Portfolio</a>)}{(!user.links || Object.values(user.links).every((v) => !v)) && (<span className="text-text-muted text-xs italic">No links added.</span>)}</div></div>
           </div>
         </div>
       </div>
@@ -1470,18 +1066,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden relative">
-      {/* Invisible Audio Element for Voice Channel */}
       <audio ref={voiceAudioRef} autoPlay style={{display: 'none'}} />
 
-      {/* ... (Connections, Connect By ID, Profile Modals remain unchanged) ... */}
-      {/* Connections Modal */}
+      {/* Ghost Prevention Modal */}
+      {showGhostModal && (
+        <GhostPreventionModal 
+          onContinue={() => handleUpdateStatus('active')}
+          onPause={() => handleUpdateStatus('paused')}
+          onEnd={() => handleUpdateStatus('ended')}
+        />
+      )}
+
       {connectionsModalOpen && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-surface w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 max-h-[80vh] flex flex-col animate-in fade-in zoom-in duration-200">
             <div className="flex justify-between items-center mb-4 shrink-0">
-              <h3 className="text-lg font-bold text-text-main flex items-center gap-2">
-                <Users size={18} className="text-gold" /> Connections
-              </h3>
+              <h3 className="text-lg font-bold text-text-main flex items-center gap-2"><Users size={18} className="text-gold" /> Connections</h3>
               <button onClick={() => setConnectionsModalOpen(false)} className="text-text-muted hover:text-white"><X size={20} /></button>
             </div>
             <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -1500,7 +1100,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       )}
 
-      {/* Connect By ID Modal */}
       {showConnectModal && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-surface border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
@@ -1514,7 +1113,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       )}
 
-      {/* Profile modal (mobile/desktop) */}
       {showProfileModal && selectedMatch && (
         <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-surface w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl h-full md:h-[85vh] flex flex-col relative animate-in fade-in zoom-in duration-200">
@@ -1524,12 +1122,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       )}
 
-      {/* Column 1: sidebar (Messages List) */}
-      <div
-        className={`flex-col border-r border-white/5 bg-surface/50 shrink-0 md:w-64 lg:w-72 ${
-          selectedMatchId ? 'hidden md:flex' : 'flex w-full'
-        }`}
-      >
+      {/* Left Sidebar */}
+      <div className={`flex-col border-r border-white/5 bg-surface/50 shrink-0 md:w-64 lg:w-72 ${selectedMatchId ? 'hidden md:flex' : 'flex w-full'}`}>
         <div className="flex flex-col border-b border-white/5 shrink-0">
           <div className="p-3 pb-2 flex justify-between items-center">
             <h2 className="text-lg font-bold text-text-main">Messages</h2>
@@ -1538,46 +1132,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <div className="px-3 pb-3"><div className="relative"><input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search..." className="w-full bg-background border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-text-main focus:outline-none focus:border-gold/50 transition-colors placeholder-text-muted/70" /><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={14} /></div></div>
         </div>
 
-        {/* Discord-style Active Voice Channel Display */}
         {selectedMatchId && voiceParticipants.length > 0 && (
           <div className="px-3 py-2 border-b border-white/5 bg-background/30 animate-in fade-in slide-in-from-top-2">
              <div className="flex items-center justify-between mb-1.5">
-                <div className="flex items-center gap-2">
-                   <Volume2 size={12} className="text-green-500" />
-                   <span className="text-[10px] font-bold text-text-main uppercase tracking-wide">
-                     Voice Channel
-                   </span>
-                </div>
-                {isInVoice ? (
-                   <button 
-                     onClick={handleVoiceToggle}
-                     className="text-[9px] text-red-400 hover:text-white transition-colors border border-red-500/20 bg-red-500/10 px-1.5 py-0.5 rounded"
-                   >
-                     Disconnect
-                   </button>
-                ) : (
-                   <button 
-                     onClick={handleVoiceToggle}
-                     className="text-[9px] text-primary hover:text-white transition-colors border border-primary/20 bg-primary/10 px-1.5 py-0.5 rounded"
-                   >
-                     Join
-                   </button>
-                )}
+                <div className="flex items-center gap-2"><Volume2 size={12} className="text-green-500" /><span className="text-[10px] font-bold text-text-main uppercase tracking-wide">Voice Channel</span></div>
+                {isInVoice ? (<button onClick={handleVoiceToggle} className="text-[9px] text-red-400 hover:text-white transition-colors border border-red-500/20 bg-red-500/10 px-1.5 py-0.5 rounded">Disconnect</button>) : (<button onClick={handleVoiceToggle} className="text-[9px] text-primary hover:text-white transition-colors border border-primary/20 bg-primary/10 px-1.5 py-0.5 rounded">Join</button>)}
              </div>
              <div className="space-y-1 pl-1">
                 {voiceParticipants.map(participant => (
                    <div key={participant.user_id} className="flex items-center gap-2 p-1 rounded-lg hover:bg-white/5 transition-colors">
-                      <div className="relative">
-                         <img 
-                           src={participant.avatar_url || DEFAULT_PROFILE_IMAGE} 
-                           className="w-5 h-5 rounded-full object-cover border border-white/10" 
-                           onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }}
-                         />
-                         <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 border border-black rounded-full"></div>
-                      </div>
-                      <span className={`text-[10px] ${participant.user_id === currentUser.id ? 'text-primary font-bold' : 'text-text-muted'}`}>
-                         {participant.display_name}
-                      </span>
+                      <div className="relative"><img src={participant.avatar_url || DEFAULT_PROFILE_IMAGE} className="w-5 h-5 rounded-full object-cover border border-white/10" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} /><div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-500 border border-black rounded-full"></div></div>
+                      <span className={`text-[10px] ${participant.user_id === currentUser.id ? 'text-primary font-bold' : 'text-text-muted'}`}>{participant.display_name}</span>
                    </div>
                 ))}
              </div>
@@ -1588,9 +1153,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {filteredMatches.length === 0 ? (
             matches.length === 0 ? (
               <div className="p-8 text-center text-text-muted flex flex-col items-center gap-4"><div className="w-16 h-16 bg-background rounded-full flex items-center justify-center border border-white/5"><Bot size={32} className="opacity-20" /></div><p className="text-xs">No matches yet.</p></div>
-            ) : (
-              <p className="text-center text-text-muted p-6 text-xs">No matches found.</p>
-            )
+            ) : (<p className="text-center text-text-muted p-6 text-xs">No matches found.</p>)
           ) : (
             filteredMatches.map((match) => {
               const previewText = match.lastMessageText || 'Chat started';
@@ -1611,17 +1174,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       <div className="flex items-center gap-1.5 min-w-0">
                         <h3 className={`font-medium text-sm truncate ${selectedMatchId === match.id ? 'text-primary' : 'text-text-main'}`}>{getDisplayName(match.user.name)}</h3>
                         {showNewBadge && (<span className="text-[8px] font-bold text-gold bg-gold/10 border border-gold/30 px-1 py-0.5 rounded-full shrink-0">NEW</span>)}
-                        {isVoiceActive && (
-                          <span className="flex items-center gap-0.5 text-[8px] font-semibold text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded-full border border-emerald-500/30">
-                            <Headphones size={8} className="shrink-0" />
-                            <span>In Voice</span>
-                          </span>
-                        )}
+                        {isVoiceActive && (<span className="flex items-center gap-0.5 text-[8px] font-semibold text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded-full border border-emerald-500/30"><Headphones size={8} className="shrink-0" /><span>In Voice</span></span>)}
                       </div>
                       <div className="flex items-center gap-1">
-                        {match.user.superLikedMe && (
-                          <span className="text-[#00BFFF] text-[9px]" title="Super Liked You">⭐</span>
-                        )}
+                        {match.user.superLikedMe && (<span className="text-[#00BFFF] text-[9px]" title="Super Liked You">⭐</span>)}
                         <span className="text-[9px] text-text-muted shrink-0 ml-1">{timeToDisplay}</span>
                       </div>
                     </div>
@@ -1634,104 +1190,60 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         </div>
       </div>
 
-      {/* Main Content Area */}
       <div className={`flex-1 flex min-w-0 bg-background relative ${!selectedMatchId ? 'hidden md:flex' : 'flex'}`}>
         {selectedMatch ? (
           <>
-            {/* 2. Left-Center (Goals) - Visible on 2xl+ */}
+            {/* Left-Center Panel (Partnership Status) */}
             <div className="hidden 2xl:flex w-80 flex-col border-r border-white/5 bg-surface/30 backdrop-blur-sm shrink-0 h-full">
                <div className="flex-1 overflow-hidden p-3 h-full">
-                  <SharedGoalsPanel 
+                  <PartnershipStatusPanel 
+                    status={selectedMatch.status || 'active'} 
                     isPlusOrPro={hasPlusAccess(currentUser)} 
-                    partnerName={selectedMatch.user.name} 
+                    onUpdateStatus={handleUpdateStatus} 
                     onUpgrade={onUpgrade}
-                    matchId={selectedMatch.id}
                   />
                </div>
             </div>
 
-            {/* 3. Center Chat Column - Dominant focus */}
+            {/* Center Chat */}
             <div className="flex-1 flex flex-col min-w-0 bg-background">
-              
-              {/* Header */}
               <div className="h-16 border-b border-white/5 flex items-center justify-between px-6 shrink-0 bg-surface/30 backdrop-blur-md z-10">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <button onClick={() => setSelectedMatchId(null)} className="md:hidden text-text-muted hover:text-white shrink-0 p-1"><ArrowLeft size={22} /></button>
                   <img src={selectedMatch.user.imageUrl} alt={selectedMatch.user.name} className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0 cursor-pointer" onError={(e) => { e.currentTarget.src = DEFAULT_PROFILE_IMAGE; }} onClick={() => setShowProfileModal(true)} />
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setShowProfileModal(true)}>
                     <h3 className="font-bold text-text-main truncate text-base leading-tight">{getDisplayName(selectedMatch.user.name)}</h3>
-                    {selectedMatch.user.superLikedMe && (
-                      <p className="text-[#00BFFF] text-[10px] font-semibold mt-0.5 flex items-center gap-1">⭐ Super Liked you</p>
-                    )}
-                    {(() => {
-                      const currentStatus = getPresenceStatus(selectedMatch.user.lastSeenAt);
-                      const statusLabel = currentStatus === 'online' ? 'Online' : currentStatus === 'away' ? 'Away' : 'Offline';
-                      const statusColor = currentStatus === 'online' ? 'text-green-500' : currentStatus === 'away' ? 'text-amber-500' : 'text-gray-500';
-                      return !selectedMatch.user.superLikedMe && (
-                        <p className="text-xs text-text-muted truncate flex items-center gap-1.5"><span className={statusColor}>●</span> {statusLabel}<span className="text-white/20">|</span><span className="truncate">{selectedMatch.user.role}</span></p>
-                      );
-                    })()}
+                    {selectedMatch.user.superLikedMe && (<p className="text-[#00BFFF] text-[10px] font-semibold mt-0.5 flex items-center gap-1">⭐ Super Liked you</p>)}
+                    {!selectedMatch.user.superLikedMe && (<p className="text-xs text-text-muted truncate flex items-center gap-1.5"><span className={getPresenceStatus(selectedMatch.user.lastSeenAt) === 'online' ? 'text-green-500' : 'text-gray-500'}>●</span> {getPresenceStatus(selectedMatch.user.lastSeenAt) === 'online' ? 'Online' : 'Offline'}<span className="text-white/20">|</span><span className="truncate">{selectedMatch.user.role}</span></p>)}
                   </div>
                 </div>
-                
                 <div className="flex items-center justify-center gap-3 shrink-0">
-                  {/* Group 1: Comms */}
                   <div className="flex items-center gap-2 bg-white/5 rounded-lg p-1 border border-white/5">
-                      {!isInVoice ? (
-                        <button 
-                          onClick={handleVoiceToggle} 
-                          className="px-3 py-1.5 text-text-muted hover:text-primary hover:bg-white/5 rounded-md transition-colors flex items-center justify-center gap-1.5" 
-                          title="Join Voice Channel"
-                        >
-                          <Headphones size={16} />
-                          <span className="hidden lg:inline text-xs font-medium">Voice</span>
-                        </button>
-                      ) : (
-                        <div className="flex items-center gap-2 px-3 py-1.5">
-                           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-                           <button onClick={toggleVoiceMic} className="text-text-main hover:text-white transition-colors">
-                              {voiceMicOn ? <Mic size={14} /> : <MicOff size={14} className="text-red-400" />}
-                           </button>
-                           <button onClick={handleVoiceToggle} className="text-xs font-bold text-red-400 hover:text-red-300 ml-1">Leave</button>
-                        </div>
-                      )}
-
+                      {!isInVoice ? (<button onClick={handleVoiceToggle} className="px-3 py-1.5 text-text-muted hover:text-primary hover:bg-white/5 rounded-md transition-colors flex items-center justify-center gap-1.5" title="Join Voice Channel"><Headphones size={16} /><span className="hidden lg:inline text-xs font-medium">Voice</span></button>) : (<div className="flex items-center gap-2 px-3 py-1.5"><div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div><button onClick={toggleVoiceMic} className="text-text-main hover:text-white transition-colors">{voiceMicOn ? <Mic size={14} /> : <MicOff size={14} className="text-red-400" />}</button><button onClick={handleVoiceToggle} className="text-xs font-bold text-red-400 hover:text-red-300 ml-1">Leave</button></div>)}
                       <div className="w-px h-4 bg-white/10"></div>
-
-                      <button 
-                        onClick={() => handleStartVideo(selectedMatch, 'video')} 
-                        className="px-3 py-1.5 text-text-muted hover:text-white hover:bg-white/5 rounded-md transition-colors flex items-center justify-center gap-1.5" 
-                        title="Start Video Call"
-                      >
-                        <Video size={16} />
-                        <span className="hidden lg:inline text-xs font-medium">Video</span>
-                      </button>
+                      <button onClick={() => handleStartVideo(selectedMatch, 'video')} className="px-3 py-1.5 text-text-muted hover:text-white hover:bg-white/5 rounded-md transition-colors flex items-center justify-center gap-1.5" title="Start Video Call"><Video size={16} /><span className="hidden lg:inline text-xs font-medium">Video</span></button>
                   </div>
-
-                  {/* Group 2: Actions */}
                   <div className="flex items-center gap-2">
-                      <button 
-                        onClick={handleDeleteChat} 
-                        className="p-2 text-text-muted hover:text-white hover:bg-white/5 rounded-lg transition-colors flex items-center justify-center gap-1.5" 
-                        title="Delete Chat"
-                      >
-                        <Trash2 size={16} />
-                        <span className="hidden xl:inline text-xs font-medium">Delete</span>
-                      </button>
-
-                      <button 
-                        onClick={handleUnmatchClick} 
-                        className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-1.5" 
-                        title="Unmatch"
-                      >
-                        <UserMinus size={16} />
-                        <span className="hidden xl:inline text-xs font-medium">Unmatch</span>
-                      </button>
+                      <button onClick={handleDeleteChat} className="p-2 text-text-muted hover:text-white hover:bg-white/5 rounded-lg transition-colors flex items-center justify-center gap-1.5" title="Delete Chat"><Trash2 size={16} /><span className="hidden xl:inline text-xs font-medium">Delete</span></button>
+                      <button onClick={handleUnmatchClick} className="p-2 text-text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-1.5" title="Unmatch"><UserMinus size={16} /><span className="hidden xl:inline text-xs font-medium">Unmatch</span></button>
                   </div>
                 </div>
               </div>
 
-              {/* Messages Area - Constrained Max Width */}
+              {/* Status Banner */}
+              {selectedMatch.status === 'paused' && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 py-2 px-4 flex items-center justify-center gap-2">
+                   <AlertCircle size={14} className="text-amber-400" />
+                   <span className="text-xs font-medium text-amber-200">Partnership paused. Messaging is disabled.</span>
+                </div>
+              )}
+              {selectedMatch.status === 'inactive' && (
+                <div className="bg-white/5 border-b border-white/10 py-2 px-4 flex items-center justify-center gap-2">
+                   <Lock size={14} className="text-text-muted" />
+                   <span className="text-xs font-medium text-text-muted">This partnership is inactive.</span>
+                </div>
+              )}
+
               <div className="flex-1 overflow-y-auto p-0 scroll-smooth custom-scrollbar">
                 <div className="w-full max-w-3xl mx-auto px-6 py-6 space-y-2">
                   {isLoadingMessages && <div className="flex justify-center p-4"><Loader2 className="animate-spin text-gold" /></div>}
@@ -1745,169 +1257,69 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     const isMe = msg.senderId === currentUser.id;
                     const prevMsg = messages[idx - 1];
                     const nextMsg = messages[idx + 1];
-                    
-                    // Grouping logic for spacing
-                    const isSameSenderPrev = prevMsg && prevMsg.senderId === msg.senderId;
                     const isSameSenderNext = nextMsg && nextMsg.senderId === msg.senderId;
-                    
                     const showDate = shouldShowDateDivider(msg, prevMsg);
                     const showNewDivider = firstUnreadIndex !== -1 && idx === firstUnreadIndex;
                     const reactionsForMsg = messageReactions[msg.id] || {};
 
                     return (
                       <React.Fragment key={msg.id}>
-                        {showDate && (
-                            <div className="w-full flex justify-center my-4 pt-2">
-                                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider bg-surface/50 px-2 py-0.5 rounded-md border border-white/5">
-                                    {getDateLabel(msg.timestamp as any)}
-                                </span>
-                            </div>
-                        )}
-                        
-                        {showNewDivider && (
-                            <div className="w-full flex justify-center my-4">
-                                <div className="flex items-center justify-center gap-2 opacity-80">
-                                    <div className="h-px bg-gold/40 w-16" />
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-gold">New messages</span>
-                                    <div className="h-px bg-gold/40 w-16" />
-                                </div>
-                            </div>
-                        )}
-                        
-                        <div 
-                            className={`flex ${isMe ? 'justify-end' : 'justify-start'} group relative ${isSameSenderNext ? 'mb-0.5' : 'mb-4'}`} 
-                            onContextMenu={(e) => { e.preventDefault(); setActiveReactionMessageId(msg.id); }}
-                        >
-                          {/* Reaction Picker Popover */}
-                          {activeReactionMessageId === msg.id && (
-                              <div className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}>
-                                  {REACTION_EMOJIS.map((emoji) => (
-                                      <button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className="text-lg leading-none px-1 hover:scale-125 transition-transform">{emoji}</button>
-                                  ))}
-                              </div>
-                          )}
-                          
-                          <div className={`max-w-[85%] md:max-w-[75%] lg:max-w-[65%] px-5 py-3 rounded-2xl shadow-sm text-base leading-relaxed ${
-                              isMe 
-                                ? 'bg-primary text-white rounded-tr-sm' 
-                                : 'bg-surface border border-white/10 text-text-main rounded-tl-sm'
-                          }`}>
+                        {showDate && (<div className="w-full flex justify-center my-4 pt-2"><span className="text-[10px] font-bold text-text-muted uppercase tracking-wider bg-surface/50 px-2 py-0.5 rounded-md border border-white/5">{getDateLabel(msg.timestamp as any)}</span></div>)}
+                        {showNewDivider && (<div className="w-full flex justify-center my-4"><div className="flex items-center justify-center gap-2 opacity-80"><div className="h-px bg-gold/40 w-16" /><span className="text-[10px] font-bold uppercase tracking-wider text-gold">New messages</span><div className="h-px bg-gold/40 w-16" /></div></div>)}
+                        <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} group relative ${isSameSenderNext ? 'mb-0.5' : 'mb-4'}`} onContextMenu={(e) => { e.preventDefault(); setActiveReactionMessageId(msg.id); }}>
+                          {activeReactionMessageId === msg.id && (<div className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} bg-surface border border-white/10 rounded-full px-2 py-1 shadow-xl flex gap-1 z-20`}>{REACTION_EMOJIS.map((emoji) => (<button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className="text-lg leading-none px-1 hover:scale-125 transition-transform">{emoji}</button>))}</div>)}
+                          <div className={`max-w-[85%] md:max-w-[75%] lg:max-w-[65%] px-5 py-3 rounded-2xl shadow-sm text-base leading-relaxed ${isMe ? 'bg-primary text-white rounded-tr-sm' : 'bg-surface border border-white/10 text-text-main rounded-tl-sm'}`}>
                             <p>{msg.text}</p>
-                            <div className={`mt-1 flex items-center gap-1.5 ${isMe ? 'justify-end' : 'justify-start'} opacity-60`}>
-                              <span className="text-[10px]">{formatLocalTime(msg.timestamp as any)}</span>
-                              {isMe && msg.id === lastSeenMessageId && (<span className="text-[10px] font-bold text-emerald-300">Read</span>)}
-                            </div>
-                            
-                            {/* Reactions Display */}
-                            {Object.keys(reactionsForMsg).length > 0 && (
-                                <div className={`flex items-center gap-1 flex-wrap mt-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                    {Object.entries(reactionsForMsg).map(([emoji, info]) => (
-                                        <button 
-                                            key={emoji} 
-                                            type="button" 
-                                            onClick={() => handleToggleReaction(msg.id, emoji)} 
-                                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border transition-colors ${info.reactedByCurrentUser ? 'bg-gold/20 border-gold/60 text-gold' : 'bg-black/20 border-white/10 text-white/80'}`}
-                                        >
-                                            <span>{emoji}</span><span>{info.count}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
+                            <div className={`mt-1 flex items-center gap-1.5 ${isMe ? 'justify-end' : 'justify-start'} opacity-60`}><span className="text-[10px]">{formatLocalTime(msg.timestamp as any)}</span>{isMe && msg.id === lastSeenMessageId && (<span className="text-[10px] font-bold text-emerald-300">Read</span>)}</div>
+                            {Object.keys(reactionsForMsg).length > 0 && (<div className={`flex items-center gap-1 flex-wrap mt-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}>{Object.entries(reactionsForMsg).map(([emoji, info]) => (<button key={emoji} type="button" onClick={() => handleToggleReaction(msg.id, emoji)} className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border transition-colors ${info.reactedByCurrentUser ? 'bg-gold/20 border-gold/60 text-gold' : 'bg-black/20 border-white/10 text-white/80'}`}><span>{emoji}</span><span>{info.count}</span></button>))}</div>)}
                           </div>
                         </div>
                       </React.Fragment>
                     );
                   })}
-                  
-                  {isOtherTyping && (
-                      <div className="flex justify-start mb-4">
-                         <div className="bg-surface border border-white/10 px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1">
-                            <div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce"></div>
-                            <div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce delay-100"></div>
-                            <div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce delay-200"></div>
-                         </div>
-                      </div>
-                  )}
-                  
+                  {isOtherTyping && (<div className="flex justify-start mb-4"><div className="bg-surface border border-white/10 px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1"><div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce"></div><div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce delay-100"></div><div className="w-1.5 h-1.5 bg-text-muted rounded-full animate-bounce delay-200"></div></div></div>)}
                   <div ref={messagesEndRef} />
                 </div>
               </div>
 
-              {/* Input Area - Constrained Max Width */}
-              <div className="p-4 border-t border-white/5 bg-surface/30 backdrop-blur-md shrink-0">
-                <div className="w-full max-w-3xl mx-auto">
-                    <div className="flex gap-3 items-end">
-                        <div className="flex-1 relative bg-background border border-white/10 rounded-2xl focus-within:border-gold/50 focus-within:ring-1 focus-within:ring-gold/50 transition-all shadow-inner">
-                            <button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform p-1">🙂</button>
-                            <input 
-                                ref={messageInputRef} 
-                                type="text" 
-                                value={inputText} 
-                                onChange={handleInputChange} 
-                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} 
-                                placeholder="Type a message..." 
-                                className="w-full bg-transparent text-text-main rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none placeholder-gray-500/50 text-base" 
-                            />
-                            {showEmojiPicker && (
-                                <div className="absolute bottom-14 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">
-                                    {EMOJIS.map((e, i) => (<button key={i} type="button" onClick={() => handleEmojiClick(e)} className="hover:scale-125 transition-transform">{e}</button>))}
-                                </div>
-                            )}
-                        </div>
-                        <button 
-                            onClick={() => handleSendMessage()} 
-                            disabled={!inputText.trim()} 
-                            className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"
-                        >
-                            <Send size={20} />
-                        </button>
-                    </div>
+              {/* Input Area */}
+              {selectedMatch.status !== 'ended' && (
+                <div className={`p-4 border-t border-white/5 bg-surface/30 backdrop-blur-md shrink-0 transition-opacity ${isInputDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <div className="w-full max-w-3xl mx-auto">
+                      <div className="flex gap-3 items-end">
+                          <div className="flex-1 relative bg-background border border-white/10 rounded-2xl focus-within:border-gold/50 focus-within:ring-1 focus-within:ring-gold/50 transition-all shadow-inner">
+                              <button type="button" onClick={() => setShowEmojiPicker((prev) => !prev)} className="absolute left-3 top-1/2 -translate-y-1/2 text-xl hover:scale-110 transition-transform p-1">🙂</button>
+                              <input ref={messageInputRef} type="text" value={inputText} onChange={handleInputChange} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder={isInputDisabled ? "Messaging unavailable" : "Type a message..."} disabled={isInputDisabled} className="w-full bg-transparent text-text-main rounded-2xl pl-12 pr-4 py-3.5 focus:outline-none placeholder-gray-500/50 text-base" />
+                              {showEmojiPicker && (<div className="absolute bottom-14 left-0 bg-surface border border-white/10 shadow-xl rounded-xl p-3 z-50 grid grid-cols-8 gap-2 text-xl">{EMOJIS.map((e, i) => (<button key={i} type="button" onClick={() => handleEmojiClick(e)} className="hover:scale-125 transition-transform">{e}</button>))}</div>)}
+                          </div>
+                          <button onClick={() => handleSendMessage()} disabled={!inputText.trim() || isInputDisabled} className="bg-primary text-white p-3.5 rounded-xl hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shrink-0"><Send size={20} /></button>
+                      </div>
+                  </div>
                 </div>
-              </div>
+              )}
+              {selectedMatch.status === 'ended' && (
+                <div className="p-6 border-t border-white/5 bg-surface/50 text-center">
+                   <p className="text-text-muted text-sm italic">This partnership has ended. Messages are archived.</p>
+                </div>
+              )}
             </div>
             
-            {/* 4. Right-Center (Recap) - Visible on 2xl+ */}
+            {/* Right Panel */}
             <div className="hidden 2xl:flex w-80 flex-col border-l border-white/5 bg-surface/30 backdrop-blur-sm shrink-0 h-full">
-               <div className="flex-1 overflow-hidden p-3 h-full">
-                  <AIRecapPanel 
-                     subscriptionTier={currentUser.subscriptionTier} 
-                     onUpgrade={onUpgrade} 
-                   />
-               </div>
+               <div className="flex-1 overflow-hidden p-3 h-full"><AIRecapPanel subscriptionTier={currentUser.subscriptionTier} onUpgrade={onUpgrade} /></div>
             </div>
             
-            {/* 5. Right Sidebar (Profile) - Tighter & Stacked */}
             <aside className="hidden xl:flex flex-col w-80 shrink-0 border-l border-white/5 bg-surface/30 h-full backdrop-blur-sm">
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
-                    {/* Fallback for Screens < 2xl: Show Goals/Recap here so they aren't lost on standard desktops */}
                     <div className="block 2xl:hidden space-y-3">
-                        <div className="h-64 shrink-0">
-                           <SharedGoalsPanel 
-                             isPlusOrPro={hasPlusAccess(currentUser)} 
-                             partnerName={selectedMatch.user.name} 
-                             onUpgrade={onUpgrade}
-                             matchId={selectedMatch.id}
-                           />
-                        </div>
-                        
-                        <div className="h-48 shrink-0">
-                           <AIRecapPanel 
-                             subscriptionTier={currentUser.subscriptionTier} 
-                             onUpgrade={onUpgrade} 
-                           />
-                        </div>
+                        <div className="h-64 shrink-0"><PartnershipStatusPanel status={selectedMatch.status || 'active'} isPlusOrPro={hasPlusAccess(currentUser)} onUpdateStatus={handleUpdateStatus} onUpgrade={onUpgrade} /></div>
+                        <div className="h-48 shrink-0"><AIRecapPanel subscriptionTier={currentUser.subscriptionTier} onUpgrade={onUpgrade} /></div>
                     </div>
-                    
-                    {/* Profile detail wrapped to scroll if needed, but flex-1 allows it to take remaining space */}
-                    <div className="bg-surface/50 border border-white/5 rounded-2xl overflow-hidden shrink-0">
-                        <ProfileDetailView match={selectedMatch} />
-                    </div>
+                    <div className="bg-surface/50 border border-white/5 rounded-2xl overflow-hidden shrink-0"><ProfileDetailView match={selectedMatch} /></div>
                 </div>
             </aside>
-
           </>
         ) : (
-          // Empty state (desktop)
           <div className="w-full h-full hidden md:flex flex-col items-center justify-center bg-background p-8 text-center">
             <h3 className="text-2xl font-bold text-text-main mb-3">No conversation selected</h3>
             <p className="text-text-muted max-w-sm mx-auto leading-relaxed">Choose a match on the left or add a fellow founder via Kova ID to start collaborating.</p>

@@ -373,7 +373,8 @@ function App() {
               // Map DB columns to camelCase for local use
               avatarZoom: callerData.avatar_zoom,
               avatarOffsetX: callerData.avatar_offset_x,
-              avatarOffsetY: callerData.avatar_offset_y
+              avatarOffsetY: callerData.avatar_offset_y,
+              reliabilityLabel: callerData.reliability_label
             };
 
             setIncomingCall({
@@ -483,7 +484,8 @@ function App() {
           // Map DB columns to camelCase
           avatarZoom: data.avatar_zoom,
           avatarOffsetX: data.avatar_offset_x,
-          avatarOffsetY: data.avatar_offset_y
+          avatarOffsetY: data.avatar_offset_y,
+          reliabilityLabel: data.reliability_label
         };
         setUser(mappedUser);
       }
@@ -579,7 +581,8 @@ function App() {
             // Map DB columns
             avatarZoom: c.avatar_zoom,
             avatarOffsetX: c.avatar_offset_x,
-            avatarOffsetY: c.avatar_offset_y
+            avatarOffsetY: c.avatar_offset_y,
+            reliabilityLabel: c.reliability_label || 'New' // Fallback to 'New' to ensure badge appears
           })) as User[];
 
         const randomized = weightedShuffle(filtered, (u) => {
@@ -663,7 +666,8 @@ function App() {
             // Map DB columns
             avatarZoom: otherUserRaw.avatar_zoom,
             avatarOffsetX: otherUserRaw.avatar_offset_x,
-            avatarOffsetY: otherUserRaw.avatar_offset_y
+            avatarOffsetY: otherUserRaw.avatar_offset_y,
+            reliabilityLabel: otherUserRaw.reliability_label
           };
 
           let lastMessageText = null;

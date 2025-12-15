@@ -1201,6 +1201,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     isPlusOrPro={hasPlusAccess(currentUser)} 
                     onUpdateStatus={handleUpdateStatus} 
                     onUpgrade={onUpgrade}
+                    lastActivityDate={selectedMatch.lastMessageAt || selectedMatch.timestamp}
                   />
                </div>
             </div>
@@ -1312,7 +1313,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <aside className="hidden xl:flex flex-col w-80 shrink-0 border-l border-white/5 bg-surface/30 h-full backdrop-blur-sm">
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3">
                     <div className="block 2xl:hidden space-y-3">
-                        <div className="h-64 shrink-0"><PartnershipStatusPanel status={selectedMatch.status || 'active'} isPlusOrPro={hasPlusAccess(currentUser)} onUpdateStatus={handleUpdateStatus} onUpgrade={onUpgrade} /></div>
+                        <div className="h-64 shrink-0">
+                          <PartnershipStatusPanel 
+                            status={selectedMatch.status || 'active'} 
+                            isPlusOrPro={hasPlusAccess(currentUser)} 
+                            onUpdateStatus={handleUpdateStatus} 
+                            onUpgrade={onUpgrade}
+                            lastActivityDate={selectedMatch.lastMessageAt || selectedMatch.timestamp}
+                          />
+                        </div>
                         <div className="h-48 shrink-0"><AIRecapPanel subscriptionTier={currentUser.subscriptionTier} onUpgrade={onUpgrade} /></div>
                     </div>
                     <div className="bg-surface/50 border border-white/5 rounded-2xl overflow-hidden shrink-0"><ProfileDetailView match={selectedMatch} /></div>

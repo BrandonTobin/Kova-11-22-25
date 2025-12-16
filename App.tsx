@@ -103,6 +103,13 @@ const isRecoveryUrl = (): boolean => {
   return false;
 };
 
+// Navigation History Item Structure
+interface NavSnapshot {
+  view: ViewState;
+  upgradeTargetTier: SubscriptionTier | null;
+  showOutOfSwipesModal: boolean;
+}
+
 function App() {
   // --- State: Auth & User ---
   const [user, setUser] = useState<User | null>(null);
@@ -171,6 +178,10 @@ function App() {
   // Global modals
   const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
   const [showOutOfSwipesModal, setShowOutOfSwipesModal] = useState(false);
+
+  // --- State: Navigation History ---
+  // Stack to track where the user came from (including modal state)
+  const [navHistory, setNavHistory] = useState<NavSnapshot[]>([]);
 
   // --- Theme ---
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -1199,23 +1210,49 @@ function App() {
   };
 
   // -----------------------------
-  // Navigation
+  // Navigation & History
   // -----------------------------
-  const navItems = [
-    { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
-    { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
-    { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
-    { id: 'KOVA_AI', label: 'KOVA AI', icon: Sparkles, isLocked: true, onClick: () => {} },
-    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
-  ];
-
   const handleNavClick = (view: ViewState) => {
     setCurrentView(view);
     clearTabNotification(view);
   };
 
-  const handleNavigateLegal = (view: ViewState) => {
-    setCurrentView(view);
+  // 1. Navigate to Legal Page with History Tracking
+  const handleNavigateLegal = (targetView: ViewState) => {
+    // Snapshot current state
+    const snapshot: NavSnapshot = {
+      view: currentView,
+      upgradeTargetTier: upgradeTargetTier,
+      showOutOfSwipesModal: showOutOfSwipesModal
+    };
+
+    setNavHistory(prev => [...prev, snapshot]);
+
+    // Close overlays temporarily to show legal page cleanly
+    setUpgradeTargetTier(null);
+    setShowOutOfSwipesModal(false);
+
+    // Navigate
+    setCurrentView(targetView);
+  };
+
+  // 2. Handle "Back" from Legal Pages
+  const handleLegalBack = () => {
+    if (navHistory.length > 0) {
+      const lastState = navHistory[navHistory.length - 1];
+      
+      // Pop from stack
+      setNavHistory(prev => prev.slice(0, -1));
+      
+      // Restore state
+      setCurrentView(lastState.view);
+      setUpgradeTargetTier(lastState.upgradeTargetTier);
+      setShowOutOfSwipesModal(lastState.showOutOfSwipesModal);
+    } else {
+      // Fallback if accessed directly (no history)
+      window.history.replaceState({}, document.title, '/');
+      setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
+    }
   };
 
   useEffect(() => {
@@ -1298,6 +1335,17 @@ function App() {
   };
 
   // -----------------------------
+  // Navigation Menu
+  // -----------------------------
+  const navItems = [
+    { id: ViewState.DISCOVER, label: 'DISCOVER', icon: Search },
+    { id: ViewState.MATCHES, label: 'MATCHES', icon: MessageSquare },
+    { id: ViewState.DASHBOARD, label: 'DASHBOARD', icon: LayoutGrid },
+    { id: 'KOVA_AI', label: 'KOVA AI', icon: Sparkles, isLocked: true, onClick: () => {} },
+    { id: ViewState.PROFILE, label: 'PROFILE', icon: UserIcon },
+  ];
+
+  // -----------------------------
   // Render
   // -----------------------------
   if (currentView === ViewState.PRIVACY) {
@@ -1309,12 +1357,7 @@ function App() {
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
-        <PrivacyPolicy
-          onBack={() => {
-            window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
-          }}
-        />
+        <PrivacyPolicy onBack={handleLegalBack} />
       </>
     );
   }
@@ -1328,12 +1371,7 @@ function App() {
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
-        <TermsOfService
-          onBack={() => {
-            window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
-          }}
-        />
+        <TermsOfService onBack={handleLegalBack} />
       </>
     );
   }
@@ -1347,12 +1385,7 @@ function App() {
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
-        <RefundPolicy
-          onBack={() => {
-            window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
-          }}
-        />
+        <RefundPolicy onBack={handleLegalBack} />
       </>
     );
   }
@@ -1366,12 +1399,7 @@ function App() {
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
-        <ContactPage
-          onBack={() => {
-            window.history.replaceState({}, document.title, '/');
-            setCurrentView(user ? ViewState.DASHBOARD : (showRegister ? ViewState.REGISTER : ViewState.LOGIN));
-          }}
-        />
+        <ContactPage onBack={handleLegalBack} />
       </>
     );
   }
@@ -1511,6 +1539,7 @@ function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* ... Plans ... */}
                 <div className="border border-white/10 bg-white/5 p-6 rounded-2xl flex flex-col relative opacity-80 shadow-sm">
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-white/10 border border-white/10 text-text-muted text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
                     Current Plan
@@ -1669,10 +1698,7 @@ function App() {
                   No refunds. See our{' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      setUpgradeTargetTier(null);
-                      setCurrentView(ViewState.REFUND);
-                    }}
+                    onClick={() => handleNavigateLegal(ViewState.REFUND)}
                     className="text-primary hover:underline"
                   >
                     Refund Policy
@@ -1684,10 +1710,7 @@ function App() {
                   By subscribing you agree to our{' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      setUpgradeTargetTier(null);
-                      setCurrentView(ViewState.TERMS);
-                    }}
+                    onClick={() => handleNavigateLegal(ViewState.TERMS)}
                     className="text-primary hover:underline"
                   >
                     Terms of Service
@@ -1695,10 +1718,7 @@ function App() {
                   and{' '}
                   <button
                     type="button"
-                    onClick={() => {
-                      setUpgradeTargetTier(null);
-                      setCurrentView(ViewState.PRIVACY);
-                    }}
+                    onClick={() => handleNavigateLegal(ViewState.PRIVACY)}
                     className="text-primary hover:underline"
                   >
                     Privacy Policy

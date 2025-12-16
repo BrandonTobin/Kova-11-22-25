@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   motion, 
   useMotionValue, 
@@ -50,7 +50,7 @@ const REPORT_REASONS = [
   "Other"
 ];
 
-// Helper to truncate text
+// Helper to truncate text (kept for other uses if needed, but bio uses CSS clamp now)
 const truncateText = (text: string | undefined, maxLength: number) => {
   if (!text) return '';
   if (text.length <= maxLength) return text;
@@ -90,6 +90,11 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const [reportDetails, setReportDetails] = useState('');
   const [blockChecked, setBlockChecked] = useState(false);
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
+
+  // --- Bio Expand/Collapse State ---
+  const [expandedBioById, setExpandedBioById] = useState<Record<string, boolean>>({});
+  const [bioOverflows, setBioOverflows] = useState<Record<string, boolean>>({});
+  const bioRef = useRef<HTMLParagraphElement>(null);
 
   // --- Limits ---
   const DAILY_SWIPE_LIMIT = 30;
@@ -166,6 +171,27 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
   const rotate = useTransform(x, [-200, 200], [-5, 5]);
   const likeOpacity = useTransform(x, [20, 150], [0, 1]);
   const nopeOpacity = useTransform(x, [-20, -150], [0, 1]);
+
+  // --- Bio Logic ---
+  const isBioExpanded = activeUser ? (expandedBioById[activeUser.id] || false) : false;
+  const hasBioOverflow = activeUser ? (bioOverflows[activeUser.id] || false) : false;
+
+  useEffect(() => {
+    if (activeUser && bioRef.current) {
+      const el = bioRef.current;
+      // Only measure overflow if currently collapsed.
+      // If expanded, we can't detect overflow (clientHeight == scrollHeight),
+      // but we assume it needed expansion if the user clicked "Read more".
+      if (!isBioExpanded) {
+         const isOverflowing = el.scrollHeight > el.clientHeight;
+         setBioOverflows(prev => {
+           // Avoid state update if value hasn't changed
+           if (prev[activeUser.id] === isOverflowing) return prev;
+           return { ...prev, [activeUser.id]: isOverflowing };
+         });
+      }
+    }
+  }, [activeUser, isBioExpanded]); // Re-run when user changes or expansion toggles
 
   // --- Logic ---
 
@@ -640,10 +666,30 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
               <Briefcase size={14} /> {activeUser.role} <span className="text-text-muted">•</span> {activeUser.industry}
             </p>
             
-            {/* --- Bio Display --- */}
-            <p className="text-text-muted text-sm leading-relaxed line-clamp-3 opacity-90 mb-4">
-              {truncateText(activeUser.bio, 140)}
-            </p>
+            {/* --- Bio Display (Updated for Read More/Less) --- */}
+            <div className="mb-4 relative">
+               <p 
+                 ref={bioRef}
+                 className={`text-text-muted text-sm leading-relaxed opacity-90 transition-all ${isBioExpanded ? '' : 'line-clamp-3'}`}
+               >
+                 {activeUser.bio || 'No bio available.'}
+               </p>
+               {(hasBioOverflow || isBioExpanded) && (
+                 <button
+                   onPointerDown={(e) => e.stopPropagation()}
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     setExpandedBioById(prev => ({
+                       ...prev,
+                       [activeUser.id]: !isBioExpanded
+                     }));
+                   }}
+                   className="text-xs font-bold text-primary mt-1 hover:underline focus:outline-none"
+                 >
+                   {isBioExpanded ? 'Read less' : 'Read more'}
+                 </button>
+               )}
+            </div>
           </div>
 
           <div className="mt-auto">

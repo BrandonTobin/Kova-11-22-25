@@ -50,6 +50,13 @@ const REPORT_REASONS = [
   "Other"
 ];
 
+// Helper to truncate text
+const truncateText = (text: string | undefined, maxLength: number) => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.substr(0, maxLength) + '...';
+};
+
 const SwipeDeck: React.FC<SwipeDeckProps> = ({ 
   users, 
   onSwipe, 
@@ -456,7 +463,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-surface w-full max-w-md rounded-2xl border border-white/10 shadow-2xl p-6 overflow-hidden flex flex-col max-h-[90vh]"
             >
-              {/* Report Modal Content (Same as before) */}
+              {/* Report Modal Content */}
               <div className="flex justify-between items-center mb-4 pb-4 border-b border-white/10">
                 <h3 className="text-xl font-bold text-text-main flex items-center gap-2">
                   <AlertTriangle className="text-gold" size={20} />
@@ -469,7 +476,7 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
                   <X size={20} />
                 </button>
               </div>
-              {/* ... Rest of report modal ... */}
+              
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                 <p className="text-text-muted text-sm mb-4">Why are you reporting <span className="font-bold text-text-main">{getDisplayName(activeUser.name)}</span>?</p>
                 <div className="space-y-3 mb-6">
@@ -633,8 +640,9 @@ const SwipeDeck: React.FC<SwipeDeckProps> = ({
               <Briefcase size={14} /> {activeUser.role} <span className="text-text-muted">•</span> {activeUser.industry}
             </p>
             
+            {/* --- Bio Display --- */}
             <p className="text-text-muted text-sm leading-relaxed line-clamp-3 opacity-90 mb-4">
-              {activeUser.bio}
+              {truncateText(activeUser.bio, 140)}
             </p>
           </div>
 

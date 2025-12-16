@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check, Crop } from 'lucide-react';
+import { ArrowLeft, Upload, MapPin, AlertCircle, ShieldCheck, Calendar, Flag, Mail, Lock, ChevronDown, Loader2, ArrowRight, Check, Crop, FileText } from 'lucide-react';
 import { User, ViewState, getAvatarStyle } from '../types';
 import { SECURITY_QUESTIONS } from '../constants';
 import PhotoPositionEditor from './PhotoPositionEditor';
@@ -34,8 +34,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
   const dobRef = useRef<HTMLInputElement>(null);
   
   // 0-based index for steps: 0, 1, 2
-  const [step, setStep] = useState(0); 
+  // We use a constant for max steps to prevent overflow
   const TOTAL_STEPS = 3;
+  const [step, setStep] = useState(0); 
 
   const [errors, setErrors] = useState<{email?: string, password?: string, confirmPassword?: string, general?: string}>({});
   
@@ -58,6 +59,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     state: '',
     mainGoal: 'Find a Technical Co-founder', 
     customGoal: '',
+    bio: '', // Added Bio field
     image: null as File | null,
     imagePreview: '',
     // Avatar Positioning
@@ -89,7 +91,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       }
     }
     if (savedStep) {
-      setStep(parseInt(savedStep));
+      // CLAMP STEP to ensure it never exceeds bounds
+      const parsedStep = parseInt(savedStep);
+      const safeStep = Math.min(Math.max(parsedStep, 0), TOTAL_STEPS - 1);
+      setStep(safeStep);
     }
   }, []);
 
@@ -167,7 +172,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
 
   // --- Location Validation (Nominatim) ---
   const validateLocation = async (city: string, state: string): Promise<boolean> => {
-    // If no city, we can't validate yet (but empty check handled by step validation)
     if (!city.trim()) {
       setIsLocationVerified(false);
       return false;
@@ -198,9 +202,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       }
     } catch (err) {
       console.error("Geocoding error", err);
-      // In case of API failure, we might want to be lenient or strict. 
-      // Requirement says "app must verify", but blocking on API failure is bad UX.
-      // We'll show a generic error asking to retry.
       setLocationError("Could not verify location. Please try again.");
       setIsValidatingLocation(false);
       return false;
@@ -216,10 +217,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
   const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newState = e.target.value;
     setFormData(prev => ({ ...prev, state: newState }));
-    // If city is already typed, re-validate with new state
     if (formData.city) {
-      // Small timeout to allow state update to settle if strictly needed, 
-      // though passing newState directly works best.
       validateLocation(formData.city, newState);
     }
   };
@@ -260,6 +258,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
         newErrors.general = "Please select your state.";
         isValid = false;
       }
+      // Bio is optional but recommended, no strict validation needed unless desired
     } else if (currentStep === 2) { // Step 2: Final & Consent
       if (!formData.acceptTerms || !formData.acceptPrivacy || !formData.isSixteen) {
         newErrors.general = "You must accept the Terms, Privacy Policy, and confirm your age.";
@@ -280,6 +279,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
     // Default Avatar if no image uploaded
     const safeImageUrl = `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(finalName)}`;
 
+    // Use provided bio or fallback to generated one
+    const finalBio = formData.bio.trim() 
+      ? formData.bio.trim() 
+      : `Hi, I'm ${finalName}. I'm currently in the ${formData.stage} stage looking to ${formData.mainGoal === 'Other' ? formData.customGoal : formData.mainGoal}.`;
+
     const newUser: User = {
       id: '', // Assigned by DB/App
       kovaId: generateKovaId(),
@@ -288,7 +292,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       password: formData.password,
       role: formData.title === 'Other' ? formData.customTitle : formData.title,
       industry: 'Tech',
-      bio: `Hi, I'm ${finalName}. I'm currently in the ${formData.stage} stage looking to ${formData.mainGoal === 'Other' ? formData.customGoal : formData.mainGoal}.`,
+      bio: finalBio,
       imageUrl: safeImageUrl,
       tags: [formData.stage],
       badges: [],
@@ -324,17 +328,17 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
 
     // Step 1: Async Location Check
     if (step === 1) {
-      // Even if already "verified" via blur, re-check if user changed text quickly without blurring
-      // or to ensure state matches.
       const isValidLoc = await validateLocation(formData.city, formData.state);
-      if (!isValidLoc) return; // Error will be set by validateLocation
+      if (!isValidLoc) return; 
     }
 
-    // Proceed
+    // Proceed if not on last step
     if (step < TOTAL_STEPS - 1) {
-      setStep(prev => prev + 1);
+      // Safely increment step, preventing overflow
+      setStep(prev => Math.min(prev + 1, TOTAL_STEPS - 1));
       if (onClearError) onClearError();
     } else {
+      // Last step: Submit
       handleSubmit(e);
     }
   };
@@ -346,7 +350,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
       sessionStorage.removeItem('kova_register_step');
       onBack();
     } else {
-      setStep(prev => prev - 1);
+      // Safely decrement step
+      setStep(prev => Math.max(prev - 1, 0));
       setErrors({});
       if (onClearError) onClearError();
     }
@@ -494,7 +499,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                    </div>
                 </div>
                 
-                {/* Location Feedback Line */}
                 <div className="min-h-[20px] mt-1 ml-1">
                   {isValidatingLocation ? (
                     <div className="flex items-center gap-1.5 text-xs text-text-muted animate-pulse">
@@ -523,6 +527,22 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
                 {formData.mainGoal === 'Other' && (
                      <input type="text" value={formData.customGoal} onChange={e => setFormData({...formData, customGoal: e.target.value})} className="w-full bg-background border border-white/10 rounded-xl px-4 py-2 mt-2 text-text-main focus:border-gold/50 outline-none text-sm" placeholder="What is your goal?" />
                 )}
+             </div>
+
+             {/* BIO FIELD ADDITION */}
+             <div>
+                <label className="block text-xs uppercase tracking-wider font-bold text-gold mb-1.5 ml-1 flex items-center gap-1">
+                  Bio
+                </label>
+                <div className="relative">
+                  <FileText className="absolute left-3 top-4 text-text-muted" size={18} />
+                  <textarea 
+                    value={formData.bio}
+                    onChange={e => setFormData({...formData, bio: e.target.value})}
+                    className="w-full bg-background border border-white/10 rounded-xl pl-10 pr-4 py-3 text-text-main focus:border-gold/50 outline-none resize-none h-24 text-sm leading-relaxed"
+                    placeholder="What you’re working on, interests, founder/investor, etc."
+                  />
+                </div>
              </div>
           </div>
         );
@@ -576,7 +596,6 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ onRegister, onBack, isL
              <div className="w-full bg-surface border border-white/10 rounded-xl p-4 space-y-3">
                <label className="flex items-start gap-3 cursor-pointer">
                  <input 
-                   // Use ref here to focus the checkbox as it's the first interactive element besides upload
                    autoFocus 
                    type="checkbox" 
                    checked={formData.acceptTerms}

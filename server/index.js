@@ -1,120 +1,53 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 // -------------------------
-// Env + Clients
+// Configuration
 // -------------------------
-
-// Stripe (server-side secret key)
-if (!process.env.STRIPE_SECRET_KEY) {
-  console.error('CRITICAL: STRIPE_SECRET_KEY is missing.');
-}
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-
-// Supabase Admin (service role key required for admin delete + secure writes)
-const supabaseUrl =
-  process.env.SUPABASE_URL || 'https://dbbtpkgiclzrsigdwdig.supabase.co';
-
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is missing.');
-}
-
-const supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-// App URL used for Stripe redirect URLs
+const PORT = process.env.PORT || 8080;
 const APP_URL = process.env.APP_URL || 'https://kovamatch.com';
 
+// Supabase Admin
+const supabaseUrl = process.env.SUPABASE_URL || 'https://dbbtpkgiclzrsigdwdig.supabase.co';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseServiceKey) {
+  console.warn('WARNING: SUPABASE_SERVICE_ROLE_KEY is missing. Account deletion will fail.');
+}
+
+const supabase = createClient(supabaseUrl, supabaseServiceKey || 'place-holder-key');
+
+// Stripe
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? require('stripe')(process.env.STRIPE_SECRET_KEY) 
+  : null;
+
 // -------------------------
-// App
+// App Setup
 // -------------------------
 const app = express();
 
-// CORS
 app.use(cors());
 
-// JSON body parser for everything EXCEPT the webhook (webhook needs raw body)
-app.use((req, res, next) => {
-  if (req.originalUrl === '/api/stripe/webhook') return next();
-  return express.json()(req, res, next);
-});
-
-// Serve legal documents (static)
-app.use('/legal', express.static(path.join(__dirname, 'legal')));
-
-// Serve frontend build (Vite: /dist)
-const distPath = path.join(__dirname, '../dist');
-app.use(express.static(distPath));
-
 // -------------------------
-// API Routes
+// Special Middleware for Stripe Webhook
 // -------------------------
-
-app.get('/api/test-api', (req, res) => {
-  res.json({ ok: true, source: 'express', time: new Date().toISOString() });
-});
-
-// --- POST: Create Checkout Session ---
-app.post('/api/stripe/create-checkout-session', async (req, res) => {
-  try {
-    const { plan, userId } = req.body || {};
-
-    if (!userId) return res.status(400).json({ error: 'Missing userId' });
-
-    // SECURITY: resolve priceId server-side only
-    let resolvedPriceId = null;
-
-    if (plan === 'kova_plus') resolvedPriceId = process.env.STRIPE_PRICE_KOVA_PLUS;
-    if (plan === 'kova_pro') resolvedPriceId = process.env.STRIPE_PRICE_KOVA_PRO;
-
-    if (!resolvedPriceId) {
-      console.error(
-        `Price ID not found for plan: ${plan}. Check STRIPE_PRICE_KOVA_PLUS/PRO env vars.`
-      );
-      return res
-        .status(400)
-        .json({ error: 'Invalid plan or server configuration error.' });
-    }
-
-    console.log(`Creating Stripe session for userId=${userId}, plan=${plan}`);
-
-    const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
-      payment_method_types: ['card'],
-      line_items: [{ price: resolvedPriceId, quantity: 1 }],
-      metadata: {
-        userId,
-        plan: plan || 'unknown',
-      },
-      success_url: `${APP_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${APP_URL}/payment-cancelled`,
-    });
-
-    return res.status(200).json({ url: session.url });
-  } catch (error) {
-    console.error('Error in /api/stripe/create-checkout-session:', error);
-    return res
-      .status(500)
-      .json({ error: error.message || 'Internal Server Error' });
-  }
-});
-
-// --- POST: Stripe Webhook (RAW BODY REQUIRED) ---
+// Must be defined BEFORE the global JSON parser
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!stripe) return res.status(500).send('Stripe not configured');
+  
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  if (!webhookSecret) {
-    console.error('CRITICAL: STRIPE_WEBHOOK_SECRET is missing.');
-    return res.status(500).send('Server Configuration Error');
-  }
+  if (!webhookSecret) return res.status(500).send('Server Configuration Error');
 
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -126,81 +59,132 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
       if (userId) {
         console.log(`Payment success for user ${userId}. Plan=${plan}`);
-
-        // IMPORTANT: your DB expects: free | plus | pro
         const newTier = plan === 'kova_pro' ? 'pro' : 'plus';
-
-        const { error } = await supabase
-          .from('users')
-          .update({ subscription_tier: newTier })
-          .eq('id', userId);
-
-        if (error) {
-          console.error('Supabase update failed:', error);
-          return res.status(500).send('Database update failed');
-        }
+        await supabase.from('users').update({ subscription_tier: newTier }).eq('id', userId);
       }
     }
-
     return res.status(200).send('Received');
   } catch (err) {
-    console.error('Webhook handler error:', err);
+    console.error('Webhook handler failed:', err);
     return res.status(500).send('Webhook handler failed');
   }
 });
 
-// --- POST: Delete Account ---
+// -------------------------
+// Global Middleware
+// -------------------------
+// Parse JSON for all other routes
+app.use(express.json());
+
+// Logging Middleware
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/assets')) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  }
+  next();
+});
+
+// -------------------------
+// API Routes
+// -------------------------
+
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+// Test API
+app.get('/api/test-api', (req, res) => {
+  res.json({ ok: true, source: 'express', time: new Date().toISOString() });
+});
+
+// Delete Account
 app.post('/api/delete-account', async (req, res) => {
+  console.log('[API] Received delete account request');
   const { userId } = req.body || {};
 
-  if (!userId) return res.status(400).json({ error: 'Missing userId' });
+  if (!userId) {
+    return res.status(400).json({ error: 'Missing userId in request body' });
+  }
+
+  if (!supabaseServiceKey) {
+    console.error('[API] Delete failed: SUPABASE_SERVICE_ROLE_KEY missing');
+    return res.status(500).json({ error: 'Server misconfigured: Missing Service Role Key' });
+  }
 
   try {
-    console.log(`Deleting account for user: ${userId}`);
+    console.log(`[API] Deleting user from Auth: ${userId}`);
 
+    // Delete from Supabase Auth (Cascade triggers for DB)
     const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+    
     if (authError) {
-      console.error('Auth deletion failed:', authError);
+      console.error('[API] Supabase Auth Deletion Failed:', authError);
       throw authError;
     }
 
-    // In case cascade isn’t enabled
-    const { error: dbError } = await supabase.from('users').delete().eq('id', userId);
-    if (dbError) console.error('DB deletion failed (continuing):', dbError);
-
-    return res.status(200).json({ success: true });
+    console.log('[API] Account deleted successfully');
+    return res.status(200).json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {
-    console.error('Error deleting account:', error);
-    return res
-      .status(500)
-      .json({ error: error.message || 'Failed to delete account' });
+    console.error('[API] Error deleting account:', error);
+    return res.status(500).json({ 
+      error: error.message || 'Failed to delete account', 
+      details: error 
+    });
   }
 });
 
-// -------------------------
-// SPA Routes (FIXES Cannot GET /reset-password)
-// -------------------------
+// Create Checkout Session
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
 
-// Serve the SPA index for known frontend routes (direct refresh / deep links)
-const spaRoutes = [
-  '/reset-password',
-  '/payment-success',
-  '/payment-cancelled',
-  '/privacy',
-  '/terms',
-  '/refunds',
-  '/contact',
-];
+  try {
+    const { plan, userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: 'Missing userId' });
 
-spaRoutes.forEach((route) => {
-  app.get(route, (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
+    let resolvedPriceId = null;
+    if (plan === 'kova_plus') resolvedPriceId = process.env.STRIPE_PRICE_KOVA_PLUS;
+    if (plan === 'kova_pro') resolvedPriceId = process.env.STRIPE_PRICE_KOVA_PRO;
+
+    if (!resolvedPriceId) {
+      return res.status(400).json({ error: 'Invalid plan or server configuration error.' });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [{ price: resolvedPriceId, quantity: 1 }],
+      metadata: { userId, plan: plan || 'unknown' },
+      success_url: `${APP_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${APP_URL}/payment-cancelled`,
+    });
+
+    return res.status(200).json({ url: session.url });
+  } catch (error) {
+    console.error('Error in checkout session:', error);
+    return res.status(500).json({ error: error.message || 'Internal Server Error' });
+  }
 });
 
-// Catch-all: send React index.html for any non-API request
+// API 404 Handler (JSON response)
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}` });
+});
+
+// -------------------------
+// Static Files & SPA Routing
+// -------------------------
+
+// Serve legal docs
+app.use('/legal', express.static(path.join(__dirname, 'legal')));
+
+// Serve React Build
+const distPath = path.join(__dirname, '../dist');
+app.use(express.static(distPath));
+
+// Handle SPA Routing (React Router)
 app.get('*', (req, res) => {
-  // If it looks like an API route, return 404 JSON instead of index.html
+  // Double check it's not an API call that missed the regex
   if (req.originalUrl.startsWith('/api/')) {
     return res.status(404).json({ error: 'Not found' });
   }
@@ -208,5 +192,9 @@ app.get('*', (req, res) => {
 });
 
 // -------------------------
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// Start Server
+// -------------------------
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Registered routes: /api/delete-account, /api/stripe/create-checkout-session, /api/health`);
+});

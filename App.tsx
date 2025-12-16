@@ -958,11 +958,26 @@ function App() {
         body: JSON.stringify({ userId: user.id }),
       });
 
+      // Handle non-JSON responses (like 404 HTML pages from proxies or bad server responses)
+      const contentType = response.headers.get("content-type");
+      let data: any = {};
+      
+      if (contentType && contentType.includes("application/json")) {
+         data = await response.json();
+      } else {
+         // Fallback if not JSON (indicates server error or route not found)
+         const text = await response.text();
+         console.warn("Received non-JSON response from deletion API:", text);
+         
+         // Throw a specific error for UI feedback
+         throw new Error("SERVER_UNAVAILABLE");
+      }
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Failed to delete account');
       }
 
+      // Success cleanup
       localStorage.removeItem('kova_current_user_id');
       localStorage.removeItem('kova_current_view');
       localStorage.removeItem('kova_seen_onboarding');
@@ -971,9 +986,14 @@ function App() {
 
       setUser(null);
       setCurrentView(ViewState.LOGIN);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Delete account error:', err);
-      alert('Failed to delete account. Please try again or contact support.');
+      
+      if (err.message === "SERVER_UNAVAILABLE") {
+        alert("Unable to reach the server. Please ensure the backend is running and deployed correctly. (Error 404/Bad Gateway)");
+      } else {
+        alert(err.message || 'Failed to delete account. Please try again or contact support.');
+      }
     } finally {
       setIsLoading(false);
     }

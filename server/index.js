@@ -98,6 +98,65 @@ app.get('/api/test-api', (req, res) => {
   res.json({ ok: true, source: 'express', time: new Date().toISOString() });
 });
 
+// Contact Form Handler
+app.post('/api/contact', async (req, res) => {
+  const { name, email, message } = req.body;
+
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+  // Use the specific Kova support email or fallback to environment variable
+  const toEmail = process.env.SUPPORT_EMAIL || 'kova.app.team@gmail.com';
+
+  // If SendGrid is not configured, we log the message and return success to avoid breaking the frontend flow during dev.
+  if (!apiKey || !fromEmail) {
+    console.warn('⚠️ SendGrid not configured. Contact form message logged:', { name, email, message });
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Message received (Simulation Mode: SendGrid not configured).' 
+    });
+  }
+
+  const payload = {
+    personalizations: [{
+      to: [{ email: toEmail }],
+      subject: `Kova Contact: ${name}`
+    }],
+    from: { email: fromEmail, name: "Kova Website" },
+    reply_to: { email: email, name: name },
+    content: [{
+      type: "text/plain",
+      value: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`
+    }]
+  };
+
+  try {
+    // Assuming Node 18+ with global fetch. If older Node, might need node-fetch or axios.
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (response.ok || response.status === 202) {
+      return res.status(200).json({ success: true, message: 'Message sent successfully.' });
+    } else {
+      const errText = await response.text();
+      console.error('SendGrid API Error:', errText);
+      return res.status(500).json({ error: 'Failed to send email.' });
+    }
+  } catch (error) {
+    console.error('Contact API Error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 // Delete Account
 app.post('/api/delete-account', async (req, res) => {
   console.log('[API] Received delete account request');
@@ -196,5 +255,5 @@ app.get('*', (req, res) => {
 // -------------------------
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Registered routes: /api/delete-account, /api/stripe/create-checkout-session, /api/health`);
+  console.log(`Registered routes: /api/delete-account, /api/stripe/create-checkout-session, /api/contact, /api/health`);
 });

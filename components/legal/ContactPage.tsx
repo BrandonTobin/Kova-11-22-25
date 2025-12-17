@@ -15,16 +15,6 @@ const ContactPage: React.FC<ContactPageProps> = ({ onBack }) => {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
-  // Helper to safely access env vars (Vite compatible)
-  const getEnv = (key: string): string => {
-    try {
-      // @ts-ignore
-      return import.meta.env[key] || '';
-    } catch (e) {
-      return '';
-    }
-  };
-
   const validateEmail = (email: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
@@ -47,17 +37,16 @@ const ContactPage: React.FC<ContactPageProps> = ({ onBack }) => {
 
     try {
       // Endpoint resolution:
-      // 1. VITE_CONTACT_ENDPOINT (Full URL)
-      // 2. Default fallback: /api/contact (Relative to domain, proxied by Vite or handled by Express)
-      const endpoint = getEnv('VITE_CONTACT_ENDPOINT') || '/api/contact';
+      // 1. VITE_CONTACT_ENDPOINT (Full URL or Edge Function)
+      // 2. Default fallback: /api/contact (Proxied to backend)
+      const endpoint = import.meta.env.VITE_CONTACT_ENDPOINT || '/api/contact';
       
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
       };
 
-      // If calling a Supabase Edge Function directly, we usually need the Anon Key.
-      // We check if the configured endpoint looks like a Supabase URL or if we just want to be safe.
-      const anonKey = getEnv('VITE_SUPABASE_ANON_KEY');
+      // If calling a Supabase Edge Function directly, inject the Anon Key
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
       if (anonKey && (endpoint.includes('supabase.co') || endpoint.includes('functions'))) {
         headers['Authorization'] = `Bearer ${anonKey}`;
       }
@@ -73,21 +62,24 @@ const ContactPage: React.FC<ContactPageProps> = ({ onBack }) => {
         }),
       });
 
-      if (!response.ok) {
-        // Attempt to parse error message
-        let errorMsg = 'Failed to send message.';
-        try {
-          const resData = await response.json();
-          if (resData.error) errorMsg = resData.error;
-          else if (resData.message) errorMsg = resData.message;
-        } catch (parseErr) {
-          // Fallback to status text
-          errorMsg = response.statusText || errorMsg;
+      const contentType = response.headers.get("content-type");
+      let resData: any = {};
+      
+      if (contentType && contentType.includes("application/json")) {
+        resData = await response.json();
+      } else {
+        // Handle non-JSON responses (often 404/500 from proxies)
+        const text = await response.text();
+        if (!response.ok) {
+           throw new Error(`Server Error (${response.status}): ${text}`);
         }
-        throw new Error(errorMsg);
       }
 
-      // Success
+      if (!response.ok) {
+        throw new Error(resData.error || resData.message || 'Failed to send message.');
+      }
+
+      // Success - Only set this if response.ok was true
       setSubmitted(true);
       setFormData({ name: '', email: '', message: '' });
     } catch (err: any) {

@@ -1,18 +1,22 @@
 {
   "name": "kova",
   "version": "1.0.0",
+  "private": true,
   "main": "server/index.js",
+
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "vite build && node server/index.js"
+    "start": "node server/index.js"
   },
+
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "@supabase/supabase-js": "^2.39.0",
     "stripe": "^14.0.0",
+
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "lucide-react": "^0.344.0",
@@ -20,7 +24,10 @@
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.1",
     "react-webcam": "^7.2.0",
-    "@google/genai": "^0.1.1",
+    "@google/genai": "^0.1.1"
+  },
+
+  "devDependencies": {
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.2.1",

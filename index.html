@@ -4,112 +4,128 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kova | Where Founders Connect</title>
-    <link rel="icon" type="image/png" href="https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/Kova_logo_transparent.png" />
+
+    <link
+      rel="icon"
+      type="image/png"
+      href="https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/Kova_logo_transparent.png"
+    />
+
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+
     <meta
       name="description"
       content="Kova is where founders connect, collaborate, and build meaningful relationships. A focused network for serious entrepreneurs — with investors welcome."
     />
     <meta property="og:title" content="Kova | Where Founders Connect" />
-    <meta property="og:description" content="A premium space for founders to match, collaborate, and accelerate their ideas — with investors welcome." />
+    <meta
+      property="og:description"
+      content="A premium space for founders to match, collaborate, and accelerate their ideas — with investors welcome."
+    />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://kovamatch.com" />
-    <meta property="og:image" content="https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/Kova.jpeg" />
+    <meta
+      property="og:image"
+      content="https://dbbtpkgiclzrsigdwdig.supabase.co/storage/v1/object/public/assets/Kova.jpeg"
+    />
     <meta property="og:site_name" content="Kova" />
+
+    <!-- Tailwind via CDN (fine for now) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
-        darkMode: 'class',
+        darkMode: "class",
         theme: {
           extend: {
             colors: {
-              primary: 'rgb(var(--color-primary) / <alpha-value>)',
-              'primary-hover': 'rgb(var(--color-primary-hover) / <alpha-value>)', 
-              secondary: 'rgb(var(--color-secondary) / <alpha-value>)',
-              background: 'rgb(var(--color-background) / <alpha-value>)',
-              surface: 'rgb(var(--color-surface) / <alpha-value>)',
-              gold: 'rgb(var(--color-gold) / <alpha-value>)',
-              'gold-hover': 'rgb(var(--color-gold-hover) / <alpha-value>)',
-              'text-main': 'rgb(var(--color-text-main) / <alpha-value>)',
-              'text-muted': 'rgb(var(--color-text-muted) / <alpha-value>)',
+              primary: "rgb(var(--color-primary) / <alpha-value>)",
+              "primary-hover":
+                "rgb(var(--color-primary-hover) / <alpha-value>)",
+              secondary: "rgb(var(--color-secondary) / <alpha-value>)",
+              background: "rgb(var(--color-background) / <alpha-value>)",
+              surface: "rgb(var(--color-surface) / <alpha-value>)",
+              gold: "rgb(var(--color-gold) / <alpha-value>)",
+              "gold-hover": "rgb(var(--color-gold-hover) / <alpha-value>)",
+              "text-main": "rgb(var(--color-text-main) / <alpha-value>)",
+              "text-muted": "rgb(var(--color-text-muted) / <alpha-value>)"
             },
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
+              sans: ["Inter", "sans-serif"]
             },
             backgroundImage: {
-              'luxury-gradient': 'linear-gradient(135deg, rgb(var(--color-primary)) 0%, rgb(var(--color-background)) 100%)',
-              'gold-gradient': 'linear-gradient(135deg, rgb(var(--color-gold)) 0%, #B8860B 100%)',
+              "luxury-gradient":
+                "linear-gradient(135deg, rgb(var(--color-primary)) 0%, rgb(var(--color-background)) 100%)",
+              "gold-gradient":
+                "linear-gradient(135deg, rgb(var(--color-gold)) 0%, #B8860B 100%)"
             }
           }
         }
-      }
+      };
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
     <style>
       :root {
-        /* Light Mode Defaults */
-        --color-primary: 10 61 63;       /* #0A3D3F - Deep Emerald */
-        --color-primary-hover: 16 80 82; /* #105052 */
-        --color-secondary: 79 177 167;   /* #4FB1A7 - Soft Teal */
-        --color-background: 243 244 246; /* #F3F4F6 - Gray 100 */
-        --color-surface: 255 255 255;    /* #FFFFFF - White */
-        --color-gold: 214 167 86;        /* #D6A756 - Gold */
-        --color-gold-hover: 229 192 117; /* #E5C075 */
-        --color-text-main: 17 24 39;     /* #111827 - Gray 900 */
-        --color-text-muted: 75 85 99;    /* #4B5563 - Gray 600 */
+        --color-primary: 10 61 63;
+        --color-primary-hover: 16 80 82;
+        --color-secondary: 79 177 167;
+        --color-background: 243 244 246;
+        --color-surface: 255 255 255;
+        --color-gold: 214 167 86;
+        --color-gold-hover: 229 192 117;
+        --color-text-main: 17 24 39;
+        --color-text-muted: 75 85 99;
       }
 
       .dark {
-        /* Dark Mode Overrides */
-        --color-primary: 10 61 63;       /* #0A3D3F */
-        --color-primary-hover: 16 80 82; /* #105052 */
-        --color-secondary: 79 177 167;   /* #4FB1A7 */
-        --color-background: 12 15 15;    /* #0C0F0F - Charcoal Black */
-        --color-surface: 17 20 20;       /* #111414 - Dark Graphite */
-        --color-gold: 214 167 86;        /* #D6A756 */
-        --color-gold-hover: 229 192 117; /* #E5C075 */
-        --color-text-main: 245 244 238;  /* #F5F4EE - Warm Off-White */
-        --color-text-muted: 199 200 201; /* #C7C8C9 - Cool Gray */
+        --color-primary: 10 61 63;
+        --color-primary-hover: 16 80 82;
+        --color-secondary: 79 177 167;
+        --color-background: 12 15 15;
+        --color-surface: 17 20 20;
+        --color-gold: 214 167 86;
+        --color-gold-hover: 229 192 117;
+        --color-text-main: 245 244 238;
+        --color-text-muted: 199 200 201;
       }
 
-      body { 
-        font-family: 'Inter', sans-serif; 
-        background-color: rgb(var(--color-background)); 
-        color: rgb(var(--color-text-main)); 
-        overflow: hidden; 
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: rgb(var(--color-background));
+        color: rgb(var(--color-text-main));
+        overflow: hidden;
         transition: background-color 0.3s ease, color 0.3s ease;
       }
-      /* Hide scrollbar for Chrome, Safari and Opera */
       .no-scrollbar::-webkit-scrollbar {
-          display: none;
+        display: none;
       }
-      /* Hide scrollbar for IE, Edge and Firefox */
       .no-scrollbar {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
+        -ms-overflow-style: none;
+        scrollbar-width: none;
       }
-
-      /* Custom Dark Mode Scrollbar */
       .custom-scrollbar {
         scrollbar-width: thin;
         scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
       }
-
       .custom-scrollbar::-webkit-scrollbar {
         width: 6px;
         height: 6px;
       }
-
       .custom-scrollbar::-webkit-scrollbar-track {
         background: transparent;
       }
-
       .custom-scrollbar::-webkit-scrollbar-thumb {
         background-color: rgba(255, 255, 255, 0.15);
         border-radius: 9999px;
       }
-
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
         background-color: rgba(255, 255, 255, 0.25);
       }
@@ -120,10 +136,10 @@
     "react": "https://esm.sh/react@^19.2.3",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "framer-motion": "https://esm.sh/framer-motion@^12.23.26",
     "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.87.3",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.88.0",
     "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
@@ -132,6 +148,8 @@
 </head>
   <body>
     <div id="root"></div>
+
+    <!-- Vite will replace this with the bundled JS in dist/ -->
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

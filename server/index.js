@@ -35,12 +35,12 @@ const stripe = process.env.STRIPE_SECRET_KEY
 // App Setup
 // -------------------------
 const app = express();
-
 app.use(cors());
 
 // -------------------------
 // Stripe Webhook (raw body)
 // -------------------------
+// NOTE: must be BEFORE express.json()
 app.post(
   '/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
@@ -101,10 +101,12 @@ app.use((req, _res, next) => {
 // API Routes
 // -------------------------
 
+// Health check
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// Simple test route
 app.get('/api/test-api', (_req, res) => {
   res.json({ ok: true, source: 'express', time: new Date().toISOString() });
 });
@@ -175,12 +177,15 @@ app.post('/api/contact', async (req, res) => {
   }
 });
 
+// -------------------------
 // Delete account
+// -------------------------
 app.post('/api/delete-account', async (req, res) => {
-  console.log('[API] Received delete account request');
+  console.log('[API] Received delete account request', req.body);
   const { userId } = req.body || {};
 
   if (!userId) {
+    console.warn('[API] Missing userId in delete-account body');
     return res.status(400).json({ error: 'Missing userId in request body' });
   }
 
@@ -214,7 +219,9 @@ app.post('/api/delete-account', async (req, res) => {
   }
 });
 
+// -------------------------
 // Stripe checkout session
+// -------------------------
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
 
@@ -250,8 +257,11 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 });
 
-// API 404 fallback
+// -------------------------
+// API 404 fallback (JSON)
+// -------------------------
 app.all('/api/*', (req, res) => {
+  console.warn('[API 404]', req.method, req.path);
   res
     .status(404)
     .json({ error: `API endpoint not found: ${req.method} ${req.path}` });
@@ -260,7 +270,6 @@ app.all('/api/*', (req, res) => {
 // -------------------------
 // Static files & SPA routing
 // -------------------------
-
 const distPath = path.join(__dirname, '..', 'dist');
 
 // Serve built assets
